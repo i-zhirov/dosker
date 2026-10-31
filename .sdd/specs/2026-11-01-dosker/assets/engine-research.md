@@ -67,6 +67,18 @@ This asset records the evidence behind the capability model. Items marked **unve
 - DOS-specific prior art: Docker images that wrap DOSBox or a DOS BBS, for example [an old DOS BBS in a Docker container](https://changelog.complete.org/archives/9836-an-old-dos-bbs-in-a-docker-container). These are ordinary containers running an emulator, not a Docker-like supervisor for emulated DOS machines.
 - No project was found that treats QEMU, DOSBox-X, or Bochs as a container runtime with layered images and per-instance supervision. The search was web-based and could miss a private or small project.
 
+## Windows Hosts
+
+Windows x86_64 is a first-release host in the design. This research pass did not verify the Windows engine artifacts. These items are **unverified** and belong to the M1-W spike.
+
+- QEMU publishes Windows builds. The exact source, version, and installer need confirmation.
+- DOSBox-X publishes Windows builds. The serial and `BOOT` behavior should match the Unix build, but this is not proven.
+- Bochs publishes Windows builds. The `nogui` display library and `com2` socket modes need confirmation.
+- Windows has no Unix domain sockets in the Rust standard library. The control channel needs a named pipe or localhost TCP.
+- QEMU on Windows can expose QMP, serial, monitor, gdbstub, and VNC over localhost TCP. The exact option forms need confirmation.
+- A Windows Job Object with kill-on-close can replace the Unix process group and parent-death signal.
+- Windows console behavior for `attach`, ANSI output, and Ctrl-C needs confirmation.
+
 ## Unverified Items
 
 - QEMU TCG speed for a DOS guest on macOS arm64. No DOS benchmark was found.
@@ -79,3 +91,7 @@ This asset records the evidence behind the capability model. Items marked **unve
 - Whether a bare FAT "superfloppy" image boots as a QEMU hard disk without an MBR. Use a partitioned image or a standard floppy size.
 - Whether `makebootfat` writes to a regular image file as well as a block device.
 - User-mode NAT on DOSBox-X and Bochs.
+- Windows engine artifacts, versions, and package sources.
+- Windows named-pipe control and Windows console behavior.
+- Windows QEMU QMP, serial, gdbstub, VNC, and NAT over localhost TCP.
+- Windows Job Object cleanup after a supervisor crash.

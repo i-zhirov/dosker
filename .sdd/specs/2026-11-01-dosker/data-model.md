@@ -160,7 +160,7 @@ The tree always represents `C:\`. Drive letters for volumes are runtime attachme
 | `finished_at` | RFC 3339 or null | |
 | `ports` | list of `PortMapping` | |
 | `volumes` | list of `VolumeMount` | |
-| `sockets` | map | `control`, `serial_agent`, `serial_guest`, `qmp`, `monitor`, `gdb` |
+| `sockets` | map | `control`, `serial_agent`, `serial_guest`, `qmp`, `monitor`, `gdb`. On Windows, `control` is a named pipe name and engine entries are `127.0.0.1:<port>`. |
 | `disk_path` | string | Private writable disk |
 | `dirty` | boolean | Set when a kill may leave FAT dirty |
 
@@ -269,6 +269,7 @@ A cache entry is valid only when its layer blob exists and matches the digest.
 ## Validation Rules
 
 - Container IDs are 12 lowercase hex characters.
+- The control endpoint is a Unix socket on Linux and macOS, and a named pipe on Windows. Engine endpoints are Unix sockets on Linux and macOS, and `127.0.0.1:<port>` on Windows.
 - Container and volume names match `[a-z0-9][a-z0-9_.-]{0,62}` and are unique.
 - DOS paths are uppercase 8.3 components. A name is 1 to 8 characters. An extension is optional and is 1 to 3 characters. The allowed characters are A-Z, 0-9, and these symbols:
 
@@ -323,7 +324,7 @@ stateDiagram-v2
 - `failed`: the container never reached `running`.
 - `removed`: the directory is gone.
 
-A stale `starting` or `running` state whose supervisor PID is gone and whose `control.sock` is dead becomes `exited` on the next CLI call.
+A stale `starting` or `running` state whose supervisor PID is gone and whose control endpoint is dead becomes `exited` on the next CLI call.
 
 ## Data Flow
 
@@ -370,7 +371,7 @@ flowchart LR
 
 ### Exec
 
-1. CLI sends an `exec` request to `control.sock`.
+1. CLI sends an `exec` request to the control endpoint.
 2. The supervisor assigns a request ID and frames the command for the agent.
 3. The agent writes a batch file with the environment and working directory.
 4. The agent runs `COMMAND.COM`, redirects output to a temporary file, and reads the exit code.

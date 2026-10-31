@@ -13,6 +13,7 @@
 | Doskerfile contract | [`contracts/doskerfile.md`](contracts/doskerfile.md) | Grammar and instruction semantics |
 | Agent protocol contract | [`contracts/agent-protocol.md`](contracts/agent-protocol.md) | Serial frame format and command set |
 | Engine research | [`assets/engine-research.md`](assets/engine-research.md) | Capability evidence and source links for QEMU, DOSBox-X, and Bochs |
+| Engine fallback analysis | [`assets/engine-fallback-analysis.md`](assets/engine-fallback-analysis.md) | Benefits and drawbacks of a QEMU-only system, and what to preserve now |
 
 ## Context And Problem
 
@@ -35,13 +36,13 @@ This design turns that idea into a concrete system. The first user is a develope
 - Provide FAT image volumes, user-mode NAT, and host port publishing.
 - Pin base images, engines, and the agent in a lock file.
 - Store images in the local OCI image layout.
-- Work on Linux x86_64 and macOS arm64.
+- Work on Linux x86_64, macOS arm64, and Windows x86_64 from the first release.
 - State the security limits plainly.
 
 ### Non-Goals
 
 - DOSker is not a sandbox for untrusted code.
-- Windows hosts are out of scope for the first release.
+- Windows arm64 is out of scope. Windows x86_64 is in scope.
 - A network registry, compose files, and shared L2 container networks are out of scope.
 - Long file names are out of scope for the first release.
 - Audio, advanced video, and game-specific tuning are out of scope.
@@ -109,6 +110,15 @@ A user starts two containers with published ports. Both run at the same time. A 
 1. **Given** two containers with different host ports, **When** both start, **Then** both are running and `dosker ps` lists them.
 2. **Given** two containers that request the same host port, **When** the second starts, **Then** it fails and the first is unaffected.
 
+#### Run the runtime slice on Windows (Priority: P1)
+
+A developer on Windows x86_64 imports a prepared FreeDOS image, starts it headless, runs a command, and stops it. The CLI and supervisor use a named pipe. The engine uses localhost TCP.
+
+**Acceptance Scenarios**:
+
+1. **Given** a Windows host and a prepared image, **When** the developer runs `dosker image import`, `dosker run -d`, and `dosker exec`, **Then** the output and status arrive.
+2. **Given** a supervisor crash, **When** the developer runs `dosker ps`, **Then** the stale container is marked exited and no engine process remains.
+
 ### Functional Requirements
 
 - **FR-001**: The system MUST parse a Doskerfile subset with `FROM`, `COPY`, `RUN`, `RUN --host`, `ENV`, `WORKDIR`, `CMD`, `MACHINE`, `ENGINE-CONFIG`, `EXPOSE`, `VOLUME`, `ENGINE`, and `REQUIRES`.
@@ -131,6 +141,9 @@ A user starts two containers with published ports. Both run at the same time. A 
 - **FR-018**: The system MUST keep the image read-only and write only to a private container disk.
 - **FR-019**: The system MUST recover from a dead supervisor by marking stale state as exited on the next CLI call.
 - **FR-020**: The system MUST document that it does not sandbox untrusted images.
+- **FR-021**: The system MUST support Linux x86_64, macOS arm64, and Windows x86_64 from the first release.
+- **FR-022**: The system MUST use a transport abstraction: Unix sockets on Linux and macOS, and named pipes on Windows for CLI to supervisor control.
+- **FR-023**: The system MUST prevent orphan engines with a parent-death signal or process group on Linux and macOS, and a Job Object on Windows.
 
 ## Assumptions And Constraints
 
@@ -140,6 +153,11 @@ A user starts two containers with published ports. Both run at the same time. A 
 - One clean boot per `RUN`. Batching consecutive `RUN` instructions is deferred until an engine can attribute changes per command.
 - QEMU is the first engine and the only engine with NAT in the MVP.
 - QEMU and Bochs on macOS arm64 come from Homebrew. DOSBox-X comes from its official arm64 release.
+- Windows x86_64 is a first-release host. Windows arm64 is out of scope.
+- On Windows, engine binaries come from official builds or a package-manager path. The QEMU source is settled in M1-W. The DOSBox-X and Bochs sources are settled in M4.
+- The supervisor control endpoint is a Unix socket on Linux and macOS, and a named pipe on Windows.
+- Engine endpoints use Unix sockets on Linux and macOS, and localhost TCP on Windows.
+- Process cleanup uses a parent-death signal or process group on Linux and macOS, and a Job Object on Windows.
 - QEMU x86 guests on macOS arm64 run under TCG. No hardware acceleration is expected.
 - Engine processes are external. DOSker does not link or fork engine code.
 - The DOS agent is a separate 16-bit 8086-compatible program built with OpenWatcom or ia16-gcc.
@@ -169,6 +187,14 @@ A user starts two containers with published ports. Both run at the same time. A 
 - **Trade-offs**: Fastest edit-run loop and least code. Builds are not reproducible by default. QEMU `vvfat` is beta. Release images differ from what was tested. Boot metadata has no home.
 - **Decision**: Rejected. It contradicts the reproducibility goal.
 
+## Engine Strategy
+
+The design keeps three engines, as the task requires. QEMU is the only engine required for M1 and M2. DOSBox-X and Bochs are capability-gated adapters. Their spikes must not block the QEMU slice.
+
+The explicit comparison of the current multi-engine design against a later QEMU-only fallback is in [`assets/engine-fallback-analysis.md`](assets/engine-fallback-analysis.md). It records the positive outcomes and the negative drawbacks of dropping the other engines, the conditions that would justify a drop, and the design elements we keep now so the option stays open.
+
+Decision: keep multi-engine for now. Re-evaluate after M4, when the DOSBox-X and Bochs spikes and adapters have produced evidence.
+
 ## Architecture
 
 ### Components
@@ -184,6 +210,7 @@ A user starts two containers with published ports. Both run at the same time. A 
 | FreeDOS builder | Produce the default base image from pinned FreeDOS binaries, boot sectors, and the agent binary | Image builder |
 | OCI store | Store layers, configs, manifests, and tags | Filesystem |
 | State store | Track containers, volumes, engines, and locks | Filesystem |
+| Host platform | Control transport, process cleanup, data directory, console | Operating system APIs |
 | Agent protocol | Encode and decode host-side frames | Serial transport |
 
 ### Diagram
@@ -218,21 +245,21 @@ dosker build (foreground, no supervisor)
 dosker run -d
   └─ dosker __supervise
        ├─ qemu | dosbox-x | bochs
-       ├─ control.sock       CLI <-> supervisor
-       ├─ serial-com2.sock   supervisor <-> guest agent
-       ├─ serial-com1.sock   guest terminal, optional
-       ├─ qmp.sock           supervisor <-> QEMU
-       ├─ monitor.sock       screenshots, shutdown
-       └─ gdb.sock           debugger pass-through
+       ├─ control        CLI <-> supervisor (Unix socket or named pipe)
+       ├─ serial-com2    supervisor <-> guest agent (Unix socket or localhost TCP)
+       ├─ serial-com1    guest terminal (Unix socket or localhost TCP)
+       ├─ qmp            supervisor <-> QEMU (Unix socket or localhost TCP)
+       ├─ monitor        screenshots, shutdown
+       └─ gdb            debugger pass-through
 ```
 
-The agent owns COM2. COM1 stays available to the guest. The adapter maps the two sockets to the first two serial ports of the engine.
+The agent owns COM2. COM1 stays available to the guest. The adapter maps the two endpoints to the first two serial ports of the engine. The endpoint kind depends on the host, not on the engine.
 
 The supervisor starts the engine, waits for the agent banner, owns all engine sockets, proxies `exec` and `attach`, records state, writes logs, reaps the engine, and stores the final status. The CLI exits after it starts a detached container.
 
-There is no central daemon. `dosker ps` reads the state directory. `dosker exec`, `attach`, `stop`, and `debug` connect to `control.sock`. A dead supervisor leaves a stale entry that the next CLI call marks as stopped. A container failure does not affect another container.
+There is no central daemon. `dosker ps` reads the state directory. `dosker exec`, `attach`, `stop`, and `debug` connect to the control endpoint. A dead supervisor leaves a stale entry that the next CLI call marks as stopped. A container failure does not affect another container.
 
-On Linux the supervisor sets a parent-death signal for the engine. On macOS it uses a process group and socket liveness. A build VM is transient and is always killed on error. A failed build commits no layer.
+On Linux the supervisor sets a parent-death signal for the engine. On macOS it uses a process group and endpoint liveness. On Windows it uses a Job Object with kill-on-close and endpoint liveness. A build VM is transient and is always killed on error. A failed build commits no layer.
 
 ### Engine Capability Matrix
 
@@ -252,6 +279,30 @@ This is the expected state at design time. Unproven cells are settled by M0 spik
 
 A Doskerfile can require a capability with `REQUIRES`. DOSker rejects an engine that lacks it and names the engines that provide it. NAT is a QEMU capability in the MVP.
 
+### Host Platform Abstraction
+
+| Host | Supervisor control | Engine endpoints | Process cleanup | Data root |
+| --- | --- | --- | --- | --- |
+| Linux x86_64 | Unix socket | Unix socket | Parent-death signal and process group | XDG data directory |
+| macOS arm64 | Unix socket | Unix socket | Process group | Application Support |
+| Windows x86_64 | Named pipe | localhost TCP | Job Object | `%LOCALAPPDATA%\dosker` |
+
+Engine availability by host:
+
+| Host | QEMU | DOSBox-X | Bochs |
+| --- | --- | --- | --- |
+| Linux x86_64 | Yes | Yes | Yes |
+| macOS arm64 | Homebrew | Official arm64 build | Homebrew |
+| Windows x86_64 | Official build, verify in M1-W | Official build, verify in M4 | Official build, verify in M4 |
+
+The `dosker-platform` crate owns the control transport, process cleanup, data directory, and console. The JSON-lines control protocol and the agent protocol are the same on every host.
+
+- A Windows named pipe uses a DACL that allows only the current user.
+- Windows engine endpoints bind to `127.0.0.1` only.
+- State writes use `rename` on Unix and `ReplaceFileW` on Windows.
+- Host paths use Rust `Path`. DOS paths always use backslash and 8.3.
+- A private disk uses a reflink when the host filesystem supports it and a full copy otherwise. Windows falls back to a full copy in the MVP.
+
 ### Workspace Crates
 
 - `dosker-core`: domain types, Doskerfile parser, lock file, errors.
@@ -260,18 +311,19 @@ A Doskerfile can require a capability with `REQUIRES`. DOSker rejects an engine 
 - `dosker-engine-qemu`, `dosker-engine-dosbox-x`, `dosker-engine-bochs`: one crate per adapter.
 - `dosker-agent-proto`: host-side frame codec.
 - `dosker-runtime`: supervisor, container state, lifecycle.
+- `dosker-platform`: control transport, process cleanup, data directory, console.
 - `dosker-cli`: argument parsing and commands.
 - `dosker-test-support`: mock engine, fixtures, golden files.
 - `agent/`: 16-bit DOS sources and build files. Not a Rust crate.
 
 ### State Directory
 
-Use the XDG data directory on Linux and the Application Support directory on macOS. `DOSKER_ROOT` overrides the root for tests.
+Use the XDG data directory on Linux, the Application Support directory on macOS, and `%LOCALAPPDATA%\dosker` on Windows. `DOSKER_ROOT` overrides the root for tests.
 
 ```
 ~/.local/share/dosker/
   images/            OCI image layout
-  containers/<id>/   state.json, disk.img, sockets, logs, config
+  containers/<id>/   state.json, disk.img, endpoints, logs, config
   volumes/<name>/    volume.img, meta.json
   engines/           managed engine binaries and checksums
   cache/             build cache
@@ -287,7 +339,7 @@ Use the XDG data directory on Linux and the Application Support directory on mac
 5. Each filesystem instruction commits a content-addressed layer, or reuses a cache hit. Config-only instructions update the build config and the history.
 6. The final image is written to the OCI store and the lock file is updated.
 7. `dosker run` creates a private writable disk, starts the supervisor, boots the engine, waits for the agent, and sends `CMD`.
-8. `exec` sends a command over `control.sock` to the supervisor, which frames it to the agent.
+8. `exec` sends a command over the control endpoint to the supervisor, which frames it to the agent.
 9. `stop` flushes the guest, quits the engine, and updates state.
 
 ## Component Interfaces
@@ -311,7 +363,7 @@ Use the XDG data directory on Linux and the Application Support directory on mac
 ### Supervisor
 
 - **Purpose**: Own one container for its whole lifetime.
-- **Interface**: A JSON-lines protocol over `control.sock`:
+- **Interface**: A JSON-lines protocol over the control endpoint. The endpoint is a Unix socket on Linux and macOS, and a named pipe on Windows.
   - `exec {command, env, workdir, timeout}` returns `{exit_code, output, timed_out, truncated}`.
   - `attach` switches the client to a line shell.
   - `stop {grace}` stops the container.
@@ -333,9 +385,9 @@ Use the XDG data directory on Linux and the Application Support directory on mac
 - **Interface**: `build(context, tag, options) -> image digest` and a progress stream.
 - **Failure Modes**: An invalid instruction, a cache corruption, a boot timeout, a non-zero `RUN`, or a disk-full error aborts the build and removes temporary state.
 
-### Control Socket Encoding
+### Control Endpoint Encoding
 
-Messages are UTF-8 JSON, one object per line. Binary file data is not sent on the control socket. `cp` streams through the agent or reads the stopped disk with the FAT reader.
+Messages are UTF-8 JSON, one object per line, over the control endpoint. The endpoint is a Unix socket on Linux and macOS, and a named pipe on Windows. Engine endpoints use Unix sockets on Linux and macOS, and localhost TCP on Windows. Binary file data is not sent on the control endpoint. `cp` streams through the agent or reads the stopped disk with the FAT reader.
 
 ### CLI
 
@@ -381,7 +433,7 @@ An image is a config plus ordered layers. A normal layer is a tar blob with a JS
 - The FreeDOS base includes `CONFIG.SYS` with `LASTDRIVE=Z`, `FILES=20`, and `BUFFERS=10`, and an `AUTOEXEC.BAT` that starts the agent.
 - `FROM` resolves a local tag or digest, a built-in FreeDOS base, an imported DOS image, or a booter blob. An imported DOS image gets an agent injection layer that adds `C:\DOSKER\DOSKER.EXE` and wraps `AUTOEXEC.BAT`.
 - `COPY` adds files to the staged tree with fixed timestamps and 8.3 validation.
-- `RUN --host` runs in a temporary staged tree that represents `C:\`. It folds the result into a layer. It rejects invalid 8.3 names and symlinks.
+- `RUN --host` runs in a temporary staged tree that represents `C:\`. The host shell is `/bin/sh -c` on Unix and `cmd.exe /C` on Windows. It folds the result into a layer. It rejects invalid 8.3 names and symlinks.
 - `RUN` boots one transient VM per instruction, sends the command to the agent, reads the tree back, and folds the delta into a layer. Before the boot, the build engine writes `C:\DOSKER\CONFIG.INI` with the control port and baud. It excludes that file and agent temporary files from the read-back delta, and it ignores the `C:\DOSKER` directory timestamp. After shutdown, it also reads the MBR, partition table, and boot sector. A change updates the layer's boot metadata and the image config.
 - After every filesystem instruction, the builder restores the agent files under `C:\DOSKER`. Changes to that directory are discarded.
 - Config-only instructions update the build config and history. They do not add an OCI filesystem layer.
@@ -445,7 +497,7 @@ OCI media types:
 
 - DOSker runs arbitrary DOS code. QEMU TCG is not a security boundary. The README and `dosker doctor` state this.
 - The tool does not claim to contain hostile images. Use an outer VM or an isolated CI runner for untrusted input.
-- All supervisor control sockets are Unix sockets in a mode 0700 container directory. Engine sockets use Unix sockets where the engine supports them, and localhost TCP otherwise.
+- The supervisor control endpoint is a Unix socket in a mode 0700 container directory on Linux and macOS, and a named pipe with a user-only DACL on Windows. Engine endpoints use Unix sockets where the engine supports them, and localhost TCP otherwise. Windows engine endpoints bind to `127.0.0.1` only.
 - Published ports bind to `127.0.0.1` by default. A LAN bind requires an explicit address.
 - `ENGINE-CONFIG` is trusted. It can pass powerful engine options.
 - `COPY` rejects traversal, absolute paths outside the context, and symlinks.
@@ -458,7 +510,7 @@ OCI media types:
 
 - **Performance**: A cached build performs no VM boot. A cold `RUN` boots one VM per instruction. The agent reports a boot and transfer baseline in the first milestone.
 - **Reliability**: State writes are atomic. Images are never modified. A failed build commits no layer.
-- **Portability**: Linux x86_64 and macOS arm64 are supported. Paths and sockets use platform abstractions.
+- **Portability**: Linux x86_64, macOS arm64, and Windows x86_64 are supported. Paths, control endpoints, process cleanup, and engine endpoints use the `dosker-platform` abstraction.
 - **Observability**: `engine.log`, `serial.log`, and `container.log` record the engine, the guest link, and command history. `dosker inspect` prints the effective command line.
 - **Maintainability**: Engine differences stay inside adapter crates. The agent stays small and has no runtime dependency beyond DOS.
 - **Compatibility**: FreeDOS is the first target. MS-DOS 5.0 and 6.22 and DR-DOS are tested when the user supplies an image. The agent is built for 8086 real mode.
@@ -466,7 +518,7 @@ OCI media types:
 
 ## Testing Strategy
 
-**Unit tests** cover the parser, `$NAME` expansion, layer codec and digest stability, cache keys, FAT builder and reader, boot metadata, 8.3 validation, lock resolution, state transitions, stale detection, frame codec, CRC and retry, engine config generation with golden files, and capability matching.
+**Unit tests** cover the parser, `$NAME` expansion, layer codec and digest stability, cache keys, FAT builder and reader, boot metadata, 8.3 validation, lock resolution, state transitions, stale detection, control transport (Unix socket and named pipe), frame codec, CRC and retry, engine config generation with golden files, and capability matching.
 
 **Adapter contract tests** use a mock engine that implements the expected sockets and lifecycle. The same contract suite checks each adapter's generated command line and declared capabilities.
 
@@ -481,7 +533,7 @@ The QEMU integration test runs on Linux in CI. On macOS arm64 it runs in a night
 
 **Agent tests** use Rust unit tests for the codec and a `/TEST` self-check mode inside the DOS agent. A conformance test runs the Rust codec against the real agent in QEMU.
 
-**CI** runs formatting, clippy, and dependency checks on every commit. Unit and mock tests run on Linux and macOS. QEMU integration runs on Linux. The 16-bit agent cross-build runs on Linux. Engine versions are pinned.
+**CI** runs formatting, clippy, and dependency checks on every commit. Unit and mock tests run on Linux, macOS, and Windows. QEMU integration runs on Linux. A Windows QEMU smoke test runs in CI. The 16-bit agent cross-build runs on Linux. Engine versions are pinned.
 
 **Security tests** check path traversal, symlink rejection, invalid 8.3 names, socket permissions, missing engines, and version mismatches.
 
@@ -501,7 +553,7 @@ A format version change is a breaking change and needs a migration or a new vers
 
 ### Planning Note
 
-This design covers the whole system and spans several independent subsystems. The first implementation plan covers M0 and M1 only. M2 to M5 become follow-up plans. Do not start M2 before the M0 spikes settle the FreeDOS builder, the agent, and the DOSBox-X boot path.
+This design covers the whole system and spans several independent subsystems. The first implementation plan covers M0, M1, and the Windows M1-W track. M2 to M5 become follow-up plans. Do not start M2 before the M0 spikes settle the FreeDOS builder, the agent, the Windows transport, and the DOSBox-X boot path.
 
 ### Milestones
 
@@ -515,15 +567,19 @@ This design covers the whole system and spans several independent subsystems. Th
 
 **M1: runtime slice (first usable).** QEMU adapter, supervisor, agent, `image import`, `create`, `start`, `stop`, `rm`, `run -d`, `exec`, `attach`, `logs`, `screenshot`, `engines`, `doctor`, and a basic QEMU gdbstub pass-through. The image is prepared by M0 and loaded with `image import`, not built by DOSker.
 
+**M1-W: Windows runtime track.** Named-pipe control transport, Job Object cleanup, Windows data directory, engine discovery, and the QEMU runtime slice on Windows x86_64. It runs in parallel with M1 and is a first-release gate.
+
 **M2: build slice.** OCI store, layers, Doskerfile parser, `COPY`, `RUN --host`, `RUN`, cache, lock file, the FreeDOS base builder, and `dosker build`.
 
 **M3: data and network.** Volumes, NAT and port publishing, host bind mounts, and development mode.
 
 **M4: more engines.** DOSBox-X first, then Bochs. The capability matrix is populated by the spikes. Debugger pass-through for Bochs.
 
-**M5: packaging.** `save`/`load`, `system prune`, macOS engine discovery, docs, install instructions, and release artifacts.
+**M5: packaging.** `save`/`load`, `system prune`, macOS and Windows engine discovery, docs, install instructions, and release artifacts for Linux, macOS, and Windows.
 
 **M1 definition of done.** `dosker image import freedos-test.img freedos-test` loads the prepared image. `dosker run -d --name test freedos-test` boots with no window. `dosker exec test ECHO HELLO` returns `HELLO` and status 0. `dosker attach test` gives a working command shell. `dosker stop test` flushes and exits. `dosker start test` returns to the same disk. The QEMU gdbstub is reachable on a socket. `dosker engines` reports the QEMU version and capabilities. Logs show the engine output and the serial transcript.
+
+**M1-W definition of done.** The same slice passes on Windows x86_64. The CLI reaches the supervisor through a named pipe. The engine uses localhost TCP. A supervisor crash leaves no engine process because the Job Object closes. `dosker engines` finds the Windows QEMU build and reports its capabilities.
 
 ## Risks
 
@@ -538,6 +594,9 @@ This design covers the whole system and spans several independent subsystems. Th
 | One boot per `RUN` is slow | Poor developer experience | Cache aggressively. Show timings. Revisit batching after engine snapshots. |
 | Auto-sized FAT volume is too small for an installer | `RUN` fails with `NO_SPACE` | Leave free space, report the required and available sizes, and add an explicit `DISK` instruction later. |
 | macOS engine quality varies | Bad macOS experience | Homebrew discovery with a version pin. Nightly macOS CI. |
+| Windows named pipes and console behavior differ | Host-specific bugs | A `dosker-platform` abstraction and Windows CI. |
+| Windows engine builds are less uniform | Version and capability mismatch | Official builds with checksums, a version check, and the M1-W spike. |
+| Windows Job Object cleanup fails | Orphan engines | Assign the engine to a Job Object with kill-on-close. Test a supervisor crash. |
 | Scope grows into gaming and BBS features | Delays the core | Capability model and milestone order. Defer game-specific display, audio, and BBS features. |
 | Users treat DOSker as a sandbox | Host compromise | State the threat model in the README and `dosker doctor`. Recommend an outer VM. |
 | FreeDOS and engine licenses | Legal risk | Build images locally. Keep engines external. MIT/Apache-2.0 for DOSker. Publish source offers. |
@@ -554,7 +613,10 @@ This design covers the whole system and spans several independent subsystems. Th
 | Do we add long file names after the MVP? | User | Deferred. Revisit when FreeDOS LFN support is proven. |
 | Do we add registry push and pull? | User | Deferred. The local OCI layout keeps the option open. |
 | Do we add a shared L2 network? | User | Deferred. It needs a virtual switch and per-engine NIC mapping. |
-| Do we support Windows? | User | Deferred. Named pipes and engine artifacts need separate work. |
+| Which Windows engine builds are the most reliable? | M1-W and M4 spikes | Verify the QEMU build in M1-W and the DOSBox-X and Bochs builds in M4. |
+| Can the control protocol run over Windows named pipes without change? | M1-W spike | Implement the `dosker-platform` transport and run the contract suite. |
+| Do Windows engine endpoints behave the same over localhost TCP? | M1-W spike | Test QMP, serial, monitor, gdbstub, VNC, and NAT. |
+| Do we support Windows arm64? | User | Deferred. It needs arm64 engine builds and a separate CI runner. |
 | Do we add a `commit` command or `CD-ROM`/ISO media? | User | Deferred. |
 | Do we add `ARG`, multi-stage builds, or `ENTRYPOINT`? | User | Deferred. They add syntax and cache rules. |
 | Can the agent be distributed under MIT/Apache-2.0 when it links OpenWatcom runtime code? | User | Check the OpenWatcom runtime license. Use ia16-gcc if the terms conflict. |
@@ -562,7 +624,7 @@ This design covers the whole system and spans several independent subsystems. Th
 
 ## Success Criteria
 
-SC-001, SC-005, and SC-006 are the M1 gate. SC-002 and SC-004 are verified in M2. SC-003 is verified in M4.
+SC-001, SC-005, SC-006, and SC-007 are the M1 gate. SC-002 and SC-004 are verified in M2. SC-003 is verified in M4.
 
 - **SC-001**: `dosker run -d --name test freedos-test` boots with no window. `dosker exec test ECHO HELLO` returns `HELLO` and status 0. `dosker attach test` gives a working shell. `dosker stop test` flushes and exits. `dosker start test` returns to the same disk. The QEMU gdbstub is reachable on a socket.
 - **SC-002**: `dosker build` turns a Doskerfile with `FROM`, `COPY`, `RUN`, and `CMD` into a runnable image. A second build reports cache hits and boots no VM.
@@ -570,3 +632,4 @@ SC-001, SC-005, and SC-006 are the M1 gate. SC-002 and SC-004 are verified in M2
 - **SC-004**: A committed lock file makes a second machine use the pinned base, engine, and agent versions. A mismatch stops the build.
 - **SC-005**: Every declared capability is backed by an integration test or marked unproven in the capability table.
 - **SC-006**: The unit, mock, and QEMU integration suites pass on Linux. Unit and mock suites pass on macOS.
+- **SC-007**: The M1 runtime slice passes on Linux x86_64, macOS arm64, and Windows x86_64. The Windows run uses a named pipe for control, a Job Object for cleanup, and no orphan engine remains after a supervisor crash.

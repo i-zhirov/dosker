@@ -27,6 +27,7 @@ Version 1. This document defines the grammar and the semantics of every instruct
 ## Build Context
 
 - The context is the directory that contains the Doskerfile.
+- Source paths follow the host convention. On Windows, a source may be drive-qualified, for example `C:\src`. A `COPY` destination is always a DOS path.
 - `.doskerignore` uses gitignore pattern syntax.
 - A `COPY` source must resolve inside the context after path normalization.
 - A symlink anywhere in a `COPY` source path is an error.
@@ -166,7 +167,7 @@ Form: `RUN --host <command>`
 Rules:
 
 - The command runs on the host in a temporary staged tree that represents `C:\`.
-- The shell is `/bin/sh -c` on Unix.
+- The shell is `/bin/sh -c` on Unix and `cmd.exe /C` on Windows.
 - The working directory is the staged tree root. A `WORKDIR` does not change the host working directory. It is provided as `DOSKER_WORKDIR`.
 - The environment is a small controlled set plus `DOSKER_ROOT`, `DOSKER_WORKDIR`, and the image `ENV` values as `DOSKER_ENV_<NAME>`.
 - The command has the host user's permissions and network access. It is trusted.
