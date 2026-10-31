@@ -1,7 +1,7 @@
 # DOSker — Design
 
 - **Date**: 2026-11-01
-- **Status**: Draft
+- **Status**: Approved
 - **Input**: `task.md` — a Docker-like system for launching pre-configured DOS systems.
 
 ## Index
