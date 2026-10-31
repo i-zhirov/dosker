@@ -2,6 +2,8 @@
 
 This asset records the positive outcomes and the negative drawbacks of a later decision to drop DOSBox-X and Bochs and keep only QEMU. The current decision is to keep the multi-engine design.
 
+The question-by-question QEMU-only change set and its positive outcomes are in [`qemu-only-deep-dive.md`](qemu-only-deep-dive.md).
+
 ## Current Decision
 
 Keep the multi-engine design. QEMU is the only engine required for M1 and M2. DOSBox-X and Bochs remain capability-gated adapters, and their spikes must not block the QEMU slice. Re-evaluate after M4, when the DOSBox-X and Bochs spikes and adapters have produced evidence.

@@ -14,6 +14,7 @@
 | Agent protocol contract | [`contracts/agent-protocol.md`](contracts/agent-protocol.md) | Serial frame format and command set |
 | Engine research | [`assets/engine-research.md`](assets/engine-research.md) | Capability evidence and source links for QEMU, DOSBox-X, and Bochs |
 | Engine fallback analysis | [`assets/engine-fallback-analysis.md`](assets/engine-fallback-analysis.md) | Benefits and drawbacks of a QEMU-only system, and what to preserve now |
+| QEMU-only deep dive | [`assets/qemu-only-deep-dive.md`](assets/qemu-only-deep-dive.md) | Question-by-question changes and positive outcomes if DOSker drops DOSBox-X and Bochs |
 
 ## Context And Problem
 
@@ -191,7 +192,7 @@ A developer on Windows x86_64 imports a prepared FreeDOS image, starts it headle
 
 The design keeps three engines, as the task requires. QEMU is the only engine required for M1 and M2. DOSBox-X and Bochs are capability-gated adapters. Their spikes must not block the QEMU slice.
 
-The explicit comparison of the current multi-engine design against a later QEMU-only fallback is in [`assets/engine-fallback-analysis.md`](assets/engine-fallback-analysis.md). It records the positive outcomes and the negative drawbacks of dropping the other engines, the conditions that would justify a drop, and the design elements we keep now so the option stays open.
+The explicit comparison of the current multi-engine design against a later QEMU-only fallback is in [`assets/engine-fallback-analysis.md`](assets/engine-fallback-analysis.md). It records the positive outcomes and the negative drawbacks of dropping the other engines, the conditions that would justify a drop, and the design elements we keep now so the option stays open. The question-by-question change set and the positive outcomes of a QEMU-only system are in [`assets/qemu-only-deep-dive.md`](assets/qemu-only-deep-dive.md).
 
 Decision: keep multi-engine for now. Re-evaluate after M4, when the DOSBox-X and Bochs spikes and adapters have produced evidence.
 
