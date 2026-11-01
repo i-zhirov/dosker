@@ -42,8 +42,36 @@ jobs:
       - name: Windows supervisor suite
         if: runner.os == 'Windows'
         run: cargo test -p dosker-runtime --test supervisor -- --test-threads=1 --nocapture
+      - name: Windows run trace
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "dosker-trace"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $env:DOSKER_ROOT = $root
+          $env:DOSKER_MOCK_ENGINE = (Resolve-Path "target\debug\mock-engine.exe").Path
+          $p = Start-Process -FilePath "target\debug\dosker.exe" -ArgumentList "run","-d","freedos:latest" -NoNewWindow -PassThru -RedirectStandardOutput "$root\run.out" -RedirectStandardError "$root\run.err"
+          if (-not $p.WaitForExit(15000)) {
+            Write-Host "run did not exit within 15s"
+            Stop-Process -Id $p.Id -Force
+          } else {
+            Write-Host "run exit code: $($p.ExitCode)"
+          }
+          Write-Host "--- stdout ---"
+          Get-Content "$root\run.out" -ErrorAction SilentlyContinue
+          Write-Host "--- stderr ---"
+          Get-Content "$root\run.err" -ErrorAction SilentlyContinue
+          Write-Host "--- tree ---"
+          Get-ChildItem -Recurse $root | Select-Object FullName, Length
+          Write-Host "--- state ---"
+          Get-Content "$root\containers\*\state.json" -ErrorAction SilentlyContinue
+          Write-Host "--- container log ---"
+          Get-Content "$root\containers\*\container.log" -ErrorAction SilentlyContinue
+          Get-Process dosker,mock-engine -ErrorAction SilentlyContinue | Stop-Process -Force
       - name: Windows exec suite
         if: runner.os == 'Windows'
+        timeout-minutes: 3
         run: cargo test -p dosker-cli --features mock-engine --test cli_exec -- --test-threads=1 --nocapture
       - name: Unit and mock suites
         run: cargo test --workspace --features dosker-cli/mock-engine
