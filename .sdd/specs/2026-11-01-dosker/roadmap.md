@@ -72,20 +72,22 @@ conformance test that runs the Rust codec against the real agent in QEMU. Out
 of scope: the supervisor, the CLI, the image builder, and every engine other
 than QEMU.
 
-- **Status:** Unplanned
+- **Status:** Planned
 - **Depends on:** Slice 1. The QEMU/FreeDOS spike and the 16-bit toolchain
   are manual prerequisites.
 - **Requirements:** FR-009, FR-010
-- **Manual prerequisites:** before this slice, a QEMU headless boot of a
-  hand-built FreeDOS image with a serial probe. OpenWatcom or ia16-gcc, plus
-  the OpenWatcom runtime license check.
-- **Plan:** —
-- **Done when:** a hand-built FreeDOS image boots under QEMU headless and the
-  agent sends `HELLO`. The host completes the handshake. `EXEC ECHO HELLO`
-  returns `HELLO` and status 0. `PUT` and `GET` round-trip a file. `STAT`
-  returns size and attributes. `SHUTDOWN` gets `SHUTDOWN_ACK`. A CRC error
-  retries three times and then closes the session. The `/TEST` self-check
-  passes.
+- **Manual prerequisites:** before this slice, a FreeDOS 1.3 Floppy Edition
+  boot floppy (`144m/x86BOOT.img` from `FD13-FloppyEdition.zip`) supplied
+  through `DOSKER_FREEDOS_SOURCE`, with QEMU, `mtools`, `fdisk`, `sfdisk`,
+  and `timeout` on the fixture host. OpenWatcom or ia16-gcc, plus the
+  OpenWatcom runtime license check.
+- **Plan:** `.sdd/specs/2026-11-01-dosker/plan-dos-agent-serial.md`
+- **Done when:** a generated FreeDOS base image boots under QEMU headless
+  and the agent sends `HELLO`. The host completes the handshake.
+  `EXEC ECHO HELLO` returns `HELLO` and status 0. `PUT` and `GET` round-trip
+  a file. `STAT` returns size, the directory flag, and attributes.
+  `SHUTDOWN` gets `SHUTDOWN_ACK`. A CRC error retries three times and then
+  closes the session. The `/TEST` self-check passes.
 
 ### Slice 3 — qemu-runtime-slice
 

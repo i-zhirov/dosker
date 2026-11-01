@@ -44,6 +44,7 @@ offset  size  field
 
 - `crc32` is the IEEE CRC-32 over bytes 0 through `20+N-1`.
 - Maximum payload is 4096 bytes.
+- The version 1 header has no session field. The serial link is the session boundary. The agent stores the `session_id` from `HELLO_ACK` only for guest-reboot detection and host bookkeeping.
 - The sender uses stop-and-wait. It sends one frame, waits for an ACK, and then sends the next.
 - The receiver sends `ACK` with the same `request_id` and `sequence` after a valid frame.
 - On a CRC error, the receiver sends `NAK` with the same `request_id` and `sequence`.
@@ -106,7 +107,7 @@ The host rejects a `protocol_version` it does not support and stops the containe
 { "session_id": "b1f0c2" }
 ```
 
-The agent stores the session ID and rejects frames from a different session.
+The agent stores the session ID for guest-reboot detection and host bookkeeping. It does not validate individual frames against a session ID. The serial link is the session boundary.
 
 ## Command Execution
 
@@ -183,10 +184,15 @@ Rules:
 {
   "exists": true,
   "size": 12345,
+  "directory": false,
   "attributes": { "read_only": false, "hidden": false, "system": false, "archive": true },
   "timestamp": "1996-03-14T12:00:00Z"
 }
 ```
+
+- `directory` is true for a directory and false for a file. A directory reports `size` 0.
+- The four `attributes` fields are independent of `directory`. There is no directory attribute.
+- A missing path reports `exists` false, `size` 0, `directory` false, all four attributes false, and no `timestamp` field.
 
 ## Liveness
 
@@ -226,7 +232,7 @@ Codes:
 | `TOO_LARGE` | File exceeds the transfer limit |
 | `UNSUPPORTED` | Unknown type or feature |
 | `CRC` | Frame failed CRC after retries |
-| `SESSION` | Unknown or expired session |
+| `SESSION` | Session is closed or not established |
 | `INTERNAL` | Agent internal error |
 
 ## Limits
