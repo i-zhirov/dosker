@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-01
-- **Status**: In Progress
+- **Status**: Implemented
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: `runtime-foundation`
 - **Depends on**: —
@@ -322,7 +322,7 @@ agent's 1 MiB limit lands.
         - `long_root_uses_the_short_fallback` (`cfg(unix)`) — create a temp dir, append a 200-byte component, create the directory, call `control_endpoint`, assert the fallback path, and run one `ping`/`pong` round-trip.
     - **Verify:** `cargo test -p dosker-platform --test short_socket && cargo test -p dosker-test-support --test transport_contract`
 
-- [ ] **Task 4: Windows named-pipe backend**
+- [x] **Task 4: Windows named-pipe backend**
     - **Implements:** FR-022 (Windows side); design §Host Platform Abstraction, §Security And Privacy; constraints “Control endpoint: … named pipe on Windows” and “Windows named pipe: DACL for the current user only”.
     - **Add Windows-only contract checks to `crates/dosker-test-support/tests/transport_contract.rs`**
         - `pipe_acl_has_one_ace_for_current_user` (`cfg(windows)`) — open the bound pipe by name with `CreateFileW(..., GENERIC_READ | GENERIC_WRITE | READ_CONTROL, ...)`, call `GetSecurityInfo(handle, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION, ...)`, assert `GetAclInformation` reports one ACE, `GetAce` returns an access-allowed ACE, and `EqualSid` matches the current user's token SID.
@@ -337,7 +337,7 @@ agent's 1 MiB limit lands.
     - **Modify `crates/dosker-platform/Cargo.toml`** — verify the `windows-sys` target dependency carries `Win32_System_Pipes`, `Win32_Security`, `Win32_Security_Authorization`, `Win32_System_Threading`, and `Win32_System_IO` from the workspace table; add any missing feature for the named-pipe backend, DACL, and process liveness.
     - **Modify `crates/dosker-test-support/Cargo.toml`** — verify `windows-sys` is present under `[target.'cfg(windows)'.dependencies]` with `Win32_Foundation`, `Win32_Security`, `Win32_Security_Authorization`, `Win32_Storage_FileSystem`, `Win32_System_SystemServices`, and `Win32_System_Threading` for the ACL check; add any missing feature.
     - **Verify:** `cargo test -p dosker-test-support --test transport_contract` on the Windows runner (the same command runs the Unix backend on Linux and macOS). Also run `cargo test -p dosker-platform` locally to prove the Unix build is unaffected.
-    - **Status note:** implemented and reviewed by inspection; the checkbox stays open until the Windows matrix leg passes.
+    - **Status note:** verified on the Windows matrix leg.
 
 - [x] **Task 5: Process-cleanup seam, Unix cleanup, and detached spawn**
     - **Implements:** FR-023 Slice 1 part — the seam and the Unix implementation; the Windows Job Object is Slice 4. Design §Process Model, §Host Platform Abstraction.

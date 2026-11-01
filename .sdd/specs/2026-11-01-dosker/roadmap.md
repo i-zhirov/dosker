@@ -43,7 +43,7 @@ trait, the Unix process-group cleanup, and the stale-supervisor rule. Out of
 scope: any real engine, the DOS agent, image storage, the build path, and the
 Windows Job Object.
 
-- **Status:** In Progress
+- **Status:** Implemented
 - **Depends on:** —
 - **Requirements:** FR-008, FR-019, FR-022, FR-023
 - **Manual prerequisites:** Rust toolchain. A Windows CI runner for the
