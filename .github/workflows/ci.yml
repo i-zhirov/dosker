@@ -39,6 +39,9 @@ jobs:
       - name: Windows transport contract
         if: runner.os == 'Windows'
         run: cargo test -p dosker-test-support --test transport_contract -- --nocapture
+      - name: Windows exec suite
+        if: runner.os == 'Windows'
+        run: cargo test -p dosker-cli --features mock-engine --test cli_exec -- --test-threads=1 --nocapture
       - name: Unit and mock suites
         run: cargo test --workspace --features dosker-cli/mock-engine
       - name: Transport contract suite
