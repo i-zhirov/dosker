@@ -3,6 +3,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
+#[cfg(unix)]
 use dosker_platform::PlatformError;
 use dosker_platform::data_root::data_root;
 
@@ -181,6 +182,7 @@ fn windows_uses_localappdata() {
     assert_eq!(data_root().unwrap(), local.path().join("dosker"));
 }
 
+#[cfg(unix)]
 #[cfg(unix)]
 #[test]
 fn missing_home_is_an_error() {
