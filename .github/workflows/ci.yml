@@ -18,6 +18,7 @@ jobs:
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -35,6 +36,9 @@ jobs:
         run: cargo build --workspace --all-targets --features dosker-cli/mock-engine
       - name: Clippy
         run: cargo clippy --workspace --all-targets --features dosker-cli/mock-engine -- -D warnings
+      - name: Windows transport contract
+        if: runner.os == 'Windows'
+        run: cargo test -p dosker-test-support --test transport_contract -- --nocapture
       - name: Unit and mock suites
         run: cargo test --workspace --features dosker-cli/mock-engine
       - name: Transport contract suite
