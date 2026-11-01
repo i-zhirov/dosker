@@ -1,0 +1,27 @@
+[package]
+name = "dosker-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "dosker"
+path = "src/main.rs"
+
+[features]
+mock-engine = ["dep:dosker-test-support"]
+
+[dependencies]
+clap.workspace = true
+dosker-core.workspace = true
+dosker-platform.workspace = true
+dosker-engine.workspace = true
+dosker-runtime.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+dosker-test-support = { workspace = true, optional = true }
+
+[dev-dependencies]
+dosker-test-support.workspace = true
+tempfile.workspace = true
