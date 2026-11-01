@@ -92,6 +92,10 @@ fn concurrent_readers_never_observe_partial_content() {
                     reads += 1;
                 }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                // Windows can briefly deny a read while the target is being
+                // replaced. A retry is a successful read, not corruption.
+                #[cfg(windows)]
+                Err(error) if error.raw_os_error() == Some(32) => {}
                 Err(error) => panic!("a reader failed: {error}"),
             }
         }
