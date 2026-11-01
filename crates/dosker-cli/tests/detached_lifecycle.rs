@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::Duration;
 
-use common::{stderr_text, stdout_text};
+use common::{run_captured, stderr_text, stdout_text};
 use dosker_core::{ContainerId, Status};
 #[cfg(unix)]
 use dosker_platform::EndpointRecord;
@@ -97,17 +97,15 @@ impl Root {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        self.command()
-            .args(args)
-            .output()
-            .expect("run the dosker binary")
+        let mut command = self.command();
+        command.args(args);
+        run_captured(&mut command, Duration::from_secs(45))
     }
 
     fn run_with_root(&self, root: &Path, args: &[&str]) -> Output {
-        self.command_with_root(root)
-            .args(args)
-            .output()
-            .expect("run the dosker binary")
+        let mut command = self.command_with_root(root);
+        command.args(args);
+        run_captured(&mut command, Duration::from_secs(45))
     }
 
     fn start(&mut self) -> ContainerId {

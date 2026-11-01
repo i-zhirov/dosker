@@ -2,9 +2,10 @@
 
 #![allow(dead_code)]
 
+use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
-use std::time::Duration;
+use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant};
 
 use dosker_core::ContainerId;
 use dosker_platform::process::{ProcessSupervisor, system};
@@ -48,15 +49,16 @@ impl CliRoot {
     }
 
     pub fn run(&self, args: &[&str]) -> Output {
-        self.command()
-            .args(args)
-            .output()
-            .expect("run the dosker binary")
+        let mut command = self.command();
+        command.args(args);
+        run_captured(&mut command, Duration::from_secs(45))
     }
 
     /// Starts a detached container and returns its id.
     pub fn start(&self) -> ContainerId {
-        let output = self.run(&["run", "-d", "freedos:latest"]);
+        let mut command = self.command();
+        command.args(["run", "-d", "freedos:latest"]);
+        let output = run_captured(&mut command, Duration::from_secs(15));
         assert_eq!(
             output.status.code(),
             Some(0),
@@ -109,6 +111,51 @@ impl Drop for CliRoot {
             }
         }
         std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Runs a command with file-backed stdout/stderr and a hard timeout.
+///
+/// A detached child must not inherit the capture pipes; files avoid a hang
+/// when the supervisor outlives the `run` process.
+pub fn run_captured(command: &mut Command, timeout: Duration) -> Output {
+    let dir = tempfile::tempdir().expect("create a capture directory");
+    let out_path = dir.path().join("stdout");
+    let err_path = dir.path().join("stderr");
+    let stdout = fs::File::create(&out_path).expect("create stdout capture");
+    let stderr = fs::File::create(&err_path).expect("create stderr capture");
+
+    let mut child = command
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .spawn()
+        .expect("spawn the dosker binary");
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("poll the dosker binary") {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            let stdout = fs::read(&out_path).unwrap_or_default();
+            let stderr = fs::read(&err_path).unwrap_or_default();
+            panic!(
+                "command timed out after {timeout:?}; stdout: {}; stderr: {}",
+                String::from_utf8_lossy(&stdout),
+                String::from_utf8_lossy(&stderr)
+            );
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+
+    let stdout = fs::read(&out_path).expect("read stdout capture");
+    let stderr = fs::read(&err_path).expect("read stderr capture");
+    Output {
+        status,
+        stdout,
+        stderr,
     }
 }
 

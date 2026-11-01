@@ -1,8 +1,11 @@
+mod common;
+
 use std::path::Path;
 use std::process::{Command, Output};
 use std::time::Duration;
 
 use chrono::Utc;
+use common::run_captured;
 use dosker_core::{ContainerId, ContainerName, Status};
 use dosker_platform::EndpointRecord;
 use dosker_platform::endpoint::control_endpoint;
@@ -46,10 +49,9 @@ impl RunRoot {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        self.command()
-            .args(args)
-            .output()
-            .expect("run the dosker binary")
+        let mut command = self.command();
+        command.args(args);
+        run_captured(&mut command, Duration::from_secs(15))
     }
 }
 
