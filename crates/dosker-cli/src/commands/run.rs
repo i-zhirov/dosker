@@ -1,7 +1,7 @@
 //! `dosker run`: create a container and start its detached supervisor.
 
 use std::fs::OpenOptions;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
@@ -60,13 +60,24 @@ pub fn execute(args: RunArgs, context: &mut Context, now: DateTime<Utc>) -> Resu
     );
     context.store.create(&record)?;
 
-    spawn_supervisor(context, &root, &id, &engine)?;
+    let mut child = spawn_supervisor(context, &root, &id, &engine)?;
 
     let deadline = Instant::now() + RUN_WAIT;
     loop {
         let stored = context.store.load(&id)?;
         if matches!(stored.status, Status::Failed | Status::Exited) {
             context.console.line(stored.status.as_str())?;
+            return Ok(EXIT_ERROR);
+        }
+
+        if child.try_wait()?.is_some() {
+            context.console.line(stored.status.as_str())?;
+            if let Ok(log) = std::fs::read_to_string(context.paths.container_log(&id)) {
+                let log = log.trim_end();
+                if !log.is_empty() {
+                    context.console.error_line(log)?;
+                }
+            }
             return Ok(EXIT_ERROR);
         }
 
@@ -92,7 +103,7 @@ fn spawn_supervisor(
     root: &std::path::Path,
     id: &ContainerId,
     engine: &str,
-) -> Result<(), CliError> {
+) -> Result<Child, CliError> {
     let log_path = context.paths.container_log(id);
     let stdout = OpenOptions::new()
         .create(true)
@@ -114,8 +125,5 @@ fn spawn_supervisor(
         .stderr(Stdio::from(stderr));
 
     system().prepare_detached(&mut command)?;
-    let child = command.spawn()?;
-    drop(child);
-
-    Ok(())
+    Ok(command.spawn()?)
 }
