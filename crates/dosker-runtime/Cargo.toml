@@ -1,0 +1,18 @@
+[package]
+name = "dosker-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dosker-core.workspace = true
+dosker-platform.workspace = true
+dosker-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+dosker-test-support.workspace = true
+tempfile.workspace = true
