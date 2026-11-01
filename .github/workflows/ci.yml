@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-14
+          - windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Build workspace
+        run: cargo build --workspace --all-targets --features dosker-cli/mock-engine
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --features dosker-cli/mock-engine -- -D warnings
+      - name: Unit and mock suites
+        run: cargo test --workspace --features dosker-cli/mock-engine
+      - name: Transport contract suite
+        run: cargo test -p dosker-test-support --test transport_contract
+      - name: Detached lifecycle suite
+        run: cargo test -p dosker-cli --features mock-engine --test detached_lifecycle
