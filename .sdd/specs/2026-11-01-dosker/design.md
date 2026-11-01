@@ -258,7 +258,7 @@ The agent owns COM2. COM1 stays available to the guest. The adapter maps the two
 
 The supervisor starts the engine, waits for the agent banner, owns all engine sockets, proxies `exec` and `attach`, records state, writes logs, reaps the engine, and stores the final status. The CLI exits after it starts a detached container.
 
-There is no central daemon. `dosker ps` reads the state directory. `dosker exec`, `attach`, `stop`, and `debug` connect to the control endpoint. A dead supervisor leaves a stale entry that the next CLI call marks as stopped. A container failure does not affect another container.
+There is no central daemon. `dosker ps` reads the state directory. `dosker exec`, `attach`, `stop`, and `debug` connect to the control endpoint. A dead supervisor leaves a stale entry that the next CLI call marks as exited. A container failure does not affect another container.
 
 On Linux the supervisor sets a parent-death signal for the engine. On macOS it uses a process group and endpoint liveness. On Windows it uses a Job Object with kill-on-close and endpoint liveness. A build VM is transient and is always killed on error. A failed build commits no layer.
 
@@ -398,6 +398,7 @@ Messages are UTF-8 JSON, one object per line, over the control endpoint. The end
 | `dosker run [-d] [--name N] [--rm] [-p [addr:]host:guest] [-v name:drive[:ro]] [--bind drive:path[:ro]] [--engine E] [--boot-timeout N] [--display none\|window\|vnc] [--vnc-port N] IMAGE` | Create and start a container |
 | `dosker create`, `start [--boot-timeout N]`, `stop`, `restart`, `rm` | Container lifecycle |
 | `dosker ps [-a]`, `inspect`, `logs [-f]`, `port` | Inspect containers |
+| `dosker status CONTAINER` | Report one container from the supervisor or the recovered state |
 | `dosker exec [-e K=V] [-w PATH] [--timeout N] CONTAINER COMMAND` | Run a command through the agent |
 | `dosker attach CONTAINER` | Open the line shell |
 | `dosker cp CONTAINER:SRC HOST` and `dosker cp HOST CONTAINER:DST` | Transfer a file in or out |

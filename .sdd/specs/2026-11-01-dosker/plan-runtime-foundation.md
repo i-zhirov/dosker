@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-01
-- **Status**: Approved
+- **Status**: In Progress
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: `runtime-foundation`
 - **Depends on**: —
@@ -64,7 +64,8 @@ uses it only as a dev-dependency, which keeps the graph acyclic.
 `libc = "0.2"`, and `windows-sys = { version = "0.59", features =
 ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Pipes",
 "Win32_Security", "Win32_Security_Authorization",
-"Win32_System_Threading", "Win32_System_IO"] }`. `libc` is a
+"Win32_System_SystemServices", "Win32_System_Threading",
+"Win32_System_IO"] }`. `libc` is a
 `[target.'cfg(unix)'.dependencies]` entry and `windows-sys` is a
 `[target.'cfg(windows)'.dependencies]` entry. The workspace table also
 holds the six path dependencies: `dosker-core = { path = "crates/dosker-core" }`,
@@ -171,7 +172,7 @@ agent's 1 MiB limit lands.
 
 ## Tasks
 
-- [ ] **Task 1: Workspace and core domain types**
+- [x] **Task 1: Workspace and core domain types**
     - **Implements:** FR-008 and FR-019 supporting types; design §Workspace Crates; data-model §Container, §Validation Rules, §Container Lifecycle.
     - **Create `Cargo.toml`, `rust-toolchain.toml`, `.gitignore`**
         - `Cargo.toml` — virtual workspace with `resolver = "2"`, the six members under `crates/`, `[workspace.package]` (`version = "0.1.0"`, `edition = "2024"`, `rust-version = "1.98"`, `license = "MIT OR Apache-2.0"`), and the workspace dependency table from Technical Context.
@@ -205,7 +206,7 @@ agent's 1 MiB limit lands.
         - `ContainerName::parse(value: &str) -> Result<Self, CoreError>` — 1 to 63 bytes; first char `[a-z0-9]`; remaining chars `[a-z0-9_.-]`; ASCII only.
         - `ContainerName::as_str(&self) -> &str`; `Display`; `TryFrom<String>`; `From<ContainerName> for String`.
     - **Create `crates/dosker-core/tests/status.rs`**
-        - `every_allowed_transition_is_accepted` — created→starting, created→removed, starting→running, starting→failed, running→stopping, running→exited, stopping→stopped, stopping→exited, stopped→starting, stopped→removed, exited→starting, exited→removed, failed→removed.
+        - `every_allowed_transition_is_accepted` — created→starting, created→removed, starting→running, starting→exited, starting→failed, running→stopping, running→exited, stopping→stopped, stopping→exited, stopped→starting, stopped→removed, exited→starting, exited→removed, failed→removed.
         - `forbidden_transitions_are_rejected` — created→running, starting→stopped, running→created, stopped→running, failed→starting, removed→created.
         - `active_states` — starting, running, and stopping are active; the rest are not.
         - `terminal_state` — only removed is terminal.
@@ -218,7 +219,7 @@ agent's 1 MiB limit lands.
         - `CoreError` — `InvalidContainerId(String)`, `InvalidContainerName(String)`, `InvalidTransition { from: Status, to: Status }`, deriving `Debug, thiserror::Error` with messages `invalid container id: {0}`, `invalid container name: {0}`, `invalid transition from {from} to {to}`.
     - **Verify:** `cargo test -p dosker-core`
 
-- [ ] **Task 2: Platform primitives — data root, endpoints, atomic files, console**
+- [x] **Task 2: Platform primitives — data root, endpoints, atomic files, console**
     - **Implements:** FR-019 (atomic state writes), FR-022 (endpoint naming), design §Host Platform Abstraction, §Security And Privacy; data-model §Validation Rules.
     - **Create `crates/dosker-platform/Cargo.toml` and `crates/dosker-platform/src/lib.rs`**
         - `lib.rs` — `pub mod console; pub mod data_root; pub mod endpoint; pub mod error; pub mod fs;` and re-exports `Endpoint`, `EndpointRecord`, `PlatformError`.
@@ -270,7 +271,7 @@ agent's 1 MiB limit lands.
         - `Console::line(&mut self, text: &str) -> io::Result<()>`; `error_line(&mut self, text: &str) -> io::Result<()>`; `raw(&mut self, text: &str) -> io::Result<()>`. Each flushes; `BrokenPipe` is swallowed.
     - **Verify:** `cargo test -p dosker-platform`
 
-- [ ] **Task 3: Control transport abstraction, Unix socket backend, and transport contract suite**
+- [x] **Task 3: Control transport abstraction, Unix socket backend, and transport contract suite**
     - **Implements:** FR-022 (Unix side); design §Host Platform Abstraction, §Control Endpoint Encoding, §Security And Privacy; data-model §Validation Rules.
     - **Create `crates/dosker-test-support/tests/transport_contract.rs`** — one contract suite that both native backends run. The factory is `fn endpoint() -> (tempfile::TempDir, Endpoint)`, building `control_endpoint(dir.path(), &ContainerId::generate())` so parallel tests never collide.
         - `round_trip_single_request` — server accepts, client writes `ping\n`, server reads the line and writes `pong\n`, client reads it.
@@ -297,7 +298,7 @@ agent's 1 MiB limit lands.
         - On Unix, bind must fail with `PlatformError::Io` carrying `AddrInUse` when a live listener already owns the path. Windows allows several instances of one pipe name by design; the supervisor is the single instance per container.
     - **Verify:** `cargo test -p dosker-test-support --test transport_contract`
 
-- [ ] **Task 3A: Unix short-path socket fallback**
+- [x] **Task 3A: Unix short-path socket fallback**
     - **Implements:** FR-022 (the transport remains usable under a long data root), FR-019 (the recorded endpoint is the one stale recovery checks), design §Host Platform Abstraction, §Security And Privacy; constraints “Unix socket path limit: 100 bytes” and “Unix socket directory mode: 0700”.
     - **Create `crates/dosker-platform/tests/short_socket.rs`** — all tests are `#[cfg(unix)]`; the Windows named-pipe name is unchanged.
         - `short_default_path_is_used_when_it_fits` — a short root yields `<root>/containers/<id>/control.sock`.
@@ -333,11 +334,12 @@ agent's 1 MiB limit lands.
         - `connect` — `WaitNamedPipeW(name, timeout_ms)` then `CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, null, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, null)`, retrying while `ERROR_PIPE_BUSY` until the deadline.
         - `endpoint_alive` — `connect` with a 200 ms budget, then drop.
         - `remove_endpoint` — no-op.
-    - **Modify `crates/dosker-platform/Cargo.toml`** — extend the `windows-sys` target dependency with `Win32_System_Pipes`, `Win32_Security`, `Win32_Security_Authorization`, `Win32_System_Threading`, and `Win32_System_IO` for the named-pipe backend, DACL, and process liveness.
-    - **Modify `crates/dosker-test-support/Cargo.toml`** — add `windows-sys` under `[target.'cfg(windows)'.dependencies]` with `Win32_Foundation`, `Win32_Security`, `Win32_Security_Authorization`, `Win32_Storage_FileSystem`, and `Win32_System_Threading` for the ACL check.
+    - **Modify `crates/dosker-platform/Cargo.toml`** — verify the `windows-sys` target dependency carries `Win32_System_Pipes`, `Win32_Security`, `Win32_Security_Authorization`, `Win32_System_Threading`, and `Win32_System_IO` from the workspace table; add any missing feature for the named-pipe backend, DACL, and process liveness.
+    - **Modify `crates/dosker-test-support/Cargo.toml`** — verify `windows-sys` is present under `[target.'cfg(windows)'.dependencies]` with `Win32_Foundation`, `Win32_Security`, `Win32_Security_Authorization`, `Win32_Storage_FileSystem`, `Win32_System_SystemServices`, and `Win32_System_Threading` for the ACL check; add any missing feature.
     - **Verify:** `cargo test -p dosker-test-support --test transport_contract` on the Windows runner (the same command runs the Unix backend on Linux and macOS). Also run `cargo test -p dosker-platform` locally to prove the Unix build is unaffected.
+    - **Status note:** implemented and reviewed by inspection; the checkbox stays open until the Windows matrix leg passes.
 
-- [ ] **Task 5: Process-cleanup seam, Unix cleanup, and detached spawn**
+- [x] **Task 5: Process-cleanup seam, Unix cleanup, and detached spawn**
     - **Implements:** FR-023 Slice 1 part — the seam and the Unix implementation; the Windows Job Object is Slice 4. Design §Process Model, §Host Platform Abstraction.
     - **Create `crates/dosker-platform/tests/process.rs`**
         - `engine_child_gets_its_own_process_group` (`cfg(unix)`) — spawn `sleep 30` through `prepare_engine`; `process_group(child.id())` is `Some(child.id())`.
@@ -360,13 +362,14 @@ agent's 1 MiB limit lands.
         - Windows `process_group` — `Ok(None)`.
     - **Verify:** `cargo test -p dosker-platform --test process`
 
-- [ ] **Task 6: Engine trait, spec, capability set, and exec types**
+- [x] **Task 6: Engine trait, spec, capability set, and exec types**
     - **Implements:** design §Engine Adapter, §Engine Capability Matrix; FR-008 (adapter seam used by the supervisor).
     - **Modify `crates/dosker-engine/Cargo.toml` and `crates/dosker-engine/src/lib.rs`; create the four module files**
         - `lib.rs` — `pub mod adapter; pub mod capability; pub mod error; pub mod spec;` and re-exports `EngineAdapter`, `EngineSession`, `EngineSpec`, `ExecRequest`, `ExecResult`, `Capability`, `CapabilitySet`, `EngineError`.
         - `Cargo.toml` — dosker-core, serde, thiserror; `serde_json` as a dev-dependency.
     - **Create `crates/dosker-engine/tests/capability.rs`**
-        - `from_name_round_trips_every_variant` — every `Capability` has a stable snake_case name and parses back.
+        - `from_name_round_trips_every_variant` — every `Capability` has a stable name and parses back.
+        - `names_match_the_documented_names` — the hard-coded name list matches the design and Doskerfile contract, including `gdbstub` for `GdbStub`.
         - `unknown_name_is_none` — `"nope"` returns `None`.
         - `contains_reports_only_inserted` — insert `Boot` and `Serial`; `Stop` is absent.
         - `empty_contains_nothing`.
@@ -374,7 +377,7 @@ agent's 1 MiB limit lands.
         - `set_serializes_as_u16` — `CapabilitySet` serializes as a number.
     - **Create `crates/dosker-engine/src/capability.rs`**
         - `Capability` — `Boot, Serial, Stop, Headless, HostDirLive, DebugNative, GdbStub, Screenshot, Vnc, Nat, Audio`, deriving `Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize` with `rename_all = "snake_case"`; `Capability::ALL: [Capability; 11]`.
-        - `Capability::from_name(name: &str) -> Option<Self>`; `Capability::name(self) -> &'static str`.
+        - `Capability::from_name(name: &str) -> Option<Self>`; `Capability::name(self) -> &'static str` — the stable name; `GdbStub` is `gdbstub` to match the design and Doskerfile contract.
         - `CapabilitySet(u16)` with `#[serde(transparent)]`, deriving `Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize`; `EMPTY`, `insert`, `contains`, `iter`, `names`; `FromIterator<Capability>`.
     - **Create `crates/dosker-engine/tests/adapter.rs`**
         - `adapter_is_object_safe` — a stub adapter is stored as `Box<dyn EngineAdapter>`, `start` returns `Box<dyn EngineSession>`, and every trait method is callable.
@@ -391,7 +394,7 @@ agent's 1 MiB limit lands.
         - `EngineError` — `Io(#[from] io::Error)`, `NotFound(PathBuf)`, `Setup(String)`, `Protocol(String)`, `ReadyTimeout(Duration)`, `ExecTimeout(Duration)`, `StopTimeout(Duration)`, `Exited(i32)`, deriving `Debug, thiserror::Error`; messages name the path, duration, exit code, or protocol detail.
     - **Verify:** `cargo test -p dosker-engine`
 
-- [ ] **Task 7: Container record, runtime paths, and atomic state store**
+- [x] **Task 7: Container record, runtime paths, and atomic state store**
     - **Implements:** FR-019 (state read by the next CLI call), FR-008 (per-container state directory), constraints “Container directory mode: 0700”, “Logs: engine log, serial log, container log”, “Container IDs: 12 lowercase hex characters”, “Container names: …”.
     - **Modify `crates/dosker-runtime/Cargo.toml` and `crates/dosker-runtime/src/lib.rs`; create the three module files**
         - `lib.rs` — `pub mod paths; pub mod record; pub mod store;` and re-exports `ContainerRecord`, `RuntimePaths`, `StateStore`, `StoreError`, `CONTROL_SOCKET`.
@@ -401,6 +404,8 @@ agent's 1 MiB limit lands.
         - `new_record_inserts_the_control_socket` — `sockets["control"]` equals the supplied record.
         - `transition_sets_started_at_once` — `Running` sets `started_at`; a later `Running` does not overwrite it.
         - `transition_sets_finished_at_for_outcomes` — `Stopped`, `Exited`, and `Failed` each set `finished_at`.
+        - `transition_repeated_outcome_keeps_finished_at` — repeating `Exited` does not move `finished_at`.
+        - `transition_allows_starting_to_exited` — a stale `starting` record becomes `exited` and sets `finished_at`.
         - `transition_rejects_a_forbidden_edge` — `Created -> Running` returns `CoreError::InvalidTransition`.
         - `serde_round_trip_preserves_every_field`.
         - `unknown_fields_are_ignored` — a `state.json` with an extra key loads.
@@ -414,7 +419,11 @@ agent's 1 MiB limit lands.
         - `create_writes_state_and_three_logs` — `state.json` loads back, and `engine.log`, `serial.log`, and `container.log` exist and are empty.
         - `create_rejects_duplicate_name_across_ids`.
         - `create_rejects_duplicate_id`.
-        - `create_reclaims_a_stale_name_lock` — a name directory whose recorded container has no `state.json` is removed and the name is reused.
+        - `create_reclaims_a_stale_name_lock` — a name directory whose recorded container has no `state.json` is removed and the name is reused; a missing or unparseable `id` file is also stale.
+        - `find_by_name_removes_a_name_dir_whose_container_is_gone`.
+        - `list_skips_non_container_entries`.
+        - `save_writes_pretty_json_with_trailing_newline`.
+        - `load_ignores_unknown_fields_through_the_store`.
         - `load_returns_saved_record`.
         - `load_missing_returns_not_found`.
         - `save_replaces_record` — a status change persists.
@@ -431,7 +440,7 @@ agent's 1 MiB limit lands.
         - File names are exactly `state.json`, `engine.log`, `serial.log`, `container.log`.
     - **Create `crates/dosker-runtime/src/store.rs`**
         - `StateStore` — `new(root: PathBuf) -> Self`, `paths(&self) -> &RuntimePaths`, `create(&self, record: &ContainerRecord) -> Result<(), StoreError>`, `load(&self, id: &ContainerId) -> Result<ContainerRecord, StoreError>`, `save(&self, record: &ContainerRecord) -> Result<(), StoreError>`, `list(&self) -> Result<Vec<ContainerRecord>, StoreError>`, `find_by_name(&self, name: &ContainerName) -> Result<Option<ContainerRecord>, StoreError>`.
-        - `create` order: ensure root, `containers/`, and `containers/.names/` at 0700; return `AlreadyExists(id)` when `containers/<id>/state.json` already exists; create `containers/.names/<name>/` with `create_dir`; on `AlreadyExists` read `containers/.names/<name>/id`, and if that container has no `state.json` remove the name directory and retry once, otherwise return `NameInUse`; write `containers/.names/<name>/id`; create the container directory and the three logs; write `state.json` last with `write_atomic`; on a state-write failure remove the name directory and the container directory before returning.
+        - `create` order: ensure root, `containers/`, and `containers/.names/` at 0700; return `AlreadyExists(id)` when `containers/<id>/state.json` already exists; create `containers/.names/<name>/` with `create_dir`; on `AlreadyExists` read `containers/.names/<name>/id`, and if that container has no `state.json` remove the name directory and retry once, otherwise return `NameInUse`; write `containers/.names/<name>/id`; create the container directory and the three logs; write `state.json` last with `write_atomic`; on any failure after the name lock, remove the name directory and the container directory before returning. A name lock whose `id` file is missing or unparseable is stale.
         - `save` writes pretty JSON with a trailing newline through `write_atomic`.
         - `load` rejects `schema_version != RECORD_SCHEMA_VERSION` with `StoreError::Corrupt`.
         - `list` iterates `containers/*` directories that contain `state.json`, skips every other entry, and sorts by `created_at` then `id`.
@@ -439,7 +448,7 @@ agent's 1 MiB limit lands.
         - `StoreError` — `NotFound(ContainerId)`, `AlreadyExists(ContainerId)`, `NameInUse(ContainerName)`, `Io { path: PathBuf, source: io::Error }`, `Corrupt { path: PathBuf, message: String }`, `Platform(#[from] PlatformError)`, `Core(#[from] CoreError)`.
     - **Verify:** `cargo test -p dosker-runtime --test record --test store`
 
-- [ ] **Task 8: JSON-lines control protocol codec**
+- [x] **Task 8: JSON-lines control protocol codec**
     - **Implements:** FR-008 (control surface of the supervisor), FR-019 (status surface), design §Control Endpoint Encoding, §Supervisor.
     - **Create `crates/dosker-runtime/tests/protocol.rs`**
         - `read_frame_returns_one_line` — `ping\n` yields `Line("ping")`.
@@ -449,6 +458,7 @@ agent's 1 MiB limit lands.
         - `read_frame_reports_clean_eof` — an empty reader yields `Eof`.
         - `read_frame_skips_blank_lines` — leading `\n` and `\r\n` are skipped.
         - `read_frame_accepts_line_at_limit` — 65536 bytes succeed.
+        - `read_frame_accepts_crlf_line_at_limit` — 65536 content bytes plus `\r\n` succeed.
         - `read_frame_rejects_line_over_limit` — 65537 bytes return `FrameError::TooLarge`.
         - `read_frame_rejects_invalid_utf8` — returns `FrameError::NotUtf8`.
         - `parse_request_accepts_each_known_type` — `ping`, `status`, `exec`, `stop`.
@@ -477,7 +487,7 @@ agent's 1 MiB limit lands.
         - `pub fn write_message<W: Write, T: Serialize>(writer: &mut W, value: &T) -> io::Result<()>` — compact JSON plus `\n`, then flush.
     - **Verify:** `cargo test -p dosker-runtime --test protocol`
 
-- [ ] **Task 9: Stale-state recovery**
+- [x] **Task 9: Stale-state recovery**
     - **Implements:** FR-019, FR-023 (kill the orphaned engine group on Unix); design §Process Model, §Error Handling And Edge Cases; data-model §Container Lifecycle.
     - **Create `crates/dosker-runtime/tests/stale.rs`**
         - `dead_supervisor_marks_running_container_exited`.
@@ -486,6 +496,7 @@ agent's 1 MiB limit lands.
         - `dead_endpoint_leaves_a_starting_container_untouched_when_the_pid_is_alive` — the endpoint is bound after the `starting` record is written, so startup is not stale.
         - `live_supervisor_and_endpoint_are_left_untouched`.
         - `stale_engine_group_is_killed` — the fake probe records `kill_group(engine_pgid)` exactly once.
+        - `kill_group_error_leaves_the_record_untouched` — a kill error is returned and the active record keeps its status and pids.
         - `stale_recovery_sets_dirty_and_clears_pids` — status `exited`, `pid`, `engine_pid`, `engine_pgid`, and `exit_code` are `None`, `finished_at` is set, `dirty` is true.
         - `stale_recovery_returns_only_changed_ids`.
         - `non_active_statuses_are_untouched` — created, stopped, exited, failed, and removed records are left alone.
@@ -498,7 +509,7 @@ agent's 1 MiB limit lands.
         - Rule: an active record is stale when its supervisor PID is absent or its supervisor process is dead. A `running` or `stopping` record is also stale when its control endpoint is missing or dead; a `starting` record is not judged by the endpoint because the supervisor binds it after writing `starting`. On stale: if `engine_pgid` is set and alive, call `probe.kill_group`; then set status `Exited`, clear `pid`, `engine_pid`, `engine_pgid`, and `exit_code`, set `finished_at` to `now`, set `dirty` true, and save atomically. Non-active records are untouched. A `kill_group` error is returned; the state is not lost.
     - **Verify:** `cargo test -p dosker-runtime --test stale`
 
-- [ ] **Task 10: Mock engine child process, mock adapter, and fixtures**
+- [x] **Task 10: Mock engine child process, mock adapter, and fixtures**
     - **Implements:** design §Testing Strategy (“Adapter contract tests use a mock engine”), §Process Model; FR-023 (a real child process so the orphan test is real); FR-008 and FR-019 (mock lifecycle used by the supervisor and CLI tests).
     - **Create `crates/dosker-test-support/tests/mock_engine.rs`**
         - `mock_engine_reports_ready` — the first stdout line is `{"event":"ready","pid":<pid>}`.
@@ -541,7 +552,7 @@ agent's 1 MiB limit lands.
         - `crates/dosker-test-support/Cargo.toml` adds dosker-engine, serde_json, `libc` (Unix), and the `[[bin]]` entry `name = "mock-engine"`, `path = "src/bin/mock-engine.rs"`; `windows-sys` is already present from the named-pipe ACL test.
     - **Verify:** `cargo test -p dosker-test-support --test mock_engine --test mock_adapter`
 
-- [ ] **Task 11: Per-container supervisor and lifecycle**
+- [x] **Task 11: Per-container supervisor and lifecycle**
     - **Implements:** FR-008 (headless container, per-container supervisor, no central daemon), FR-019 (engine death recorded), FR-022 (served over the transport trait), design §Process Model, §Supervisor, §Runtime.
     - **Create `crates/dosker-runtime/tests/supervisor.rs`**
         - `supervisor_answers_ping_status_exec_and_stop` — start in a thread against a temp root with a `created` record and a `MockAdapter`; `ping` returns `pong`; `status` reports `running`; `exec ECHO HELLO` returns `HELLO\r\n` and exit 0; `stop` reports `stopped`; the thread returns 0; the final record is `stopped` with `pid = None`.
@@ -567,7 +578,7 @@ agent's 1 MiB limit lands.
         - On every exit path remove the control endpoint; return 0 for `stopped` or `exited`, 1 for `failed`. The `failed` path also clears `pid`.
     - **Verify:** `cargo build -p dosker-test-support --bin mock-engine && cargo test -p dosker-runtime --test supervisor`
 
-- [ ] **Task 12: CLI shell, hidden supervise entry, ps, and status**
+- [x] **Task 12: CLI shell, hidden supervise entry, ps, and status**
     - **Implements:** FR-008 (detached supervisor entry and state-only `ps`), FR-019 (`ps` and `status` recover before reporting), FR-022 (CLI client over the transport trait), design §CLI, §Process Model.
     - **Modify `crates/dosker-cli/Cargo.toml` and `src/main.rs`; create `src/cli.rs`, `src/context.rs`, `src/error.rs`, `src/resolve.rs`, `src/control_client.rs`, `src/adapter.rs`, and `src/commands/mod.rs`**
         - `Cargo.toml` — `[[bin]] name = "dosker"`, `path = "src/main.rs"`; `[features] mock-engine = ["dep:dosker-test-support"]`; `dosker-test-support` optional plus a dev-dependency on it; dev-dependency `tempfile`.
@@ -580,9 +591,9 @@ agent's 1 MiB limit lands.
         - `resolve.rs` — `Selector` — `Id(ContainerId)` or `Name(ContainerName)`; `parse_selector(value: &str) -> Result<Selector, CliError>`; `resolve(store: &StateStore, value: &str) -> Result<ContainerRecord, CliError>` (id first, then name; not found is `Message`/1).
         - `control_client.rs` — `pub fn request(endpoint: &EndpointRecord, request: &Request, timeout: Duration) -> Result<Response, CliError>`: connect, set read and write timeouts to the timeout plus 5 s, write one frame, read one frame, and deserialize a `Response`.
         - `adapter.rs` — `pub fn default_engine() -> Option<&'static str>` (Some `mock` with the feature, otherwise `None`), `pub fn is_known(engine: &str) -> bool`, and `pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>` (with the feature, `mock` builds a `MockAdapter` from `mock_engine_path` and `SystemProcesses`; unknown is `Usage`).
-        - `commands/mod.rs` — re-exports `exec, ps, run, status, stop, supervise`.
+        - `commands/mod.rs` — declare `ps`, `status`, and `supervise`; Tasks 13 and 14 add `exec`, `run`, and `stop`.
         - `commands/supervise.rs` — `pub fn execute(args: SuperviseArgs) -> Result<u8, CliError>`: parse `container`, build the adapter, and run `Supervisor::new(SupervisorConfig { root, container_id, ready_timeout: DEFAULT_READY_TIMEOUT }, adapter)`; map a `SupervisorError` to `CliError::Message`.
-        - `cli.rs` — dispatch `Ps` and `Status` to their commands with `&SystemProbe::new()` and `Utc::now()`.
+        - `cli.rs` — dispatch `Ps` and `Status` to their commands with `&SystemProbe::new()` and `Utc::now()`; dispatch `Supervise`; `Run`, `Exec`, and `Stop` return `Usage` until Tasks 13 and 14 replace their arms.
     - **Create `crates/dosker-cli/tests/cli_ps.rs`**
         - `ps_lists_only_active_by_default`.
         - `ps_all_includes_stopped_and_exited`.
@@ -603,7 +614,7 @@ agent's 1 MiB limit lands.
         - `execute(args: StatusArgs, ctx: &mut Context, probe: &dyn HostProbe, now: DateTime<Utc>) -> Result<u8, CliError>`: resolve, `recover_stale`, and if the record is active query `status` over the endpoint; on a transport failure fall back to the recovered record. Print `{id} {name} {status} pid={pid-or-dash} engine_pid={engine_pid-or-dash}`.
     - **Verify:** `cargo test -p dosker-cli --features mock-engine --test cli_ps --test cli_status`
 
-- [ ] **Task 13: Detached `run -d`**
+- [x] **Task 13: Detached `run -d`**
     - **Implements:** FR-008 (detached per-container supervisor, no central daemon), FR-022 (spawned supervisor owns the control endpoint), design §Process Model, §CLI (“The CLI exits after it starts a detached container”), §Runtime.
     - **Create `crates/dosker-cli/tests/cli_run.rs`**
         - `run_requires_detach` — exit 2.
@@ -620,7 +631,7 @@ agent's 1 MiB limit lands.
     - **Modify `crates/dosker-cli/src/cli.rs`** — dispatch `Run` to `commands::run::execute(args, &mut ctx, Utc::now())`.
     - **Verify:** `cargo build -p dosker-test-support --bin mock-engine && cargo test -p dosker-cli --features mock-engine --test cli_run`
 
-- [ ] **Task 14: `exec` and `stop` commands**
+- [x] **Task 14: `exec` and `stop` commands**
     - **Implements:** FR-008 (`exec` and `stop` reached over the control endpoint), FR-019 (a dead supervisor recovers before the command reports), FR-022 (client transport), design §CLI, §Supervisor.
     - **Create `crates/dosker-cli/tests/cli_exec.rs`**
         - `exec_echo_returns_output_and_zero`.
@@ -645,7 +656,7 @@ agent's 1 MiB limit lands.
     - **Modify `crates/dosker-cli/src/cli.rs`** — dispatch `Exec` and `Stop`.
     - **Verify:** `cargo build -p dosker-test-support --bin mock-engine && cargo test -p dosker-cli --features mock-engine --test cli_exec --test cli_stop`
 
-- [ ] **Task 15: End-to-end detached lifecycle, orphan cleanup, and `DOSKER_ROOT`**
+- [x] **Task 15: End-to-end detached lifecycle, orphan cleanup, and `DOSKER_ROOT`**
     - **Implements:** FR-008 (detached container answers over the socket), FR-019 (the next `ps` marks a killed supervisor’s container `exited`), FR-022 (end-to-end over the native endpoint), FR-023 (no orphan process after a supervisor kill on Unix), constraint “`DOSKER_ROOT` overrides the data root”.
     - **Create `crates/dosker-cli/tests/detached_lifecycle.rs`**
         - `detached_container_answers_exec_status_and_stop` — `run -d`, assert the state is `running`, `exec ECHO HELLO` prints `HELLO` and exits 0, `status` reports `running`, `stop` reports `stopped`, `ps -a` lists the record as `stopped`.
@@ -657,7 +668,7 @@ agent's 1 MiB limit lands.
         - The helper spawns the real `dosker` binary, sets all environment variables per child, parses the container id from `run` output, and cleans up with `stop`; if `stop` fails it kills the supervisor and the engine PID from the state.
     - **Verify:** `cargo build -p dosker-test-support --bin mock-engine && cargo test -p dosker-cli --features mock-engine --test detached_lifecycle`
 
-- [ ] **Task 16: Continuous integration for Linux, macOS, and Windows**
+- [x] **Task 16: Continuous integration for Linux, macOS, and Windows**
     - **Implements:** design §Testing Strategy (“CI runs formatting, clippy, and dependency checks on every commit. Unit and mock tests run on Linux, macOS, and Windows.”), §Success Criteria portability.
     - **Create `.github/workflows/ci.yml`**
         - Job `fmt` on `ubuntu-latest`: checkout, install toolchain 1.98.1 with `rustfmt` and `clippy`, `cargo fmt --all -- --check`.
@@ -714,4 +725,18 @@ Windows smoke tests.
 - **State schema drift.** `ContainerRecord` is versioned and ignores unknown fields, so later slices add fields without breaking reads; a version change is still a breaking change and is rejected on load.
 - **No `rm` in this slice.** A stopped, failed, or created container keeps its name and directory. A retry uses a new name; `rm` arrives with the image and lifecycle work.
 - **Unix socket path length.** A Unix socket path is limited to roughly 104 bytes on macOS. Task 3A falls back to `/tmp/dosker-<euid>/<id>.sock` when the default path exceeds 100 bytes, records that path in `sockets["control"]`, and removes it on exit. The residual risk is a host without a usable short temp directory; `bind` returns the OS error and the supervisor records a failed start.
+
+## Deviations
+
+- `GdbStub` is named `gdbstub` in `Capability::name` and serde, matching the design and Doskerfile contract. The generic snake-case derive would have produced `gdb_stub`.
+- `Starting -> Exited` is an allowed transition; stale recovery needs it for a supervisor that dies during startup.
+- Task 4 verifies the workspace `windows-sys` features instead of extending them; the workspace table carries the transport and ACL features, including `Win32_System_SystemServices` for `ACCESS_ALLOWED_ACE_TYPE`.
+- Task 12 declares only `ps`, `status`, and `supervise`; Tasks 13 and 14 add `exec`, `run`, and `stop`.
+- The CLI has a `src/lib.rs` library target so integration tests can call `Context::with_console`; `main.rs` calls `dosker_cli::cli::run`.
+- `ensure_dir_mode` rejects a symlink directory after `create_dir_all`.
+- The supervisor removes its control endpoint only after a successful bind; a failed bind leaves another supervisor's socket alone.
+- On macOS, `serve` treats a `set_read_timeout` `InvalidInput` as a closed peer and continues; other errors propagate.
+- The `run` liveness probe uses a hard 200 ms connect and read budget.
+- `exec` maps only a connect failure (`CliError::Platform`) to 125; other client errors exit 1.
+- The design CLI table includes `dosker status`; the process-model stale wording is `exited`.
 
