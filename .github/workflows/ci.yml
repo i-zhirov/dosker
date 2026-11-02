@@ -42,3 +42,133 @@ jobs:
         run: cargo test -p dosker-test-support --test transport_contract
       - name: Detached lifecycle suite
         run: cargo test -p dosker-cli --features mock-engine --test detached_lifecycle
+
+  agent-build:
+    name: agent-build
+    runs-on: ubuntu-latest
+    env:
+      WATCOM: /usr/watcom
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OpenWatcom
+        run: |
+          installer="$RUNNER_TEMP/open-watcom-2_0-c-linux-x64"
+          curl -fsSL -o "$installer" \
+            https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/open-watcom-2_0-c-linux-x64
+          chmod +x "$installer"
+          sudo "$installer" -s -dDstDir=/usr/watcom
+      - name: Configure the DOS include path
+        run: |
+          printf '\nexport INCLUDE=%s/h\n' "$WATCOM" | \
+            sudo tee -a "$WATCOM/owsetenv.sh" >/dev/null
+      - name: Build the DOS agent
+        run: agent/build.sh
+      - name: Upload the DOS agent binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: dosker-agent-binaries
+          path: |
+            agent/build/DOSKER.EXE
+            agent/build/EXITCODE.EXE
+          if-no-files-found: error
+
+  agent-qemu:
+    name: agent-qemu
+    runs-on: ubuntu-latest
+    needs: agent-build
+    timeout-minutes: 30
+    env:
+      DOSKER_SKIP_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+      - name: Install QEMU and disk tools
+        run: |
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            qemu-system-x86 mtools util-linux fdisk curl unzip
+      - name: Check the QEMU and disk tools
+        run: |
+          for tool in timeout fdisk sfdisk mcopy mdir mformat qemu-system-i386; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              printf 'required tool is missing: %s\n' "$tool" >&2
+              exit 1
+            fi
+          done
+      - name: Download the DOS agent binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: dosker-agent-binaries
+          path: agent/build
+      - name: Build the FreeDOS base image
+        env:
+          DOSKER_FREEDOS_SOURCE: ${{ vars.DOSKER_FREEDOS_SOURCE }}
+        run: |
+          set -euo pipefail
+
+          input="${DOSKER_FREEDOS_SOURCE:-}"
+          if [ -z "$input" ]; then
+            printf '::error::DOSKER_FREEDOS_SOURCE is not set. Set the repository variable to a FreeDOS Floppy Edition ZIP URL, a raw boot floppy image URL, or a local path.\n' >&2
+            exit 1
+          fi
+
+          case "$input" in
+            http://*|https://*)
+              case "$input" in
+                *.zip)
+                  archive="$RUNNER_TEMP/freedos-floppy.zip"
+                  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$archive" "$input"; then
+                    printf '::error::DOSKER_FREEDOS_SOURCE download failed: %s\n' "$input" >&2
+                    exit 1
+                  fi
+
+                  if ! printf '%s  %s\n' \
+                    '75a4e11a7fce6f124e20927b3022b4b715a2a3f7324c5f5bfea42d90d80eb072' \
+                    "$archive" | sha256sum -c -; then
+                    printf '::error::DOSKER_FREEDOS_SOURCE archive checksum mismatch: %s\n' "$input" >&2
+                    exit 1
+                  fi
+
+                  if ! unzip -q -o "$archive" '144m/x86BOOT.img' -d "$RUNNER_TEMP"; then
+                    printf '::error::DOSKER_FREEDOS_SOURCE archive lacks 144m/x86BOOT.img: %s\n' "$input" >&2
+                    exit 1
+                  fi
+
+                  source_path="$RUNNER_TEMP/144m/x86BOOT.img"
+                  ;;
+                *)
+                  source_path="$RUNNER_TEMP/x86BOOT.img"
+                  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$source_path" "$input"; then
+                    printf '::error::DOSKER_FREEDOS_SOURCE download failed: %s\n' "$input" >&2
+                    exit 1
+                  fi
+                  ;;
+              esac
+              ;;
+            *)
+              source_path="$input"
+              ;;
+          esac
+
+          if [ ! -f "$source_path" ]; then
+            printf '::error::DOSKER_FREEDOS_SOURCE is not a file: %s\n' "$source_path" >&2
+            exit 1
+          fi
+
+          export DOSKER_FREEDOS_SOURCE="$source_path"
+          printf 'DOSKER_FREEDOS_SOURCE=%s\n' "$source_path" >> "$GITHUB_ENV"
+          agent/tools/build-base-image.sh
+      - name: Test the FreeDOS base image
+        run: agent/tools/base-image-test.sh
+      - name: Test the fixture builder
+        run: agent/tools/fixture-test.sh
+      - name: Conformance handshake
+        run: agent/tools/conformance.sh qemu_handshake
+      - name: Conformance exec
+        run: agent/tools/conformance.sh qemu_exec
+      - name: Conformance transfer
+        run: agent/tools/conformance.sh qemu_transfer
+      - name: Conformance lifecycle
+        run: agent/tools/conformance.sh qemu_lifecycle
+      - name: Self-check
+        run: agent/tools/self-check.sh
