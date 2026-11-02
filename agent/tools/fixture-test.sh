@@ -100,9 +100,8 @@ DOSKER_FIXTURE_TEST=0 \
 mtools_mdir -i "$FIXTURE" ::/APP >/dev/null 2>&1 || \
   die "fixture lacks ::/APP"
 
-LISTING="$(mtools_mdir -i "$FIXTURE" ::/DOSKER)"
 for name in DOSKER.EXE EXITCODE.EXE BIG.TXT TWO.TXT CONFIG.INI; do
-  printf '%s\n' "$LISTING" | grep -Fq "$name" || \
+  mtools_mdir -i "$FIXTURE" "::/DOSKER/$name" >/dev/null || \
     die "fixture listing lacks $name"
 done
 
