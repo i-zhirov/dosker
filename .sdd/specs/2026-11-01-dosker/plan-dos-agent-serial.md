@@ -1481,4 +1481,4 @@ the `exec_line_shell_sequence` conformance test.
 - The agent primes the DOS free-space query before the handshake to keep the first `PUT_REQ` ACK inside the host timeout.
 - EXEC uses `_bios_timeofday` because OpenWatcom does not declare `biostime`, falls back to the `spawnl` return when `INT 21h/AH=4Dh` is 0, and appends `ERR.TMP` after stdout to capture FreeDOS shell errors.
 - EXEC validates `workdir` with `path_is_valid` and returns `BAD_PATH` before the ACK. Conformance adds environment, workdir, agent-side `TOO_LONG`, and stateful line-shell tests.
-- CI adds the `fdisk` package and appends the DOS `INCLUDE` path after the OpenWatcom installer.
+- CI extracts the OpenWatcom self-extracting archive with `unzip` and sets `PATH`/`INCLUDE`, because the installer can fail with a terminfo floating-point exception. CI also adds the `fdisk` package.

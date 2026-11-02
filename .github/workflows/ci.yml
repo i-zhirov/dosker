@@ -55,12 +55,15 @@ jobs:
           installer="$RUNNER_TEMP/open-watcom-2_0-c-linux-x64"
           curl -fsSL -o "$installer" \
             https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/open-watcom-2_0-c-linux-x64
-          chmod +x "$installer"
-          sudo "$installer" -s -dDstDir=/usr/watcom
-      - name: Configure the DOS include path
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends unzip
+          sudo mkdir -p "$WATCOM"
+          sudo unzip -q "$installer" -d "$WATCOM"
+          sudo chmod -R +x "$WATCOM/binl64" "$WATCOM/binl"
+      - name: Configure the DOS toolchain
         run: |
-          printf '\nexport INCLUDE=%s/h\n' "$WATCOM" | \
-            sudo tee -a "$WATCOM/owsetenv.sh" >/dev/null
+          printf 'PATH=%s/binl64:%s/binl:%s\n' "$WATCOM" "$WATCOM" "$PATH" >> "$GITHUB_ENV"
+          printf 'INCLUDE=%s/h\n' "$WATCOM" >> "$GITHUB_ENV"
       - name: Build the DOS agent
         run: agent/build.sh
       - name: Upload the DOS agent binaries
