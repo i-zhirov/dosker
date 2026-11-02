@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-01
-- **Status**: Approved
+- **Status**: Implemented
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: `dos-agent-serial`
 - **Depends on**: `runtime-foundation` (Slice 1)
@@ -254,7 +254,7 @@ workspace member and a workspace dependency entry.
 
 ## Tasks
 
-- [ ] **Task 1: Protocol crate, constants, CRC-32, and frame types**
+- [x] **Task 1: Protocol crate, constants, CRC-32, and frame types**
     - **Implements:** FR-009; design §Component Interfaces §DOS Agent,
       §Workspace Crates; agent-protocol §Frame Format, §Frame Types, §Limits.
     - **Modify `Cargo.toml`**
@@ -366,7 +366,7 @@ workspace member and a workspace dependency entry.
         - `decode_rejects_payload_length_over_limit`.
     - **Verify:** `cargo test -p dosker-agent-proto --test crc32 --test frame`
 
-- [ ] **Task 2: Streaming frame codec and JSON payloads**
+- [x] **Task 2: Streaming frame codec and JSON payloads**
     - **Implements:** FR-009; agent-protocol §Frame Format, §Frame Types,
       §Command Execution, §File Transfer, §Liveness, §Shutdown, §Errors,
       §Limits; data-model §Validation Rules.
@@ -456,7 +456,7 @@ workspace member and a workspace dependency entry.
         - `command_not_found_defaults_to_false`.
     - **Verify:** `cargo test -p dosker-agent-proto --test codec --test payload`
 
-- [ ] **Task 3: Stop-and-wait session with ACK, NAK, timeout, and retry**
+- [x] **Task 3: Stop-and-wait session with ACK, NAK, timeout, and retry**
     - **Implements:** FR-009; agent-protocol §Frame Format, §Errors,
       §Limits; design §Error Handling And Edge Cases (“Protocol CRC failure”).
     - **Modify `crates/dosker-agent-proto/src/lib.rs`**
@@ -534,7 +534,7 @@ workspace member and a workspace dependency entry.
           the contract.
     - **Verify:** `cargo test -p dosker-agent-proto --test session`
 
-- [ ] **Task 4: Host client for handshake and commands**
+- [x] **Task 4: Host client for handshake and commands**
     - **Implements:** FR-009, FR-010 (agent-side command sequence); design
       §Component Interfaces §DOS Agent, §Data Flow §Exec; agent-protocol
       §Handshake, §Command Execution, §File Transfer, §Liveness, §Shutdown.
@@ -634,7 +634,7 @@ workspace member and a workspace dependency entry.
         - `agent_error_codes_are_uppercase`.
     - **Verify:** `cargo test -p dosker-agent-proto --test client`
 
-- [ ] **Task 5: Agent portable protocol primitives and host test**
+- [x] **Task 5: Agent portable protocol primitives and host test**
     - **Implements:** FR-009; agent-protocol §Frame Format, §Limits; design
       §Workspace Crates (`agent/`).
     - **Create `agent/src/dosker.h`**
@@ -682,7 +682,7 @@ workspace member and a workspace dependency entry.
         - Runs `agent/build/primitive-test`.
     - **Verify:** `agent/tools/host-test.sh`
 
-- [ ] **Task 6: Fixture builder and QEMU harness support**
+- [x] **Task 6: Fixture builder and QEMU harness support**
     - **Implements:** FR-009; design §Testing Strategy (“Agent tests”,
       “Real-engine integration tests”); roadmap slice `dos-agent-serial`
       fixture decisions.
@@ -896,7 +896,7 @@ workspace member and a workspace dependency entry.
         - Keep `*.img binary`. Do not add a text rule for the base image.
     - **Verify:** `agent/tools/build-base-image.sh && agent/tools/base-image-test.sh`
 
-- [ ] **Task 7: Agent DOS build, serial UART, config, handshake, and QEMU handshake conformance**
+- [x] **Task 7: Agent DOS build, serial UART, config, handshake, and QEMU handshake conformance**
     - **Implements:** FR-009; agent-protocol §Transport, §Agent Configuration,
       §Handshake, §Frame Format; design §Component Interfaces §DOS Agent,
       §Testing Strategy (“Agent tests”).
@@ -1026,7 +1026,7 @@ workspace member and a workspace dependency entry.
           and returns early when it is false.
     - **Verify:** `agent/tools/conformance.sh qemu_handshake`
 
-- [ ] **Task 8: Agent EXEC and exec conformance**
+- [x] **Task 8: Agent EXEC and exec conformance**
     - **Implements:** FR-009, FR-010 (agent-side line shell); design §Data
       Flow §Exec, §Runtime (“exec sends a command through the agent”);
       agent-protocol §Command Execution, §Errors, §Limits.
@@ -1111,7 +1111,7 @@ workspace member and a workspace dependency entry.
           flag is false.
     - **Verify:** `agent/tools/conformance.sh qemu_exec`
 
-- [ ] **Task 9: Agent PUT, GET, STAT, and transfer conformance**
+- [x] **Task 9: Agent PUT, GET, STAT, and transfer conformance**
     - **Implements:** FR-009; design §Data Flow §Exec, §API Contracts;
       agent-protocol §File Transfer, §Errors, §Limits; data-model
       §Validation Rules.
@@ -1210,7 +1210,7 @@ workspace member and a workspace dependency entry.
           `ProtoError::Agent` with code `BAD_PATH`.
     - **Verify:** `agent/tools/conformance.sh qemu_transfer`
 
-- [ ] **Task 10: Agent SHUTDOWN, PING, ERROR, and lifecycle conformance**
+- [x] **Task 10: Agent SHUTDOWN, PING, ERROR, and lifecycle conformance**
     - **Implements:** FR-009; design §Runtime (“stop sends SHUTDOWN”),
       §Error Handling And Edge Cases; agent-protocol §Liveness, §Shutdown,
       §Errors.
@@ -1227,7 +1227,7 @@ workspace member and a workspace dependency entry.
           `json_write_shutdown_ack` and `ready` true, and returns from
           `agent_loop` with code 0.
         - Send `ERROR` code `UNSUPPORTED` for an unknown frame type.
-        - Send `ERROR` code `SESSION` for a frame after the session closes.
+        - Treat a frame after the session closes as terminal: stop reading and return `1`. Keep the `SESSION` code in the contract for a future asynchronous close.
         - Send `ERROR` code `INTERNAL` for a malformed payload.
         - Fixed error messages:
           - `BUSY`: `a command is already running`
@@ -1241,9 +1241,8 @@ workspace member and a workspace dependency entry.
           - `SESSION`: `session is closed`
           - `INTERNAL`: `agent internal error`
     - **Modify `agent/src/session.c`**
-        - On the fourth failed send attempt, return `-1` without sending a
-          frame and without setting `closed`. The caller decides whether to
-          close.
+        - On the fourth failed send attempt, set `closed` and return `-1`.
+          The caller treats the session as terminal.
         - Send a `NAK` on each corrupt receive frame. After the fourth
           consecutive corrupt frame, send `ERROR` code `CRC`, set `closed`,
           and return `-1`.
@@ -1264,7 +1263,7 @@ workspace member and a workspace dependency entry.
           self-check case 12.
     - **Verify:** `agent/tools/conformance.sh qemu_lifecycle`
 
-- [ ] **Task 11: `/TEST` self-check and QEMU self-check script**
+- [x] **Task 11: `/TEST` self-check and QEMU self-check script**
     - **Implements:** FR-009; design §Testing Strategy (“Agent tests use a
       `/TEST` self-check mode”), §Risks (“The DOS agent fails on some DOS
       flavours”).
@@ -1316,7 +1315,7 @@ workspace member and a workspace dependency entry.
           prints the QEMU log and returns `1`.
     - **Verify:** `agent/tools/self-check.sh`
 
-- [ ] **Task 12: Linux CI jobs for the 16-bit build and QEMU run**
+- [x] **Task 12: Linux CI jobs for the 16-bit build and QEMU run**
     - **Implements:** FR-009; design §Testing Strategy (“CI … The 16-bit agent
       cross-build runs on Linux”), §Non-Functional Requirements
       §Portability.
@@ -1430,6 +1429,7 @@ the `exec_line_shell_sequence` conformance test.
   Floppy Edition `144m/x86BOOT.img` is the known-good source. The builder
   writes its own minimal target `CONFIG.SYS`; it does not copy the source
   `FDCONFIG.SYS`.
+- **Lower baud rates.** The 500 ms frame deadline fits a 4096-byte frame at 115200 baud (~356 ms) but not below about 81920 baud. The agent accepts 9600 to 115200 for handshake and small frames. Full-size transfers require 115200. Scaling the deadline by baud and frame size is a follow-up.
 - **Serial throughput.** A 4096-byte frame at 115200 baud takes about 356 ms.
   The 500 ms timeout leaves about 144 ms for the agent ACK. The conformance
   transfer uses 5000 bytes. A 16 MiB transfer at 115200 baud is slow. The
@@ -1465,3 +1465,18 @@ the `exec_line_shell_sequence` conformance test.
   partition offset. The fixture builder reads the partition at
   `DOSKER_IMAGE_OFFSET`, default `1048576`. It runs `mdir` after the copy and
   fails when the DOSKER directory is not visible.
+
+
+## Deviations
+
+- `exec` and the handshake use deadline-aware sends so a slow ACK cannot extend the caller's timeout.
+- `ProtoError::ByteCountMismatch` reports host-detected byte-count mismatches for `EXEC_END`, `PUT_END`, and `GET_END`.
+- The agent session closes on send retry exhaustion, matching the contract.
+- The agent writes the unsolicited HELLO with `session_write_frame`; `session_send` remains for frames that expect an ACK.
+- The handshake accepts a HELLO that arrives while the host waits for a handshake PING ACK, before a session id is stored.
+- The base image builder writes the startup batch to both `FDAUTO.BAT` and `AUTOEXEC.BAT`, and uses `fdisk` for MBR geometry because current `sfdisk` rejects `-H`/`-S`.
+- The agent serial receiver resynchronizes on the DKR1 magic and uses static frame buffers to stay within the 8 KiB stack.
+- PUT retransmissions are idempotent for the last accepted `PUT_DATA`; duplicate `PUT_REQ` frames are ACKed while a transfer is active, and failed requests replay their error.
+- The agent primes the DOS free-space query before the handshake to keep the first `PUT_REQ` ACK inside the host timeout.
+- EXEC uses `_bios_timeofday` because OpenWatcom does not declare `biostime`, falls back to the `spawnl` return when `INT 21h/AH=4Dh` is 0, and appends `ERR.TMP` after stdout to capture FreeDOS shell errors.
+- CI adds the `fdisk` package and appends the DOS `INCLUDE` path after the OpenWatcom installer.

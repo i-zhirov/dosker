@@ -72,7 +72,7 @@ conformance test that runs the Rust codec against the real agent in QEMU. Out
 of scope: the supervisor, the CLI, the image builder, and every engine other
 than QEMU.
 
-- **Status:** Planned
+- **Status:** Implemented
 - **Depends on:** Slice 1. The QEMU/FreeDOS spike and the 16-bit toolchain
   are manual prerequisites.
 - **Requirements:** FR-009, FR-010
