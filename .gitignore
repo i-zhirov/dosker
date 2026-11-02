@@ -1,6 +1,9 @@
 /target/
 .DS_Store
 *.tmp
+/agent/build/
 /agent/fixtures/freedos-base.img
 /agent/fixtures/freedos-source.img
+/agent/fixtures/dosker-agent.img
+/agent/fixtures/dosker-agent-test.img
 /agent/fixtures/*.log
