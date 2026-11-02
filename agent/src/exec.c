@@ -165,22 +165,27 @@ static int run_batch(void)
     FILE *error_file;
     int error_handle;
     int saved_error;
+    int redirect_ok;
     int spawn_result;
 
     /* The batch captures stdout. FreeDOS writes shell errors to handle 2. */
     comspec = comspec_path();
     error_file = fopen(ERROR_PATH, "wb");
     error_handle = error_file != NULL ? fileno(error_file) : -1;
-    saved_error = dup_handle(2);
-    if (error_handle >= 0) {
-        force_dup(error_handle, 2);
+    saved_error = error_handle >= 0 ? dup_handle(2) : -1;
+    redirect_ok = 0;
+
+    if (error_handle >= 0 && saved_error >= 0) {
+        redirect_ok = force_dup(error_handle, 2);
     }
 
     spawn_result = spawnl(P_WAIT, comspec, comspec, "/C", BATCH_PATH,
                           (char *)0);
 
+    if (redirect_ok && !force_dup(saved_error, 2)) {
+        close_handle(2);
+    }
     if (saved_error >= 0) {
-        force_dup(saved_error, 2);
         close_handle(saved_error);
     }
     if (error_file != NULL) {
@@ -240,18 +245,23 @@ static int stream_output(struct session *s, u32 limit,
     file = fopen(OUTPUT_PATH, "rb");
     if (file == NULL) {
         result->output_bytes = 0;
-        return 1;
+        return 0;
     }
 
     for (;;) {
         u32 remaining;
         u16 chunk;
         u16 count;
+        int extra;
 
         remaining = limit - output_bytes;
         if (remaining == 0) {
-            if (fgetc(file) != EOF) {
+            extra = fgetc(file);
+            if (extra != EOF) {
                 result->truncated = 1;
+            } else if (ferror(file)) {
+                fclose(file);
+                return 0;
             }
             break;
         }
@@ -260,6 +270,10 @@ static int stream_output(struct session *s, u32 limit,
                       (u32)FRAME_CHUNK : remaining);
         count = (u16)fread(output_buffer, 1, chunk, file);
         if (count == 0) {
+            if (ferror(file)) {
+                fclose(file);
+                return 0;
+            }
             break;
         }
 
@@ -287,7 +301,11 @@ static int stream_output(struct session *s, u32 limit,
         }
     }
 
-    fclose(file);
+    if (ferror(file) || fclose(file) != 0) {
+        result->output_bytes = output_bytes;
+        return 0;
+    }
+
     result->output_bytes = output_bytes;
     return send_ok;
 }
@@ -355,6 +373,10 @@ int exec_run(struct session *s, const struct exec_request *request,
                 ok = 0;
             }
         }
+    }
+
+    if (!ok) {
+        send_error(s, "INTERNAL", "agent internal error", s->request_id);
     }
 
     remove_temp_files();

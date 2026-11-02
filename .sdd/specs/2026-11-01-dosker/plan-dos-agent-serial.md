@@ -1437,6 +1437,7 @@ the `exec_line_shell_sequence` conformance test.
 - **Baud range.** The 16-bit agent supports 9600 to 115200 on a standard
   1.8432 MHz UART. A higher `MACHINE` baud value falls back to 115200. The
   design’s 921600 upper bound applies to hosts with a higher UART clock.
+- **Agent data budget.** DGROUP is about 61 KiB of the 64 KiB limit including the 8 KiB stack. Check `agent/build/DOSKER.MAP` before adding static buffers.
 - **Agent code size.** The agent links in the large model (`-ml`) with a
   64 KiB code segment. The link fails loudly when the code exceeds the
   segment. The source set is small.
@@ -1479,4 +1480,5 @@ the `exec_line_shell_sequence` conformance test.
 - PUT retransmissions are idempotent for the last accepted `PUT_DATA`; duplicate `PUT_REQ` frames are ACKed while a transfer is active, and failed requests replay their error.
 - The agent primes the DOS free-space query before the handshake to keep the first `PUT_REQ` ACK inside the host timeout.
 - EXEC uses `_bios_timeofday` because OpenWatcom does not declare `biostime`, falls back to the `spawnl` return when `INT 21h/AH=4Dh` is 0, and appends `ERR.TMP` after stdout to capture FreeDOS shell errors.
+- EXEC validates `workdir` with `path_is_valid` and returns `BAD_PATH` before the ACK. Conformance adds environment, workdir, agent-side `TOO_LONG`, and stateful line-shell tests.
 - CI adds the `fdisk` package and appends the DOS `INCLUDE` path after the OpenWatcom installer.

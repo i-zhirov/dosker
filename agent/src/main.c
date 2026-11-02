@@ -156,6 +156,12 @@ int agent_loop(struct session *s, const struct config *cfg)
                            header.request_id);
                 break;
             }
+            if (request.workdir[0] != '\0' &&
+                !path_is_valid(request.workdir)) {
+                send_error(s, "BAD_PATH", "path is invalid or not 8.3",
+                           header.request_id);
+                break;
+            }
 
             session_ack(s, header.request_id, header.sequence);
             session_use_request(s, header.request_id);

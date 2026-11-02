@@ -6,7 +6,9 @@ use std::collections::BTreeMap;
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use dosker_agent_proto::{AgentClient, ExecRequest, ProtoError};
+use dosker_agent_proto::{
+    AgentClient, ErrorCode, ExecRequest, FrameType, ProtoError, encode_payload,
+};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(60);
 const EXEC_TIMEOUT: Duration = Duration::from_secs(60);
@@ -186,4 +188,122 @@ fn exec_missing_command_sets_command_not_found() {
         outcome.command_not_found,
         "command_not_found was false; captured output: {output:?}"
     );
+}
+
+#[test]
+fn exec_passes_environment_to_child() {
+    if !support::integration_enabled() {
+        return;
+    }
+
+    let (_qemu, mut client) = start();
+    let mut request = request("ECHO %GREETING%", "C:\\DOSKER", OUTPUT_LIMIT);
+    request
+        .env
+        .insert("GREETING".to_owned(), "HELLO".to_owned());
+
+    let outcome = client
+        .exec(&request, EXEC_TIMEOUT)
+        .expect("failed to execute with an environment");
+    let output = text(&outcome.output);
+
+    assert!(
+        output.contains("HELLO"),
+        "output does not contain the environment value: {output:?}"
+    );
+}
+
+#[test]
+fn exec_uses_the_request_workdir_for_a_relative_command() {
+    if !support::integration_enabled() {
+        return;
+    }
+
+    let (_qemu, mut client) = start();
+    let outcome = client
+        .exec(
+            &request("TYPE TWO.TXT", "C:\\DOSKER", OUTPUT_LIMIT),
+            EXEC_TIMEOUT,
+        )
+        .expect("failed to execute in the request workdir");
+    let output = text(&outcome.output);
+
+    assert!(
+        output.contains("ONE") && output.contains("TWO"),
+        "relative command did not read the workdir file: {output:?}"
+    );
+}
+
+#[test]
+fn exec_rejects_an_invalid_workdir() {
+    if !support::integration_enabled() {
+        return;
+    }
+
+    let (_qemu, mut client) = start();
+    let result = client.exec(
+        &request("ECHO X", "C:\\APP\\TOOLONGNAME", OUTPUT_LIMIT),
+        EXEC_TIMEOUT,
+    );
+
+    match result {
+        Err(ProtoError::Agent(error)) => assert_eq!(error.code, ErrorCode::BadPath),
+        other => panic!("unexpected result: {other:?}"),
+    }
+}
+
+#[test]
+fn exec_rejects_a_command_over_127_chars_on_the_agent() {
+    if !support::integration_enabled() {
+        return;
+    }
+
+    let (_qemu, mut client) = start();
+    let request = ExecRequest {
+        command: "A".repeat(128),
+        env: BTreeMap::new(),
+        workdir: "C:\\".to_owned(),
+        max_output_bytes: OUTPUT_LIMIT,
+    };
+    let payload = encode_payload(&request).expect("failed to encode the request");
+    let session = client.session_mut();
+    session.begin_request();
+
+    match session.send(FrameType::ExecReq, &payload) {
+        Err(ProtoError::Agent(error)) => assert_eq!(error.code, ErrorCode::TooLong),
+        other => panic!("unexpected result: {other:?}"),
+    }
+}
+
+#[test]
+fn exec_line_shell_sequence_proves_state() {
+    if !support::integration_enabled() {
+        return;
+    }
+
+    let (_qemu, mut client) = start();
+    let first = client
+        .exec(
+            &request(
+                "COPY C:\\DOSKER\\TWO.TXT C:\\DOSKER\\SEQ.TMP",
+                "C:\\",
+                OUTPUT_LIMIT,
+            ),
+            EXEC_TIMEOUT,
+        )
+        .expect("failed to create the sequence file");
+    let second = client
+        .exec(
+            &request("TYPE C:\\DOSKER\\SEQ.TMP", "C:\\", OUTPUT_LIMIT),
+            EXEC_TIMEOUT,
+        )
+        .expect("failed to read the sequence file");
+
+    assert_eq!(first.exit_code, 0);
+    assert_eq!(second.exit_code, 0);
+
+    let output = text(&second.output);
+    let one = output.find("ONE").expect("output does not contain ONE");
+    let two = output.find("TWO").expect("output does not contain TWO");
+    assert!(one < two, "sequence is out of order: {output:?}");
 }
