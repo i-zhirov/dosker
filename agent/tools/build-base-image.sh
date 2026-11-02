@@ -105,7 +105,7 @@ copy_to_source_root "FREEDOS/BIN/SYS.COM" "SYS.COM"
 copy_to_source_root "FREEDOS/BIN/COMMAND.COM" "COMMAND.COM"
 
 # A minimal target configuration. The target gets its own CONFIG.SYS and a
-# stub AUTOEXEC.BAT; Task 6 replaces the stub with the agent launcher.
+# stub AUTOEXEC.BAT; the fixture builder replaces the stub with the agent launcher.
 {
   printf 'FILES=40\r\n'
   printf 'BUFFERS=20\r\n'
