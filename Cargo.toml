@@ -7,6 +7,7 @@ members = [
     "crates/dosker-runtime",
     "crates/dosker-test-support",
     "crates/dosker-cli",
+    "crates/dosker-agent-proto",
 ]
 
 [workspace.package]
@@ -40,3 +41,4 @@ dosker-engine = { path = "crates/dosker-engine" }
 dosker-runtime = { path = "crates/dosker-runtime" }
 dosker-test-support = { path = "crates/dosker-test-support" }
 dosker-cli = { path = "crates/dosker-cli" }
+dosker-agent-proto = { path = "crates/dosker-agent-proto" }
