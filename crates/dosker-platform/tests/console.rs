@@ -88,10 +88,35 @@ fn raw_writes_without_newline() {
 }
 
 #[test]
+fn bytes_writes_verbatim() {
+    let stdout = RecordingWriter::new();
+    let stderr = RecordingWriter::new();
+    let mut console = Console::new(Box::new(stdout.clone()), Box::new(stderr.clone()));
+
+    console.bytes(b"\x00first\xff\n").unwrap();
+
+    assert_eq!(stdout.contents(), b"\x00first\xff\n");
+    assert_eq!(stderr.contents(), b"");
+    assert_eq!(stdout.flush_count(), 1);
+}
+
+#[test]
+fn try_bytes_reports_broken_pipe() {
+    let mut console = Console::new(Box::new(BrokenPipeWriter), Box::new(BrokenPipeWriter));
+
+    let error = console
+        .try_bytes(b"x")
+        .expect_err("a broken pipe is reported");
+
+    assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+}
+
+#[test]
 fn broken_pipe_is_ignored() {
     let mut console = Console::new(Box::new(BrokenPipeWriter), Box::new(BrokenPipeWriter));
 
     assert!(console.line("a").is_ok());
     assert!(console.error_line("e").is_ok());
     assert!(console.raw("x").is_ok());
+    assert!(console.bytes(b"x").is_ok());
 }

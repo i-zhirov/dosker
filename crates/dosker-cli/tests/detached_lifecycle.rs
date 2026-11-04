@@ -109,6 +109,7 @@ impl Root {
     }
 
     fn start(&mut self) -> ContainerId {
+        self.import_image();
         let output = self.run(&["run", "-d", "freedos:latest"]);
         assert_eq!(
             output.status.code(),
@@ -118,6 +119,24 @@ impl Root {
         );
         let text = stdout_text(&output);
         ContainerId::parse(text.trim()).expect("parse the id printed by run")
+    }
+
+    fn import_image(&self) {
+        let dir = tempfile::tempdir().expect("create an image source directory");
+        let source = dir.path().join("disk.img");
+        common::make_disk_image(&source);
+        let output = self.run(&[
+            "image",
+            "import",
+            source.to_str().expect("source path is utf-8"),
+            "freedos:latest",
+        ]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "stderr: {}",
+            stderr_text(&output)
+        );
     }
 }
 

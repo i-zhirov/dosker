@@ -24,12 +24,17 @@ fn adapter(env: Vec<(String, String)>) -> MockAdapter {
 
 fn spec(log_dir: &Path) -> EngineSpec {
     EngineSpec {
+        root: log_dir.to_path_buf(),
         container_id: ContainerId::generate(),
         workdir: String::from(r"C:\"),
         env: BTreeMap::new(),
         cmd: None,
         expects_agent: false,
         log_dir: log_dir.to_path_buf(),
+        disk_path: log_dir.join("disk.img"),
+        booter: false,
+        display: dosker_engine::DisplayMode::None,
+        vnc_port: None,
     }
 }
 
@@ -193,6 +198,43 @@ fn capabilities_are_boot_serial_and_stop() {
     assert!(adapter.capabilities().contains(Capability::Serial));
     assert!(adapter.capabilities().contains(Capability::Stop));
     assert!(!adapter.capabilities().contains(Capability::Headless));
+}
+
+#[test]
+fn mock_session_reports_no_endpoints() {
+    let root = tempfile::tempdir().expect("create a temp directory");
+    let mut adapter = adapter(Vec::new());
+    let mut session = start(&mut adapter, root.path());
+
+    assert!(session.endpoints().is_empty());
+
+    session.kill().expect("kill the mock engine");
+}
+
+#[test]
+fn mock_adapter_builds_a_command_for_inspection() {
+    let root = tempfile::tempdir().expect("create a temp directory");
+    let env = vec![(String::from("MOCK_READY_DELAY_MS"), String::from("0"))];
+    let mut adapter = adapter(env.clone());
+    let spec = spec(root.path());
+
+    let command = adapter
+        .build_command(&spec)
+        .expect("build the mock command");
+
+    assert_eq!(
+        command.program,
+        mock_engine_path().expect("the mock engine binary is available")
+    );
+    assert!(command.args.is_empty());
+    assert_eq!(command.env, env);
+
+    let mut session = adapter
+        .start_with_command(&spec, &command)
+        .expect("start the mock engine");
+    assert_eq!(session.command(), Some(&command));
+
+    session.kill().expect("kill the mock engine");
 }
 
 #[test]

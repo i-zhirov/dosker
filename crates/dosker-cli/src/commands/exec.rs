@@ -53,7 +53,15 @@ pub fn execute(
     if !response.ok {
         return match response.error {
             Some(error) => match error.code {
-                ErrorCode::NotRunning | ErrorCode::EngineError => Ok(EXIT_NOT_RUNNING),
+                ErrorCode::NoAgent => {
+                    context.console.error_line("the image has no agent")?;
+                    Ok(EXIT_NOT_RUNNING)
+                }
+                ErrorCode::EngineError => {
+                    context.console.error_line(&error.message)?;
+                    Ok(EXIT_NOT_RUNNING)
+                }
+                ErrorCode::NotRunning => Ok(EXIT_NOT_RUNNING),
                 _ => Err(CliError::Message(error.message)),
             },
             None => Err(CliError::Message(String::from(

@@ -2,16 +2,18 @@
 
 use std::path::PathBuf;
 
+use dosker_image::ImageStore;
 use dosker_platform::console::Console;
 use dosker_platform::data_root::data_root;
 use dosker_runtime::{RuntimePaths, StateStore};
 
 use crate::error::CliError;
 
-/// The data root, state store, and console shared by a command.
+/// The data root, state store, image store, and console shared by a command.
 pub struct Context {
     pub paths: RuntimePaths,
     pub store: StateStore,
+    pub images: ImageStore,
     pub console: Console,
 }
 
@@ -26,7 +28,8 @@ impl Context {
     pub fn with_console(root: PathBuf, console: Console) -> Self {
         Self {
             paths: RuntimePaths::new(root.clone()),
-            store: StateStore::new(root),
+            store: StateStore::new(root.clone()),
+            images: ImageStore::new(root),
             console,
         }
     }

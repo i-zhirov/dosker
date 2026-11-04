@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, TimeZone, Utc};
 use dosker_core::{ContainerId, ContainerName, CoreError, Status};
+use dosker_engine::DisplayMode;
 use dosker_platform::EndpointRecord;
 use dosker_runtime::record::RECORD_SCHEMA_VERSION;
 use dosker_runtime::{CONTROL_SOCKET, ContainerRecord};
@@ -57,6 +58,47 @@ fn new_record_starts_created() {
     assert_eq!(record.exit_code, None);
     assert_eq!(record.started_at, None);
     assert_eq!(record.finished_at, None);
+}
+
+#[test]
+fn new_record_starts_with_runtime_defaults() {
+    let record = sample_record();
+
+    assert_eq!(record.image_digest, "");
+    assert!(!record.booter);
+    assert_eq!(record.display, DisplayMode::None);
+    assert_eq!(record.vnc_port, None);
+    assert_eq!(record.cmd, None);
+    assert_eq!(record.engine_command, None);
+}
+
+#[test]
+fn with_image_sets_digest_booter_and_cmd() {
+    let record = sample_record().with_image(
+        "sha256:0123456789abcdef".to_owned(),
+        true,
+        Some("GAME.EXE".to_owned()),
+    );
+
+    assert_eq!(record.image_digest, "sha256:0123456789abcdef");
+    assert!(record.booter);
+    assert_eq!(record.cmd.as_deref(), Some("GAME.EXE"));
+}
+
+#[test]
+fn with_display_sets_mode_and_port() {
+    let record = sample_record().with_display(DisplayMode::Vnc, Some(5901));
+
+    assert_eq!(record.display, DisplayMode::Vnc);
+    assert_eq!(record.vnc_port, Some(5901));
+}
+
+#[test]
+fn with_disk_sets_the_disk_path() {
+    let path = PathBuf::from("/tmp/dosker/containers/0123456789ab/disk.img");
+    let record = sample_record().with_disk(path.clone());
+
+    assert_eq!(record.disk_path, Some(path));
 }
 
 #[test]
@@ -174,6 +216,12 @@ fn serde_round_trip_preserves_every_field() {
     record.finished_at = Some(at(6));
     record.disk_path = Some(PathBuf::from("/tmp/dosker/disk.img"));
     record.dirty = true;
+    record.image_digest = "sha256:0123456789abcdef".to_owned();
+    record.booter = true;
+    record.display = DisplayMode::Window;
+    record.vnc_port = Some(5900);
+    record.cmd = Some("GAME.EXE".to_owned());
+    record.engine_command = Some("qemu -machine pc".to_owned());
 
     let json = serde_json::to_string(&record).unwrap();
     let restored: ContainerRecord = serde_json::from_str(&json).unwrap();

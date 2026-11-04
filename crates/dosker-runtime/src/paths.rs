@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use dosker_core::{ContainerId, ContainerName};
 
 const STATE_FILE: &str = "state.json";
+const DISK_FILE: &str = "disk.img";
 const ENGINE_LOG: &str = "engine.log";
 const SERIAL_LOG: &str = "serial.log";
 const CONTAINER_LOG: &str = "container.log";
@@ -49,6 +50,11 @@ impl RuntimePaths {
     /// Returns the state file of a container.
     pub fn state_file(&self, id: &ContainerId) -> PathBuf {
         self.container_dir(id).join(STATE_FILE)
+    }
+
+    /// Returns the private disk file of a container.
+    pub fn disk_file(&self, id: &ContainerId) -> PathBuf {
+        self.container_dir(id).join(DISK_FILE)
     }
 
     /// Returns the engine log of a container.

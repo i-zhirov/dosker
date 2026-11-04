@@ -10,6 +10,7 @@ use dosker_cli::cli::PsArgs;
 use dosker_cli::commands::ps;
 use dosker_cli::context::Context;
 use dosker_core::{ContainerId, ContainerName, Status};
+use dosker_engine::DisplayMode;
 use dosker_platform::console::Console;
 use dosker_platform::endpoint::control_endpoint;
 use dosker_platform::{Endpoint, EndpointRecord, PlatformError};
@@ -102,6 +103,7 @@ fn add_record(
     let id = ContainerId::parse(id).unwrap();
     let name = ContainerName::parse(name).unwrap();
     let endpoint = control_endpoint(root, &id);
+    let disk = root.join("containers").join(id.as_str()).join("disk.img");
     let mut record = ContainerRecord::new(
         id,
         name,
@@ -109,7 +111,15 @@ fn add_record(
         "mock".to_owned(),
         endpoint.record(),
         created_at,
-    );
+    )
+    .with_image(
+        String::from("sha256:0123456789abcdef"),
+        false,
+        Some(String::from("APP.EXE")),
+    )
+    .with_display(DisplayMode::None, None)
+    .with_disk(disk);
+    record.engine_command = Some(String::from("qemu-system-i386 -machine pc"));
     record.status = status;
     record.pid = pid;
     StateStore::new(root.to_path_buf()).create(&record).unwrap();
@@ -327,4 +337,66 @@ fn ps_does_not_connect_to_live_containers() {
     std::thread::sleep(Duration::from_millis(100));
     assert!(!connected.load(Ordering::SeqCst));
     assert_eq!(row_fields(&output.lines()[1])[3], "running");
+}
+
+#[test]
+fn ps_lists_a_created_container_with_all() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let record = add_record(
+        root,
+        "000000000009",
+        "created-one",
+        Status::Created,
+        None,
+        at(0),
+    );
+
+    let (mut context, output) = context_for(root);
+    ps::execute(
+        PsArgs { all: true },
+        &mut context,
+        &FakeProbe::dead(),
+        at(100),
+    )
+    .unwrap();
+
+    let lines = output.lines();
+    assert_eq!(lines[0], "ID NAME IMAGE STATUS CREATED");
+    assert_eq!(
+        row_fields(&lines[1]),
+        vec![
+            record.id.as_str(),
+            "created-one",
+            "freedos:latest",
+            "created",
+            "2026-01-01T00:00:00Z"
+        ]
+    );
+}
+
+#[test]
+fn ps_header_is_unchanged() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    add_record(
+        root,
+        "000000000010",
+        "header-check",
+        Status::Created,
+        None,
+        at(0),
+    );
+
+    let (mut context, output) = context_for(root);
+    ps::execute(
+        PsArgs { all: true },
+        &mut context,
+        &FakeProbe::dead(),
+        at(100),
+    )
+    .unwrap();
+
+    assert_eq!(output.lines()[0], "ID NAME IMAGE STATUS CREATED");
+    assert_eq!(row_fields(&output.lines()[1]).len(), 5);
 }

@@ -1,32 +1,21 @@
-//! `dosker run`: create a container and start its detached supervisor.
+//! `dosker run`: create a container and start its supervisor.
 
-use std::fs::OpenOptions;
-use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::io::{self, BufReader};
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use dosker_core::{ContainerId, ContainerName, Status};
-use dosker_platform::endpoint::control_endpoint;
-use dosker_platform::process::{ProcessSupervisor, system};
-use dosker_runtime::ContainerRecord;
+use dosker_core::Status;
+use dosker_engine::DisplayMode;
 
 use crate::adapter;
-use crate::cli::{EXIT_ERROR, EXIT_OK, RunArgs};
+use crate::cli::{EXIT_ERROR, EXIT_NOT_RUNNING, EXIT_OK, RunArgs};
+use crate::commands::attach;
+use crate::commands::create::create_container;
+use crate::commands::start::{print_container_log, start_container};
 use crate::context::Context;
-use crate::control_client;
 use crate::error::CliError;
 
-const RUN_WAIT: Duration = Duration::from_secs(65);
-const POLL_STEP: Duration = Duration::from_millis(100);
-const PING_BUDGET: Duration = Duration::from_millis(200);
-
 pub fn execute(args: RunArgs, context: &mut Context, now: DateTime<Utc>) -> Result<u8, CliError> {
-    if !args.detach {
-        return Err(CliError::Usage(String::from(
-            "run requires -d to start a container in the background",
-        )));
-    }
-
     let engine = match args.engine {
         Some(engine) => engine,
         None => match adapter::default_engine() {
@@ -42,88 +31,49 @@ pub fn execute(args: RunArgs, context: &mut Context, now: DateTime<Utc>) -> Resu
         return Err(CliError::Usage(format!("unknown engine: {engine}")));
     }
 
-    let id = ContainerId::generate();
-    let name = match args.name {
-        Some(name) => ContainerName::parse(&name)?,
-        None => ContainerName::parse(&format!("dosker-{}", &id.as_str()[..8]))?,
-    };
+    let display = DisplayMode::parse(&args.display).ok_or_else(|| {
+        CliError::Usage(format!(
+            "invalid display mode: {}; use none, window, or vnc",
+            args.display
+        ))
+    })?;
 
-    let root = std::path::absolute(context.paths.root())?;
-    let endpoint = control_endpoint(&root, &id);
-    let record = ContainerRecord::new(
-        id.clone(),
-        name,
-        args.image,
-        engine.clone(),
-        endpoint.record(),
+    let record = create_container(
+        context,
+        &args.image,
+        args.name,
+        engine,
+        display,
+        args.vnc_port,
         now,
-    );
-    context.store.create(&record)?;
+    )?;
+    let outcome = start_container(context, &record, Duration::from_secs(args.boot_timeout))?;
 
-    let mut child = spawn_supervisor(context, &root, &id, &engine)?;
-
-    let deadline = Instant::now() + RUN_WAIT;
-    loop {
-        let stored = context.store.load(&id)?;
-        if matches!(stored.status, Status::Failed | Status::Exited) {
-            context.console.line(stored.status.as_str())?;
-            return Ok(EXIT_ERROR);
-        }
-
-        if child.try_wait()?.is_some() {
-            context.console.line(stored.status.as_str())?;
-            if let Ok(log) = std::fs::read_to_string(context.paths.container_log(&id)) {
-                let log = log.trim_end();
-                if !log.is_empty() {
-                    context.console.error_line(log)?;
-                }
-            }
-            return Ok(EXIT_ERROR);
-        }
-
-        if let Some(endpoint) = stored.control_endpoint()
-            && control_client::ping(endpoint, PING_BUDGET).is_ok()
-        {
-            context.console.line(id.as_str())?;
+    if outcome.record.status == Status::Running {
+        if args.detach {
+            context.console.line(outcome.record.id.as_str())?;
             return Ok(EXIT_OK);
         }
 
-        if Instant::now() >= deadline {
-            let status = context.store.load(&id)?.status;
-            context.console.line(status.as_str())?;
-            return Ok(EXIT_ERROR);
+        if outcome.record.booter {
+            context
+                .console
+                .line("the image has no agent; the container is running")?;
+            return Ok(EXIT_OK);
         }
 
-        std::thread::sleep(POLL_STEP);
+        let Some(endpoint) = outcome.record.control_endpoint() else {
+            return Ok(EXIT_NOT_RUNNING);
+        };
+        let stdin = io::stdin();
+        let mut input = BufReader::new(stdin.lock());
+        return attach::run_shell(endpoint, r"C:\", &mut input, &mut context.console);
     }
-}
 
-fn spawn_supervisor(
-    context: &Context,
-    root: &std::path::Path,
-    id: &ContainerId,
-    engine: &str,
-) -> Result<Child, CliError> {
-    let log_path = context.paths.container_log(id);
-    let stdout = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)?;
-    let stderr = stdout.try_clone()?;
-
-    let mut command = Command::new(std::env::current_exe()?);
-    command
-        .arg("__supervise")
-        .arg("--root")
-        .arg(root)
-        .arg("--container")
-        .arg(id.as_str())
-        .arg("--engine")
-        .arg(engine)
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-
-    system().prepare_detached(&mut command)?;
-    Ok(command.spawn()?)
+    context.console.line(&format!(
+        "{} {}",
+        outcome.record.name, outcome.record.status
+    ))?;
+    print_container_log(context, &outcome.record.id)?;
+    Ok(EXIT_ERROR)
 }

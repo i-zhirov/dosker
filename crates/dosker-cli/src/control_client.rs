@@ -11,7 +11,7 @@ use dosker_runtime::protocol::{FrameRead, Reply, Request, Response, read_frame, 
 use crate::error::CliError;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const IO_MARGIN: Duration = Duration::from_secs(5);
+pub(crate) const IO_MARGIN: Duration = Duration::from_secs(5);
 
 /// Connects to an endpoint, sends one request, and reads one response.
 pub fn request(

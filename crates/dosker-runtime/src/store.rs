@@ -5,8 +5,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use dosker_core::{ContainerId, ContainerName, CoreError};
-use dosker_platform::PlatformError;
+use dosker_platform::control::remove_endpoint;
 use dosker_platform::fs::{ensure_dir_mode, write_atomic};
+use dosker_platform::{Endpoint, PlatformError};
 
 use crate::paths::RuntimePaths;
 use crate::record::{ContainerRecord, RECORD_SCHEMA_VERSION};
@@ -195,6 +196,41 @@ impl StateStore {
             }
             Err(error) => Err(error),
         }
+    }
+
+    /// Removes a container's endpoints, name lock, and directory.
+    ///
+    /// A missing endpoint, name lock, or directory is success.
+    pub fn remove(&self, record: &ContainerRecord) -> Result<(), StoreError> {
+        for recorded in record.sockets.values() {
+            let endpoint = Endpoint::from(recorded.clone());
+            remove_endpoint(&endpoint).map_err(StoreError::from)?;
+        }
+
+        let name_dir = self.paths.name_dir(&record.name);
+        let id_file = name_dir.join("id");
+        match fs::read_to_string(&id_file) {
+            Ok(id_text) => {
+                if id_text.trim() == record.id.as_str() {
+                    match fs::remove_dir_all(&name_dir) {
+                        Ok(()) => {}
+                        Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+                        Err(source) => return Err(io_error(&name_dir, source)),
+                    }
+                }
+            }
+            Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => return Err(io_error(&id_file, source)),
+        }
+
+        let container_dir = self.paths.container_dir(&record.id);
+        match fs::remove_dir_all(&container_dir) {
+            Ok(()) => {}
+            Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => return Err(io_error(&container_dir, source)),
+        }
+
+        Ok(())
     }
 
     fn ensure_layout(&self) -> Result<(), StoreError> {

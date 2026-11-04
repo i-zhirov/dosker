@@ -308,6 +308,20 @@ fn exec_send_stops_at_the_deadline() {
 }
 
 #[test]
+fn exec_send_write_stops_at_the_deadline() {
+    let (agent, mut client) = handshaken();
+    agent.set_block_writes();
+
+    let started = Instant::now();
+    match client.exec(&mock_agent::exec_request(), Duration::from_millis(100)) {
+        Err(ProtoError::Timeout) => {}
+        other => panic!("expected a timeout, got {other:?}"),
+    }
+
+    assert!(started.elapsed() < Duration::from_millis(900));
+}
+
+#[test]
 fn exec_rejects_output_over_the_request_limit() {
     let (agent, mut client) = handshaken();
     agent.set_exec_output(
@@ -550,6 +564,32 @@ fn shutdown_returns_ready() {
     let request: ShutdownRequest =
         decode_payload(&frames[0].payload).expect("shutdown request decodes");
     assert_eq!(request.grace_ms, 10_000);
+}
+
+#[test]
+fn shutdown_with_timeout_waits_for_a_delayed_ack() {
+    let (agent, mut client) = handshaken();
+    agent.set_shutdown_ack_delay(Duration::from_secs(1));
+
+    let ack = client
+        .shutdown_with_timeout(10_000, Duration::from_secs(10))
+        .expect("shutdown succeeds");
+
+    assert!(ack.ready);
+}
+
+#[test]
+fn shutdown_with_timeout_fails_when_the_ack_misses_the_deadline() {
+    let (agent, mut client) = handshaken();
+    agent.set_shutdown_ack_delay(Duration::from_secs(1));
+
+    let started = Instant::now();
+    match client.shutdown_with_timeout(10_000, Duration::from_millis(100)) {
+        Err(ProtoError::Timeout) => {}
+        other => panic!("expected a shutdown timeout, got {other:?}"),
+    }
+
+    assert!(started.elapsed() < Duration::from_millis(900));
 }
 
 #[test]

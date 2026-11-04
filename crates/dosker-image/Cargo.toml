@@ -1,0 +1,19 @@
+[package]
+name = "dosker-image"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dosker-core.workspace = true
+dosker-platform.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+sha2.workspace = true
+fatfs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+serde_json.workspace = true

@@ -107,13 +107,13 @@ model arrive in Slice 5. This slice keeps a minimal import record so the
 runtime can be proven first. Out of scope: the build path, layers, volumes,
 NAT, and the Windows host.
 
-- **Status:** Unplanned
+- **Status:** Implemented
 - **Depends on:** Slices 1 and 2.
 - **Requirements:** FR-005, FR-006, FR-008, FR-009, FR-010, FR-011, FR-018,
   FR-019, FR-021
 - **Manual prerequisites:** QEMU builds for Linux and macOS. A prepared
   FreeDOS image from the M0 spike, for `image import`.
-- **Plan:** —
+- **Plan:** `.sdd/specs/2026-11-01-dosker/plan-qemu-runtime-slice.md`
 - **Done when:** the design's M1 definition of done passes on Linux x86_64 and
   macOS arm64. A prepared FreeDOS image imports and boots headless. `exec`
   returns output and status. `attach` gives a working shell. `stop` flushes and

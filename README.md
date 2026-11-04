@@ -31,6 +31,41 @@ The value can be:
 For a ZIP, CI verifies the archive and extracts `144m/x86BOOT.img` before it
 builds the base image.
 
+### QEMU runtime suites
+
+The `agent-qemu` job runs the Rust QEMU runtime integration suite on Linux
+after the conformance and self-check scripts. The suite uses the prepared
+fixture at `agent/fixtures/dosker-agent.img`. It runs:
+
+```sh
+DOSKER_INTEGRATION=1 \
+DOSKER_QEMU_IMAGE=agent/fixtures/dosker-agent.img \
+DOSKER_QEMU=qemu-system-i386 \
+cargo test -p dosker-cli --features qemu-engine --test qemu_runtime -- --nocapture
+```
+
+The macOS arm64 suite runs in
+[`.github/workflows/qemu-nightly.yml`](.github/workflows/qemu-nightly.yml)
+at 03:00 UTC each day and on manual dispatch. macOS arm64 uses TCG, so the
+job is slower and runs nightly.
+
+### QEMU image URL variable
+
+Set the repository variable `DOSKER_QEMU_IMAGE_URL` in
+*Settings > Secrets and variables > Actions > Variables*. It is not a secret.
+The nightly workflow fails when the variable is absent.
+
+Set it with `gh`:
+
+```sh
+gh variable set DOSKER_QEMU_IMAGE_URL \
+  --body 'https://example.com/dosker-agent.img'
+```
+
+The value can be a ZIP archive that contains a `.img` file or a raw image URL.
+The workflow downloads and extracts a ZIP archive. It downloads a raw image
+directly.
+
 ### Pinned Floppy Edition ZIP
 
 CI uses the official FreeDOS 1.3 Floppy Edition archive:
@@ -63,7 +98,8 @@ terminfo floating-point exception on the runner.
 
 The `agent-build` job uploads `DOSKER.EXE` and `EXITCODE.EXE`. The
 `agent-qemu` job downloads that artifact, sets `DOSKER_SKIP_BUILD=1`, builds
-the FreeDOS image, and runs the QEMU conformance and self-check scripts.
+the FreeDOS image, and runs the QEMU conformance and self-check scripts. It
+then runs the Rust QEMU runtime suite.
 
 ## Documentation
 

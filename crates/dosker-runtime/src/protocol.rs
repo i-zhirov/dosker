@@ -2,12 +2,27 @@
 
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Read, Write};
+use std::path::PathBuf;
 
 use dosker_core::{ContainerId, ContainerName, Status};
+use dosker_engine::DebugKind;
 use serde::{Deserialize, Serialize};
 
 /// The largest accepted control line, excluding its terminator.
 pub const MAX_MESSAGE_BYTES: usize = 65_536;
+
+/// The largest file accepted in either direction by `cp`.
+pub const MAX_CP_BYTES: u64 = 16 * 1024 * 1024;
+
+/// The direction of a `cp` transfer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CpDirection {
+    /// Copy from the host into the guest.
+    In,
+    /// Copy from the guest onto the host.
+    Out,
+}
 
 /// The default deadline for a guest command.
 pub const DEFAULT_EXEC_TIMEOUT_MS: u64 = 30_000;
@@ -34,6 +49,18 @@ pub enum Request {
         #[serde(default = "default_stop_grace_ms")]
         grace_ms: u64,
     },
+    Attach,
+    Cp {
+        direction: CpDirection,
+        source: String,
+        destination: String,
+    },
+    Debug {
+        kind: DebugKind,
+    },
+    Screenshot {
+        path: PathBuf,
+    },
 }
 
 /// The result carried by a successful response.
@@ -52,6 +79,17 @@ pub enum Reply {
     },
     Stop {
         status: Status,
+    },
+    Attach,
+    Cp {
+        bytes: u64,
+    },
+    Debug {
+        kind: DebugKind,
+        endpoint: String,
+    },
+    Screenshot {
+        path: PathBuf,
     },
 }
 
@@ -74,6 +112,12 @@ pub enum ErrorCode {
     UnknownMessage,
     InvalidMessage,
     NotRunning,
+    NoAgent,
+    Unsupported,
+    TooLarge,
+    NoFile,
+    GuestRebooted,
+    Busy,
     EngineError,
     Timeout,
     Internal,
@@ -151,14 +195,29 @@ pub enum RequestParse {
 /// A line is terminated by `\n` or `\r\n`. The terminator is not part of the
 /// returned text, and at most [`MAX_MESSAGE_BYTES`] content bytes are accepted.
 pub fn read_frame<R: BufRead>(reader: &mut R) -> Result<FrameRead, FrameError> {
+    read_frame_into(reader, &mut Vec::new())
+}
+
+/// Reads one non-blank line, keeping a partial line in `buffer`.
+///
+/// A caller that retries after a read timeout must pass the same buffer so the
+/// bytes already received are not discarded. The buffer is empty after a
+/// complete frame, a frame error, or end of input; an I/O error leaves the
+/// partial bytes in place.
+pub fn read_frame_into<R: BufRead>(
+    reader: &mut R,
+    buffer: &mut Vec<u8>,
+) -> Result<FrameRead, FrameError> {
     loop {
-        let mut buffer = Vec::new();
-        let read = reader
-            .by_ref()
-            .take((MAX_MESSAGE_BYTES + 2) as u64)
-            .read_until(b'\n', &mut buffer)?;
+        if buffer.len() > MAX_MESSAGE_BYTES {
+            buffer.clear();
+            return Err(FrameError::TooLarge);
+        }
+        let limit = (MAX_MESSAGE_BYTES + 2 - buffer.len()) as u64;
+        let read = reader.by_ref().take(limit).read_until(b'\n', buffer)?;
 
         if read == 0 {
+            buffer.clear();
             return Ok(FrameRead::Eof);
         }
 
@@ -170,6 +229,7 @@ pub fn read_frame<R: BufRead>(reader: &mut R) -> Result<FrameRead, FrameError> {
             buffer.pop();
         }
         if buffer.len() > MAX_MESSAGE_BYTES {
+            buffer.clear();
             return Err(FrameError::TooLarge);
         }
         if buffer.is_empty() {
@@ -179,7 +239,8 @@ pub fn read_frame<R: BufRead>(reader: &mut R) -> Result<FrameRead, FrameError> {
             return Ok(FrameRead::Eof);
         }
 
-        let text = String::from_utf8(buffer).map_err(|_| FrameError::NotUtf8)?;
+        let bytes = std::mem::take(buffer);
+        let text = String::from_utf8(bytes).map_err(|_| FrameError::NotUtf8)?;
         return Ok(FrameRead::Line(text));
     }
 }
@@ -202,7 +263,10 @@ pub fn parse_request(line: &str) -> RequestParse {
         return RequestParse::UnknownType;
     };
 
-    if !matches!(kind, "ping" | "status" | "exec" | "stop") {
+    if !matches!(
+        kind,
+        "ping" | "status" | "exec" | "stop" | "attach" | "cp" | "debug" | "screenshot"
+    ) {
         return RequestParse::UnknownType;
     }
 

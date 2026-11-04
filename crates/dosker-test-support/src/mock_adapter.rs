@@ -1,5 +1,6 @@
 //! A fake engine adapter backed by the mock engine child process.
 
+use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
@@ -8,8 +9,8 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use dosker_engine::{
-    Capability, CapabilitySet, EngineAdapter, EngineError, EngineSession, EngineSpec, ExecRequest,
-    ExecResult,
+    Capability, CapabilitySet, EngineAdapter, EngineCommand, EngineEndpoint, EngineError,
+    EngineSession, EngineSpec, ExecRequest, ExecResult,
 };
 use dosker_platform::process::ProcessSupervisor;
 use serde_json::{Value, json};
@@ -23,6 +24,8 @@ pub struct MockAdapter {
     engine_path: PathBuf,
     processes: Arc<dyn ProcessSupervisor>,
     child_env: Vec<(String, String)>,
+    endpoints: Vec<EngineEndpoint>,
+    files: BTreeMap<String, Vec<u8>>,
 }
 
 impl MockAdapter {
@@ -31,11 +34,23 @@ impl MockAdapter {
             engine_path,
             processes,
             child_env: Vec::new(),
+            endpoints: Vec::new(),
+            files: BTreeMap::new(),
         }
     }
 
     pub fn with_child_env(mut self, env: Vec<(String, String)>) -> Self {
         self.child_env = env;
+        self
+    }
+
+    pub fn with_endpoints(mut self, endpoints: Vec<EngineEndpoint>) -> Self {
+        self.endpoints = endpoints;
+        self
+    }
+
+    pub fn with_files(mut self, files: BTreeMap<String, Vec<u8>>) -> Self {
+        self.files = files;
         self
     }
 }
@@ -63,7 +78,25 @@ impl EngineAdapter for MockAdapter {
         }
     }
 
+    fn build_command(&self, spec: &EngineSpec) -> Result<EngineCommand, EngineError> {
+        let _ = spec;
+        Ok(EngineCommand {
+            program: self.engine_path.clone(),
+            args: Vec::new(),
+            env: self.child_env.clone(),
+        })
+    }
+
     fn start(&mut self, spec: &EngineSpec) -> Result<Box<dyn EngineSession>, EngineError> {
+        let command = self.build_command(spec)?;
+        self.start_with_command(spec, &command)
+    }
+
+    fn start_with_command(
+        &mut self,
+        spec: &EngineSpec,
+        command: &EngineCommand,
+    ) -> Result<Box<dyn EngineSession>, EngineError> {
         std::fs::create_dir_all(&spec.log_dir)?;
         let log_path = spec.log_dir.join("engine.log");
         let stderr = std::fs::OpenOptions::new()
@@ -71,24 +104,24 @@ impl EngineAdapter for MockAdapter {
             .append(true)
             .open(&log_path)?;
 
-        let mut command = Command::new(&self.engine_path);
-        command
+        let mut process = Command::new(&command.program);
+        process
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr));
         for (key, value) in &spec.env {
-            command.env(key, value);
+            process.env(key, value);
         }
-        for (key, value) in &self.child_env {
-            command.env(key, value);
+        for (key, value) in &command.env {
+            process.env(key, value);
         }
         self.processes
-            .prepare_engine(&mut command)
+            .prepare_engine(&mut process)
             .map_err(|source| EngineError::Setup(source.to_string()))?;
 
-        let mut child = command.spawn().map_err(|source| {
+        let mut child = process.spawn().map_err(|source| {
             if source.kind() == std::io::ErrorKind::NotFound {
-                EngineError::NotFound(self.engine_path.clone())
+                EngineError::NotFound(command.program.clone())
             } else {
                 EngineError::Io(source)
             }
@@ -126,6 +159,9 @@ impl EngineAdapter for MockAdapter {
             pid,
             next_id: 0,
             exit_code: None,
+            command: command.clone(),
+            endpoints: std::mem::take(&mut self.endpoints),
+            files: std::mem::take(&mut self.files),
         }))
     }
 }
@@ -137,6 +173,9 @@ struct MockSession {
     pid: u32,
     next_id: u64,
     exit_code: Option<i32>,
+    command: EngineCommand,
+    endpoints: Vec<EngineEndpoint>,
+    files: BTreeMap<String, Vec<u8>>,
 }
 
 impl MockSession {
@@ -268,6 +307,29 @@ impl EngineSession for MockSession {
             Some(status) => Ok(Some(self.record_exit(status))),
             None => Ok(None),
         }
+    }
+
+    fn command(&self) -> Option<&EngineCommand> {
+        Some(&self.command)
+    }
+
+    fn endpoints(&self) -> Vec<EngineEndpoint> {
+        self.endpoints.clone()
+    }
+
+    fn put_file(&mut self, path: &str, data: &[u8]) -> Result<u64, EngineError> {
+        self.files.insert(path.to_owned(), data.to_vec());
+        Ok(data.len() as u64)
+    }
+
+    fn get_file(&mut self, path: &str) -> Result<Vec<u8>, EngineError> {
+        self.files
+            .get(path)
+            .cloned()
+            .ok_or_else(|| EngineError::Agent {
+                code: String::from("NO_FILE"),
+                message: format!("the guest has no file at {path}"),
+            })
     }
 }
 

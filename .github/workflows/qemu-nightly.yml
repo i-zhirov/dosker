@@ -1,0 +1,72 @@
+name: QEMU nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  runtime-macos:
+    name: runtime-macos
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          components: rustfmt, clippy
+      - name: Install QEMU
+        run: brew install qemu
+      - uses: Swatinem/rust-cache@v2
+      - name: Download the prepared image
+        env:
+          DOSKER_QEMU_IMAGE_URL: ${{ vars.DOSKER_QEMU_IMAGE_URL }}
+        run: |
+          set -euo pipefail
+
+          url="${DOSKER_QEMU_IMAGE_URL:-}"
+          if [ -z "$url" ]; then
+            printf '::error::DOSKER_QEMU_IMAGE_URL is not set. Set the repository variable to a ZIP archive or a raw image URL.\n' >&2
+            exit 1
+          fi
+
+          case "$url" in
+            *.zip|*.ZIP)
+              archive="$RUNNER_TEMP/dosker-image.zip"
+              extract="$RUNNER_TEMP/dosker-image"
+              rm -rf "$extract"
+              mkdir -p "$extract"
+              if ! curl -fsSL --retry 3 --retry-delay 2 -o "$archive" "$url"; then
+                printf '::error::DOSKER_QEMU_IMAGE_URL download failed: %s\n' "$url" >&2
+                exit 1
+              fi
+              if ! unzip -q -o "$archive" -d "$extract"; then
+                printf '::error::DOSKER_QEMU_IMAGE_URL archive cannot be extracted: %s\n' "$url" >&2
+                exit 1
+              fi
+              image="$(find "$extract" -type f -iname '*.img' -print -quit)"
+              if [ -z "$image" ]; then
+                printf '::error::DOSKER_QEMU_IMAGE_URL archive contains no .img file: %s\n' "$url" >&2
+                exit 1
+              fi
+              ;;
+            *)
+              image="$RUNNER_TEMP/dosker-agent.img"
+              if ! curl -fsSL --retry 3 --retry-delay 2 -o "$image" "$url"; then
+                printf '::error::DOSKER_QEMU_IMAGE_URL download failed: %s\n' "$url" >&2
+                exit 1
+              fi
+              ;;
+          esac
+
+          if [ ! -s "$image" ]; then
+            printf '::error::DOSKER_QEMU_IMAGE_URL did not produce an image: %s\n' "$url" >&2
+            exit 1
+          fi
+
+          printf 'DOSKER_QEMU_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
+      - name: Rust QEMU runtime suite
+        env:
+          DOSKER_INTEGRATION: "1"
+          DOSKER_QEMU: qemu-system-i386
+        run: cargo test -p dosker-cli --features qemu-engine --test qemu_runtime -- --nocapture

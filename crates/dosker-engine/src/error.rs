@@ -23,4 +23,12 @@ pub enum EngineError {
     StopTimeout(Duration),
     #[error("engine exited with code {0}")]
     Exited(i32),
+    #[error("the image has no agent")]
+    NoAgent,
+    #[error("unsupported engine feature: {0}")]
+    Unsupported(&'static str),
+    #[error("the guest rebooted during the command")]
+    GuestRebooted,
+    #[error("agent error {code}: {message}")]
+    Agent { code: String, message: String },
 }

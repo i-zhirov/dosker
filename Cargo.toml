@@ -8,6 +8,8 @@ members = [
     "crates/dosker-test-support",
     "crates/dosker-cli",
     "crates/dosker-agent-proto",
+    "crates/dosker-image",
+    "crates/dosker-engine-qemu",
 ]
 
 [workspace.package]
@@ -38,7 +40,11 @@ windows-sys = { version = "0.59", features = [
 dosker-core = { path = "crates/dosker-core" }
 dosker-platform = { path = "crates/dosker-platform" }
 dosker-engine = { path = "crates/dosker-engine" }
+dosker-engine-qemu = { path = "crates/dosker-engine-qemu" }
 dosker-runtime = { path = "crates/dosker-runtime" }
 dosker-test-support = { path = "crates/dosker-test-support" }
 dosker-cli = { path = "crates/dosker-cli" }
 dosker-agent-proto = { path = "crates/dosker-agent-proto" }
+dosker-image = { path = "crates/dosker-image" }
+fatfs = "0.3"
+sha2 = "0.10"

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use dosker_core::{ContainerId, ContainerName, CoreError, Status};
+use dosker_engine::DisplayMode;
 use dosker_platform::EndpointRecord;
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,18 @@ pub struct ContainerRecord {
     pub sockets: BTreeMap<String, EndpointRecord>,
     pub disk_path: Option<PathBuf>,
     pub dirty: bool,
+    #[serde(default)]
+    pub image_digest: String,
+    #[serde(default)]
+    pub booter: bool,
+    #[serde(default)]
+    pub display: DisplayMode,
+    #[serde(default)]
+    pub vnc_port: Option<u16>,
+    #[serde(default)]
+    pub cmd: Option<String>,
+    #[serde(default)]
+    pub engine_command: Option<String>,
 }
 
 impl ContainerRecord {
@@ -68,7 +81,35 @@ impl ContainerRecord {
             sockets,
             disk_path: None,
             dirty: false,
+            image_digest: String::new(),
+            booter: false,
+            display: DisplayMode::None,
+            vnc_port: None,
+            cmd: None,
+            engine_command: None,
         }
+    }
+
+    /// Records the image digest, whether the image is a booter, and the
+    /// startup command.
+    pub fn with_image(mut self, digest: String, booter: bool, cmd: Option<String>) -> Self {
+        self.image_digest = digest;
+        self.booter = booter;
+        self.cmd = cmd;
+        self
+    }
+
+    /// Records the display mode and the allocated VNC port.
+    pub fn with_display(mut self, display: DisplayMode, vnc_port: Option<u16>) -> Self {
+        self.display = display;
+        self.vnc_port = vnc_port;
+        self
+    }
+
+    /// Records the private container disk path.
+    pub fn with_disk(mut self, path: PathBuf) -> Self {
+        self.disk_path = Some(path);
+        self
     }
 
     /// Returns the recorded control endpoint.

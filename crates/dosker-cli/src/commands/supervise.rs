@@ -1,7 +1,7 @@
 //! The hidden supervisor entry that owns one container.
 
 use dosker_core::ContainerId;
-use dosker_runtime::{DEFAULT_READY_TIMEOUT, Supervisor, SupervisorConfig};
+use dosker_runtime::{Supervisor, SupervisorConfig};
 
 use crate::adapter;
 use crate::cli::SuperviseArgs;
@@ -13,7 +13,7 @@ pub fn execute(args: SuperviseArgs) -> Result<u8, CliError> {
     let config = SupervisorConfig {
         root: args.root,
         container_id,
-        ready_timeout: DEFAULT_READY_TIMEOUT,
+        ready_timeout: std::time::Duration::from_millis(args.ready_timeout_ms),
     };
 
     Supervisor::new(config, engine)

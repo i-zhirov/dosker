@@ -10,13 +10,16 @@ path = "src/main.rs"
 
 [features]
 mock-engine = ["dep:dosker-test-support"]
+qemu-engine = []
 
 [dependencies]
 clap.workspace = true
 dosker-core.workspace = true
 dosker-platform.workspace = true
 dosker-engine.workspace = true
+dosker-engine-qemu.workspace = true
 dosker-runtime.workspace = true
+dosker-image.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
@@ -25,3 +28,4 @@ dosker-test-support = { workspace = true, optional = true }
 [dev-dependencies]
 dosker-test-support.workspace = true
 tempfile.workspace = true
+fatfs.workspace = true

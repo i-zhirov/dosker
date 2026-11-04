@@ -309,6 +309,34 @@ impl<T: Transport> AgentClient<T> {
         decode_payload(&frame.payload)
     }
 
+    /// Ask the agent to flush its files and stop within a caller deadline.
+    pub fn shutdown_with_timeout(
+        &mut self,
+        grace_ms: u64,
+        timeout: Duration,
+    ) -> Result<ShutdownAck> {
+        let deadline = Instant::now() + timeout;
+        self.session.begin_request();
+        let payload = encode_payload(&ShutdownRequest { grace_ms })?;
+        self.session
+            .send_with_deadline(FrameType::Shutdown, &payload, deadline)?;
+
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(ProtoError::Timeout);
+        }
+
+        let frame = Self::classify(self.session.recv_with_timeout(remaining)?)?;
+        if frame.kind != FrameType::ShutdownAck {
+            return Err(ProtoError::UnexpectedFrame {
+                expected: "SHUTDOWN_ACK",
+                actual: frame.kind,
+            });
+        }
+
+        decode_payload(&frame.payload)
+    }
+
     /// Consume the client and return its transport.
     pub fn into_inner(self) -> T {
         self.session.into_inner()

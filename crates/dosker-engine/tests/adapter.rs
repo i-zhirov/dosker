@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use dosker_core::ContainerId;
 use dosker_engine::{
-    Capability, CapabilitySet, EngineAdapter, EngineError, EngineSession, EngineSpec, ExecRequest,
-    ExecResult,
+    Capability, CapabilitySet, DebugKind, DisplayMode, EngineAdapter, EngineCommand, EngineError,
+    EngineSession, EngineSpec, ExecRequest, ExecResult,
 };
 
 struct StubSession;
@@ -73,12 +73,17 @@ impl EngineAdapter for StubAdapter {
 
 fn sample_spec() -> EngineSpec {
     EngineSpec {
+        root: PathBuf::from("/tmp/dosker"),
         container_id: ContainerId::parse("0123456789ab").unwrap(),
         workdir: "C:\\DOSKER".to_owned(),
         env: BTreeMap::from([("NAME".to_owned(), "VALUE".to_owned())]),
         cmd: Some("ECHO HELLO".to_owned()),
         expects_agent: true,
         log_dir: PathBuf::from("/tmp/dosker-logs"),
+        disk_path: PathBuf::from("/tmp/dosker/containers/0123456789ab/disk.img"),
+        booter: false,
+        display: DisplayMode::None,
+        vnc_port: None,
     }
 }
 
@@ -122,6 +127,100 @@ fn spec_holds_the_pinned_fields() {
     assert_eq!(spec.cmd.as_deref(), Some("ECHO HELLO"));
     assert!(spec.expects_agent);
     assert_eq!(spec.log_dir, PathBuf::from("/tmp/dosker-logs"));
+    assert_eq!(spec.root, PathBuf::from("/tmp/dosker"));
+    assert_eq!(
+        spec.disk_path,
+        PathBuf::from("/tmp/dosker/containers/0123456789ab/disk.img")
+    );
+    assert!(!spec.booter);
+    assert_eq!(spec.display, DisplayMode::None);
+    assert_eq!(spec.vnc_port, None);
+}
+
+#[test]
+fn display_mode_names_round_trip() {
+    for (mode, name) in [
+        (DisplayMode::None, "none"),
+        (DisplayMode::Window, "window"),
+        (DisplayMode::Vnc, "vnc"),
+    ] {
+        assert_eq!(mode.as_str(), name);
+        assert_eq!(DisplayMode::parse(name), Some(mode));
+        assert_eq!(serde_json::to_string(&mode).unwrap(), format!("\"{name}\""));
+    }
+
+    assert_eq!(DisplayMode::parse("headless"), None);
+    assert_eq!(DisplayMode::default(), DisplayMode::None);
+}
+
+#[test]
+fn debug_kind_is_gdb() {
+    assert_eq!(serde_json::to_string(&DebugKind::Gdb).unwrap(), "\"gdb\"");
+    assert_eq!(
+        serde_json::from_str::<DebugKind>("\"gdb\"").unwrap(),
+        DebugKind::Gdb
+    );
+}
+
+#[test]
+fn engine_command_render_quotes_arguments() {
+    let command = EngineCommand {
+        program: PathBuf::from("/usr/bin/qemu-system-i386"),
+        args: vec![
+            "-machine".to_owned(),
+            "pc".to_owned(),
+            "-display".to_owned(),
+            "gtk,title=My Machine".to_owned(),
+            "-fw_cfg".to_owned(),
+            "name=opt/rom,string=it's".to_owned(),
+        ],
+        env: vec![("QEMU_LOG".to_owned(), "1".to_owned())],
+    };
+
+    let rendered = command.render();
+
+    assert!(rendered.starts_with("/usr/bin/qemu-system-i386 -machine pc -display "));
+    assert!(rendered.contains("'gtk,title=My Machine'"));
+    assert!(rendered.contains("'name=opt/rom,string=it'\\''s'"));
+    assert!(!rendered.contains("QEMU_LOG"));
+}
+
+#[test]
+fn default_session_features_are_unsupported() {
+    let mut session: Box<dyn EngineSession> = Box::new(StubSession);
+
+    assert!(session.command().is_none());
+    assert!(session.endpoints().is_empty());
+
+    match session.screenshot(Path::new("/tmp/screen.png")) {
+        Err(EngineError::Unsupported("screenshot")) => {}
+        other => panic!("expected Unsupported screenshot, got {other:?}"),
+    }
+    match session.debug_endpoint(DebugKind::Gdb) {
+        Err(EngineError::Unsupported("debugger")) => {}
+        other => panic!("expected Unsupported debugger, got {other:?}"),
+    }
+    match session.put_file(r"C:\FILE.TXT", b"data") {
+        Err(EngineError::Unsupported("file upload")) => {}
+        other => panic!("expected Unsupported file upload, got {other:?}"),
+    }
+    match session.get_file(r"C:\FILE.TXT") {
+        Err(EngineError::Unsupported("file download")) => {}
+        other => panic!("expected Unsupported file download, got {other:?}"),
+    }
+}
+
+#[test]
+fn no_agent_error_message() {
+    assert_eq!(EngineError::NoAgent.to_string(), "the image has no agent");
+}
+
+#[test]
+fn guest_rebooted_error_message() {
+    assert_eq!(
+        EngineError::GuestRebooted.to_string(),
+        "the guest rebooted during the command"
+    );
 }
 
 #[test]

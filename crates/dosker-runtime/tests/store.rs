@@ -291,6 +291,109 @@ fn unsupported_schema_version_is_rejected() {
     }
 }
 
+#[test]
+fn remove_deletes_the_container_disk_and_name_lock() {
+    let (_dir, store) = store();
+    let record = record("000000000001", "alpha", at(0));
+    store.create(&record).unwrap();
+    let disk = store.paths().disk_file(&record.id);
+    fs::write(&disk, b"disk").unwrap();
+
+    store.remove(&record).unwrap();
+
+    assert!(!disk.exists());
+    assert!(!store.paths().container_dir(&record.id).exists());
+    assert!(!store.paths().name_dir(&record.name).exists());
+}
+
+#[test]
+fn remove_keeps_other_containers() {
+    let (_dir, store) = store();
+    let removed = record("000000000001", "alpha", at(0));
+    let kept = record("000000000002", "beta", at(1));
+    store.create(&removed).unwrap();
+    store.create(&kept).unwrap();
+
+    store.remove(&removed).unwrap();
+
+    assert!(!store.paths().container_dir(&removed.id).exists());
+    assert!(store.paths().container_dir(&kept.id).is_dir());
+    assert!(store.paths().name_dir(&kept.name).is_dir());
+    assert_eq!(store.load(&kept.id).unwrap(), kept);
+}
+
+#[test]
+fn remove_is_idempotent() {
+    let (_dir, store) = store();
+    let record = record("000000000001", "alpha", at(0));
+    store.create(&record).unwrap();
+
+    store.remove(&record).unwrap();
+    store.remove(&record).unwrap();
+
+    assert!(!store.paths().container_dir(&record.id).exists());
+    assert!(!store.paths().name_dir(&record.name).exists());
+}
+
+#[test]
+fn remove_leaves_a_name_lock_owned_by_another_id() {
+    let (_dir, store) = store();
+    let record = record("000000000001", "alpha", at(0));
+    store.create(&record).unwrap();
+    let name_dir = store.paths().name_dir(&record.name);
+    fs::write(name_dir.join("id"), "000000000002\n").unwrap();
+
+    store.remove(&record).unwrap();
+
+    assert!(!store.paths().container_dir(&record.id).exists());
+    assert_eq!(
+        fs::read_to_string(name_dir.join("id")).unwrap().trim(),
+        "000000000002"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn remove_removes_recorded_control_and_engine_sockets() {
+    let (_dir, store) = store();
+    let mut record = record("0000000000f1", "alpha", at(0));
+    store.create(&record).unwrap();
+
+    let container_dir = store.paths().container_dir(&record.id);
+    let control = container_dir.join("control.sock");
+    let agent = container_dir.join("serial_agent.sock");
+    let fallback = dosker_platform::short_socket_dir().join(format!("{}-gdb.sock", record.id));
+    fs::create_dir_all(fallback.parent().unwrap()).unwrap();
+    for path in [&control, &agent, &fallback] {
+        fs::write(path, b"socket").unwrap();
+    }
+    record.sockets.insert(
+        "control".to_owned(),
+        EndpointRecord::UnixSocket {
+            path: control.clone(),
+        },
+    );
+    record.sockets.insert(
+        "serial_agent".to_owned(),
+        EndpointRecord::UnixSocket {
+            path: agent.clone(),
+        },
+    );
+    record.sockets.insert(
+        "gdb".to_owned(),
+        EndpointRecord::UnixSocket {
+            path: fallback.clone(),
+        },
+    );
+
+    store.remove(&record).unwrap();
+
+    for path in [&control, &agent, &fallback] {
+        assert!(!path.exists(), "{} should be gone", path.display());
+    }
+    assert!(!container_dir.exists());
+}
+
 #[cfg(unix)]
 #[test]
 fn root_containers_and_container_dir_are_owner_only() {

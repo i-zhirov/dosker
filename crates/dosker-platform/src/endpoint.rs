@@ -49,6 +49,29 @@ pub fn short_socket_path(id: &ContainerId) -> PathBuf {
     short_socket_dir().join(format!("{id}.sock"))
 }
 
+/// Returns the path of a named engine socket for a container.
+///
+/// The path sits in the container directory when it fits the platform limit
+/// and falls back to the short socket directory otherwise. `name` must be one
+/// of `agent`, `qmp`, `monitor`, or `gdb`.
+#[cfg(unix)]
+pub fn engine_socket_path(root: &Path, id: &ContainerId, name: &str) -> PathBuf {
+    debug_assert!(
+        matches!(name, "agent" | "qmp" | "monitor" | "gdb"),
+        "engine socket name must be one of agent, qmp, monitor, gdb: {name}"
+    );
+
+    let default = root
+        .join("containers")
+        .join(id.as_str())
+        .join(format!("{name}.sock"));
+    if unix_path_len(&default) <= MAX_UNIX_SOCKET_PATH_BYTES {
+        default
+    } else {
+        short_socket_dir().join(format!("{}-{name}.sock", id.as_str()))
+    }
+}
+
 /// Returns the control endpoint for a container.
 pub fn control_endpoint(root: &Path, id: &ContainerId) -> Endpoint {
     #[cfg(unix)]

@@ -169,7 +169,26 @@ impl<T: Transport> Session<T> {
         'attempts: for _ in 0..attempts {
             let mut timeout = self.attempt_timeout(deadline)?;
             let frame = Frame::new(kind, self.request_id, self.sequence, payload.to_vec())?;
-            write_frame(&mut self.transport, &frame)?;
+
+            // Bound the write by the remaining budget so a blocked transport
+            // cannot hold the request past its deadline.
+            self.transport.set_write_timeout(Some(timeout))?;
+            match write_frame(&mut self.transport, &frame) {
+                Ok(()) => {}
+                Err(ProtoError::Io(error))
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                    ) =>
+                {
+                    if deadline.is_some() {
+                        return Err(ProtoError::Timeout);
+                    }
+                    continue 'attempts;
+                }
+                Err(error) => return Err(error),
+            }
+
             timeout = timeout.min(self.attempt_timeout(deadline)?);
             self.transport.set_read_timeout(Some(timeout))?;
 

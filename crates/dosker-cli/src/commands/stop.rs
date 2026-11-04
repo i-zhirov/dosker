@@ -8,7 +8,7 @@ use dosker_runtime::protocol::{Reply, Request};
 use dosker_runtime::recover_stale;
 use dosker_runtime::stale::HostProbe;
 
-use crate::cli::{EXIT_ERROR, EXIT_OK, StopArgs};
+use crate::cli::{EXIT_ERROR, EXIT_NOT_RUNNING, EXIT_OK, StopArgs};
 use crate::context::Context;
 use crate::control_client;
 use crate::error::CliError;
@@ -29,6 +29,15 @@ pub fn execute(
             .console
             .line(&format!("{} {}", record.name, record.status))?;
         return Ok(EXIT_OK);
+    }
+
+    // A created container has no supervisor and has never run, so there is
+    // nothing to stop. Match the pinned not-running exit code.
+    if record.status == Status::Created {
+        context
+            .console
+            .line(&format!("{} {}", record.name, record.status))?;
+        return Ok(EXIT_NOT_RUNNING);
     }
 
     let Some(endpoint) = record.control_endpoint() else {

@@ -3,6 +3,7 @@
 use std::io;
 
 use dosker_core::CoreError;
+use dosker_image::ImageError;
 use dosker_platform::PlatformError;
 use dosker_runtime::StoreError;
 
@@ -31,6 +32,10 @@ pub enum CliError {
     #[error(transparent)]
     Store(#[from] StoreError),
 
+    /// An image operation failed.
+    #[error(transparent)]
+    Image(#[from] ImageError),
+
     /// An input or output operation failed.
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -44,6 +49,7 @@ impl CliError {
             Self::Core(CoreError::InvalidContainerId(_) | CoreError::InvalidContainerName(_)) => {
                 EXIT_USAGE
             }
+            Self::Image(ImageError::InvalidReference(_)) => EXIT_USAGE,
             _ => EXIT_ERROR,
         }
     }

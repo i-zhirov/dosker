@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 use std::io::{self, BufReader, Cursor, Read};
+use std::path::PathBuf;
 
 use dosker_core::{ContainerId, ContainerName, Status};
+use dosker_engine::DebugKind;
 use dosker_runtime::{
-    ContainerSummary, DEFAULT_EXEC_TIMEOUT_MS, DEFAULT_STOP_GRACE_MS, ErrorCode, FrameError,
-    FrameRead, MAX_MESSAGE_BYTES, Reply, Request, RequestParse, Response, parse_request,
-    read_frame, write_message,
+    ContainerSummary, CpDirection, DEFAULT_EXEC_TIMEOUT_MS, DEFAULT_STOP_GRACE_MS, ErrorCode,
+    FrameError, FrameRead, MAX_MESSAGE_BYTES, Reply, Request, RequestParse, Response,
+    parse_request, read_frame, write_message,
 };
 
 const EXEC_DEFAULTS: &str = r#"{"type":"exec","command":"ECHO HELLO"}"#;
@@ -185,12 +187,64 @@ fn parse_request_applies_stop_default() {
 fn parse_request_reports_unknown_type() {
     assert_eq!(parse_request("{}"), RequestParse::UnknownType);
     assert_eq!(
-        parse_request(r#"{"type":"attach"}"#),
+        parse_request(r#"{"type":"fork"}"#),
         RequestParse::UnknownType
     );
     assert_eq!(
         parse_request(r#"{"type":"nope"}"#),
         RequestParse::UnknownType
+    );
+}
+
+#[test]
+fn parse_request_accepts_attach() {
+    assert_eq!(
+        parse_request(r#"{"type":"attach"}"#),
+        RequestParse::Known(Request::Attach)
+    );
+}
+
+#[test]
+fn parse_request_accepts_cp_in_and_out() {
+    assert_eq!(
+        parse_request(
+            r#"{"type":"cp","direction":"in","source":"a.txt","destination":"C:\\A.TXT"}"#
+        ),
+        RequestParse::Known(Request::Cp {
+            direction: CpDirection::In,
+            source: "a.txt".to_owned(),
+            destination: r"C:\A.TXT".to_owned(),
+        })
+    );
+    assert_eq!(
+        parse_request(
+            r#"{"type":"cp","direction":"out","source":"C:\\A.TXT","destination":"a.txt"}"#
+        ),
+        RequestParse::Known(Request::Cp {
+            direction: CpDirection::Out,
+            source: r"C:\A.TXT".to_owned(),
+            destination: "a.txt".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn parse_request_accepts_debug_gdb() {
+    assert_eq!(
+        parse_request(r#"{"type":"debug","kind":"gdb"}"#),
+        RequestParse::Known(Request::Debug {
+            kind: DebugKind::Gdb,
+        })
+    );
+}
+
+#[test]
+fn parse_request_accepts_screenshot() {
+    assert_eq!(
+        parse_request(r#"{"type":"screenshot","path":"shot.ppm"}"#),
+        RequestParse::Known(Request::Screenshot {
+            path: PathBuf::from("shot.ppm"),
+        })
     );
 }
 
@@ -233,6 +287,43 @@ fn response_round_trip_for_each_reply() {
     for reply in replies {
         let response = Response::ok(reply);
         assert_eq!(round_trip(&response), response);
+    }
+}
+
+#[test]
+fn response_round_trip_for_attach_cp_debug_screenshot() {
+    let replies = [
+        Reply::Attach,
+        Reply::Cp { bytes: 5 },
+        Reply::Debug {
+            kind: DebugKind::Gdb,
+            endpoint: "unix:/tmp/gdb.sock".to_owned(),
+        },
+        Reply::Screenshot {
+            path: PathBuf::from("shot.ppm"),
+        },
+    ];
+
+    for reply in replies {
+        let response = Response::ok(reply);
+        assert_eq!(round_trip(&response), response);
+    }
+}
+
+#[test]
+fn no_agent_unsupported_too_large_no_file_guest_rebooted_and_busy_codes_are_snake_case() {
+    let cases = [
+        (ErrorCode::NoAgent, "no_agent"),
+        (ErrorCode::Unsupported, "unsupported"),
+        (ErrorCode::TooLarge, "too_large"),
+        (ErrorCode::NoFile, "no_file"),
+        (ErrorCode::GuestRebooted, "guest_rebooted"),
+        (ErrorCode::Busy, "busy"),
+    ];
+
+    for (code, expected) in cases {
+        let value = serde_json::to_value(Response::error(code, "reason")).unwrap();
+        assert_eq!(value["error"]["code"], expected);
     }
 }
 

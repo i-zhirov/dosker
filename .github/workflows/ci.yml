@@ -33,11 +33,13 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Build workspace
-        run: cargo build --workspace --all-targets --features dosker-cli/mock-engine
+        run: cargo build --workspace --all-targets --features dosker-cli/mock-engine,dosker-cli/qemu-engine
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --features dosker-cli/mock-engine -- -D warnings
+        run: cargo clippy --workspace --all-targets --features dosker-cli/mock-engine,dosker-cli/qemu-engine -- -D warnings
       - name: Unit and mock suites
         run: cargo test --workspace --features dosker-cli/mock-engine
+      - name: QEMU adapter unit suites
+        run: cargo test -p dosker-engine-qemu
       - name: Transport contract suite
         run: cargo test -p dosker-test-support --test transport_contract
       - name: Detached lifecycle suite
@@ -79,7 +81,7 @@ jobs:
     name: agent-qemu
     runs-on: ubuntu-latest
     needs: agent-build
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       DOSKER_SKIP_BUILD: "1"
     steps:
@@ -175,3 +177,10 @@ jobs:
         run: agent/tools/conformance.sh qemu_lifecycle
       - name: Self-check
         run: agent/tools/self-check.sh
+      - name: Rust QEMU runtime suite
+        timeout-minutes: 30
+        env:
+          DOSKER_INTEGRATION: "1"
+          DOSKER_QEMU_IMAGE: agent/fixtures/dosker-agent.img
+          DOSKER_QEMU: qemu-system-i386
+        run: cargo test -p dosker-cli --features qemu-engine --test qemu_runtime -- --nocapture

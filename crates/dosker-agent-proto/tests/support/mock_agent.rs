@@ -79,6 +79,7 @@ enum ExecResponse {
 
 enum ReadItem {
     Data(Vec<u8>),
+    DelayedData { data: Vec<u8>, delay: Duration },
 }
 
 struct MockState {
@@ -90,6 +91,8 @@ struct MockState {
     response_sequence: u32,
     read_delay: Option<Duration>,
     read_timeout: Option<Duration>,
+    write_timeout: Option<Duration>,
+    block_writes: bool,
     silent_ack: bool,
     hello_instead_of_ack: Option<Hello>,
     ping: PingResponse,
@@ -102,6 +105,7 @@ struct MockState {
     put_ok: bool,
     put_end_bytes: Option<u64>,
     shutdown_ack: ShutdownAck,
+    shutdown_ack_delay: Option<Duration>,
 }
 
 impl Default for MockState {
@@ -115,6 +119,8 @@ impl Default for MockState {
             response_sequence: 0,
             read_delay: None,
             read_timeout: None,
+            write_timeout: None,
+            block_writes: false,
             silent_ack: false,
             hello_instead_of_ack: None,
             ping: PingResponse::Pong(Pong {
@@ -133,6 +139,7 @@ impl Default for MockState {
             put_ok: true,
             put_end_bytes: None,
             shutdown_ack: ShutdownAck { ready: true },
+            shutdown_ack_delay: None,
         }
     }
 }
@@ -158,6 +165,19 @@ impl MockState {
     fn push_next(&mut self, kind: FrameType, request_id: u32, payload: Vec<u8>) {
         let sequence = self.next_sequence(request_id);
         self.push_frame(kind, request_id, sequence, payload);
+    }
+
+    fn push_next_delayed(
+        &mut self,
+        kind: FrameType,
+        request_id: u32,
+        payload: Vec<u8>,
+        delay: Duration,
+    ) {
+        let sequence = self.next_sequence(request_id);
+        let frame = Frame::new(kind, request_id, sequence, payload).expect("mock frame is valid");
+        let data = frame.encode().expect("mock frame encodes");
+        self.reads.push_back(ReadItem::DelayedData { data, delay });
     }
 
     fn ack(&mut self, frame: &Frame) {
@@ -213,6 +233,10 @@ impl MockAgent {
         self.state.borrow_mut().read_delay = Some(delay);
     }
 
+    pub fn set_block_writes(&self) {
+        self.state.borrow_mut().block_writes = true;
+    }
+
     pub fn set_silent_ack(&self, silent: bool) {
         self.state.borrow_mut().silent_ack = silent;
     }
@@ -251,6 +275,10 @@ impl MockAgent {
         self.state.borrow_mut().shutdown_ack = ack;
     }
 
+    pub fn set_shutdown_ack_delay(&self, delay: Duration) {
+        self.state.borrow_mut().shutdown_ack_delay = Some(delay);
+    }
+
     pub fn host_frames(&self) -> Vec<Frame> {
         self.state.borrow().host_frames.clone()
     }
@@ -270,6 +298,40 @@ impl Read for MockAgent {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         if buffer.is_empty() {
             return Ok(0);
+        }
+
+        // A delayed item models a response that becomes available only after
+        // the host has started waiting for it.
+        let delayed = {
+            let state = self.state.borrow();
+
+            if state.pending_read.is_empty() {
+                match state.reads.front() {
+                    Some(ReadItem::DelayedData { delay, .. }) => Some((*delay, state.read_timeout)),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        };
+
+        if let Some((delay, read_timeout)) = delayed {
+            if let Some(timeout) = read_timeout
+                && delay > timeout
+            {
+                thread::sleep(timeout);
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "delayed response is not ready",
+                ));
+            }
+
+            thread::sleep(delay);
+            let mut state = self.state.borrow_mut();
+
+            if let Some(ReadItem::DelayedData { data, .. }) = state.reads.pop_front() {
+                state.pending_read = data;
+            }
         }
 
         let delay = {
@@ -297,6 +359,7 @@ impl Read for MockAgent {
         if state.pending_read.is_empty() {
             match state.reads.pop_front() {
                 Some(ReadItem::Data(bytes)) => state.pending_read = bytes,
+                Some(ReadItem::DelayedData { data, .. }) => state.pending_read = data,
                 None => {
                     return Err(io::Error::new(
                         io::ErrorKind::WouldBlock,
@@ -315,10 +378,21 @@ impl Read for MockAgent {
 
 impl Write for MockAgent {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
-        self.state
-            .borrow_mut()
-            .pending_write
-            .extend_from_slice(buffer);
+        let mut state = self.state.borrow_mut();
+
+        if state.block_writes {
+            // Model a full socket buffer: the host blocks until its write
+            // timeout expires, and a missing timeout blocks for much longer.
+            let delay = state.write_timeout.unwrap_or(Duration::from_secs(5));
+            drop(state);
+            thread::sleep(delay);
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "the write buffer is full",
+            ));
+        }
+
+        state.pending_write.extend_from_slice(buffer);
         Ok(buffer.len())
     }
 
@@ -426,7 +500,16 @@ impl Write for MockAgent {
             FrameType::Shutdown => {
                 let ack = state.shutdown_ack.clone();
                 let payload = encode_payload(&ack).expect("shutdown ack encodes");
-                state.push_next(FrameType::ShutdownAck, frame.request_id, payload);
+                if let Some(delay) = state.shutdown_ack_delay {
+                    state.push_next_delayed(
+                        FrameType::ShutdownAck,
+                        frame.request_id,
+                        payload,
+                        delay,
+                    );
+                } else {
+                    state.push_next(FrameType::ShutdownAck, frame.request_id, payload);
+                }
             }
             _ => {}
         }
@@ -441,7 +524,8 @@ impl Transport for MockAgent {
         Ok(())
     }
 
-    fn set_write_timeout(&mut self, _timeout: Option<Duration>) -> io::Result<()> {
+    fn set_write_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
+        self.state.borrow_mut().write_timeout = timeout;
         Ok(())
     }
 }

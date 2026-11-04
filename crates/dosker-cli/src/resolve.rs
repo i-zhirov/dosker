@@ -41,6 +41,6 @@ pub fn resolve(store: &StateStore, value: &str) -> Result<ContainerRecord, CliEr
     }
 }
 
-fn not_found(value: &str) -> CliError {
+pub(crate) fn not_found(value: &str) -> CliError {
     CliError::Message(format!("container not found: {value}"))
 }

@@ -6,27 +6,34 @@ use crate::error::CliError;
 
 /// Returns the engine chosen when the command line names none.
 pub fn default_engine() -> Option<&'static str> {
-    #[cfg(feature = "mock-engine")]
+    #[cfg(feature = "qemu-engine")]
+    {
+        Some("qemu")
+    }
+    #[cfg(all(not(feature = "qemu-engine"), feature = "mock-engine"))]
     {
         Some("mock")
     }
-    #[cfg(not(feature = "mock-engine"))]
+    #[cfg(all(not(feature = "qemu-engine"), not(feature = "mock-engine")))]
     {
-        None
+        Some("qemu")
     }
 }
 
 /// Reports whether the CLI can build an adapter for an engine name.
 pub fn is_known(engine: &str) -> bool {
+    if engine == "qemu" {
+        return true;
+    }
+
     #[cfg(feature = "mock-engine")]
     {
-        engine == "mock"
+        if engine == "mock" {
+            return true;
+        }
     }
-    #[cfg(not(feature = "mock-engine"))]
-    {
-        let _ = engine;
-        false
-    }
+
+    false
 }
 
 /// Builds the adapter for a known engine.
@@ -44,6 +51,18 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError> {
             let processes: Arc<dyn ProcessSupervisor> = Arc::new(system());
             return Ok(Box::new(MockAdapter::new(path, processes)));
         }
+    }
+
+    if engine == "qemu" {
+        use std::sync::Arc;
+
+        use dosker_engine_qemu::QemuAdapter;
+        use dosker_platform::process::{ProcessSupervisor, system};
+
+        let processes: Arc<dyn ProcessSupervisor> = Arc::new(system());
+        let adapter = QemuAdapter::discover(processes)
+            .map_err(|error| CliError::Message(error.to_string()))?;
+        return Ok(Box::new(adapter));
     }
 
     Err(CliError::Usage(format!("unknown engine: {engine}")))
