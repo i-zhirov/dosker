@@ -133,15 +133,15 @@ own.
 
 In scope: a pipe DACL for the current user only, `ReplaceFileW` state writes,
 Job Object cleanup after a supervisor crash, `%LOCALAPPDATA%\dosker`, and QMP,
-serial, monitor, gdbstub, VNC, and NAT over `127.0.0.1`. Out of scope: the
-build path and the DOSBox-X and Bochs engines.
+serial, monitor, gdbstub, and VNC over `127.0.0.1`. QEMU NAT remains in Slice 9.
+Out of scope: the build path and the DOSBox-X and Bochs engines.
 
-- **Status:** Unplanned
+- **Status:** Planned
 - **Depends on:** Slices 1 and 3.
 - **Requirements:** FR-021, FR-022, FR-023
 - **Manual prerequisites:** a Windows CI runner with QEMU. A Windows QEMU
   build with a pinned version and checksum.
-- **Plan:** —
+- **Plan:** `.sdd/specs/2026-11-01-dosker/plan-windows-runtime-track.md`
 - **Done when:** the design's M1-W definition of done passes on Windows
   x86_64. The CLI reaches the supervisor through a named pipe. The engine uses
   localhost TCP. A supervisor crash leaves no QEMU process. `engines` finds the
