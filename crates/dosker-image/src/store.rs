@@ -20,6 +20,7 @@ pub const IMAGE_RECORD_FILE: &str = "image.json";
 pub const IMAGE_DISK_FILE: &str = "disk.img";
 
 const DIR_MODE: u32 = 0o700;
+#[cfg(unix)]
 const DISK_MODE: u32 = 0o444;
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
 

@@ -1,14 +1,18 @@
 mod common;
 
 use std::fs;
-use std::io::BufReader;
-use std::time::Duration;
 
 use common::{CliRoot, stderr_text, stdout_text};
-use dosker_core::{ContainerId, Status};
+use dosker_core::ContainerId;
 
 #[cfg(unix)]
+use dosker_core::Status;
+#[cfg(unix)]
+use std::io::BufReader;
+#[cfg(unix)]
 use std::process::Command;
+#[cfg(unix)]
+use std::time::Duration;
 
 #[cfg(unix)]
 use dosker_core::ContainerName;

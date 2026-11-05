@@ -1,17 +1,19 @@
 mod common;
 
 use std::fs;
-use std::io::BufReader;
-use std::time::Duration;
 
 use common::{CliRoot, stderr_text, stdout_text};
 use dosker_core::{ContainerId, Status};
 use dosker_runtime::MAX_CP_BYTES;
 
 #[cfg(unix)]
+use std::io::BufReader;
+#[cfg(unix)]
 use std::process::Command;
 #[cfg(unix)]
 use std::sync::{Arc, Mutex};
+#[cfg(unix)]
+use std::time::Duration;
 
 #[cfg(unix)]
 use dosker_core::ContainerName;
@@ -420,7 +422,7 @@ fn cp_treats_a_windows_drive_path_as_host() {
     let operand = parse_operand(&context, r"C:\TEMP\FILE.TXT").expect("parse the operand");
 
     assert!(
-        matches!(operand, CpOperand::Host(path) if path == std::path::PathBuf::from(r"C:\TEMP\FILE.TXT"))
+        matches!(operand, CpOperand::Host(path) if path.as_path() == std::path::Path::new(r"C:\TEMP\FILE.TXT"))
     );
 }
 
