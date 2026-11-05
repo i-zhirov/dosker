@@ -55,8 +55,8 @@ The minimum QEMU version is `7.1.0`.
 
 The Windows QEMU CI job requires these repository variables:
 
-- `DOSKER_WINDOWS_QEMU_URL` is the QEMU ZIP archive URL.
-- `DOSKER_WINDOWS_QEMU_SHA256` is the ZIP archive SHA-256.
+- `DOSKER_WINDOWS_QEMU_URL` is the QEMU installer `.exe` URL.
+- `DOSKER_WINDOWS_QEMU_SHA256` is the installer SHA-256.
 - `DOSKER_WINDOWS_QEMU_VERSION` is the QEMU version in `X.Y.Z`
   form.
 - `DOSKER_QEMU_IMAGE_URL` is the prepared image URL. It can be a ZIP archive

@@ -68,8 +68,8 @@ The `windows-qemu` CI job requires these repository variables:
 - `DOSKER_WINDOWS_QEMU_VERSION`
 - `DOSKER_QEMU_IMAGE_URL`
 
-The job fails when any value is empty. The first three describe the QEMU ZIP
-archive. `DOSKER_QEMU_IMAGE_URL` describes the prepared image.
+The job fails when any value is empty. The first three describe the QEMU
+installer. `DOSKER_QEMU_IMAGE_URL` describes the prepared image.
 
 ### QEMU image URL variable
 

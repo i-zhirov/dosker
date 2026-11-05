@@ -8,8 +8,8 @@ set -euo pipefail
 formats=(
   "DOSKER_FREEDOS_SOURCE|FreeDOS Floppy Edition ZIP URL, raw boot floppy image URL, or local path"
   "DOSKER_QEMU_IMAGE_URL|ZIP archive containing a .img file, or a raw image URL"
-  "DOSKER_WINDOWS_QEMU_URL|Windows QEMU ZIP archive URL"
-  "DOSKER_WINDOWS_QEMU_SHA256|64-character hexadecimal SHA-256 of the ZIP"
+  "DOSKER_WINDOWS_QEMU_URL|Windows QEMU installer .exe URL"
+  "DOSKER_WINDOWS_QEMU_SHA256|64-character hexadecimal SHA-256 of the installer"
   "DOSKER_WINDOWS_QEMU_VERSION|bare X.Y.Z version"
 )
 

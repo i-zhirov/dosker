@@ -13,8 +13,8 @@
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: `windows-runtime-track`
 - **Depends on**: Slices 1 and 3.
 - **Manual prerequisites**: a Windows CI runner with QEMU. A Windows QEMU build with a pinned version and checksum.
-  The human supplies `DOSKER_WINDOWS_QEMU_URL` as a ZIP archive,
-  `DOSKER_WINDOWS_QEMU_SHA256` for that archive, and
+  The human supplies `DOSKER_WINDOWS_QEMU_URL` as the official Windows
+  QEMU installer `.exe`, `DOSKER_WINDOWS_QEMU_SHA256` for that installer, and
   `DOSKER_WINDOWS_QEMU_VERSION` as GitHub Actions repository variables. The human
   supplies a prepared FreeDOS image through `DOSKER_QEMU_IMAGE_URL` or a local
   `DOSKER_QEMU_IMAGE`. The design does not name the Windows QEMU source, version,
@@ -59,6 +59,10 @@
   port. This plan records the deferral and does not implement NAT.
 - **Windows arm64**: out of scope per the design.
 - **Build path, DOSBox-X, Bochs, COM1 pass-through**: out of scope.
+- **Windows QEMU artifact**: the official Windows build is an NSIS installer,
+  not a ZIP archive. The job verifies the installer SHA-256 and installs it
+  silently to `$RUNNER_TEMP\qemu`; it does not extract a ZIP. The preflight
+  reports the installer URL and checksum format.
 
 ## Shared Interfaces
 
@@ -642,9 +646,11 @@ exactly these names.
           `DOSKER_WINDOWS_QEMU_VERSION`, or `DOSKER_QEMU_IMAGE_URL` is empty.
           `DOSKER_WINDOWS_QEMU_VERSION` is the bare `X.Y.Z` form.
         - Add a QEMU install step in PowerShell. The manual prerequisite
-          supplies a ZIP archive. Download `DOSKER_WINDOWS_QEMU_URL` to
-          `$env:RUNNER_TEMP\qemu.zip`. Check the archive SHA-256 against
-          `DOSKER_WINDOWS_QEMU_SHA256`. Extract it. Find
+          supplies the official NSIS installer `.exe`. Download
+          `DOSKER_WINDOWS_QEMU_URL` to `$env:RUNNER_TEMP\qemu-setup.exe`.
+          Check the installer SHA-256 against
+          `DOSKER_WINDOWS_QEMU_SHA256`. Install it silently to
+          `$env:RUNNER_TEMP\qemu` with `/S` and `/D=...`. Find
           `qemu-system-i386.exe`. Append `DOSKER_QEMU`,
           `DOSKER_QEMU_SHA256`, and `DOSKER_QEMU_VERSION` to
           `$env:GITHUB_ENV`. The binary checksum comes from `Get-FileHash` and
