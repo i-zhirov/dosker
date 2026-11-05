@@ -14,6 +14,8 @@ use dosker_engine::{
     DebugKind, EngineCommand, EngineEndpoint, EngineError, EngineSession, EngineSpec, ExecRequest,
     ExecResult,
 };
+#[cfg(windows)]
+use dosker_platform::process::JobObject;
 use dosker_platform::process::ProcessSupervisor;
 
 use crate::discovery::{QemuBinary, QemuVersion};
@@ -45,6 +47,8 @@ pub struct QemuSession {
     agent: Option<AgentClient<SerialLog<EngineStream>>>,
     qmp: Option<QmpClient>,
     exit_code: Option<i32>,
+    #[cfg(windows)]
+    job: Option<JobObject>,
 }
 
 impl QemuSession {
@@ -77,7 +81,24 @@ impl QemuSession {
             EngineError::Setup(format!("could not prepare the QEMU process: {error}"))
         })?;
 
+        #[cfg(windows)]
+        let job = JobObject::kill_on_close().map_err(|error| {
+            EngineError::Setup(format!("could not create the QEMU job object: {error}"))
+        })?;
+
+        #[cfg(windows)]
+        let mut child = process.spawn()?;
+        #[cfg(not(windows))]
         let child = process.spawn()?;
+
+        #[cfg(windows)]
+        if let Err(error) = job.assign_child(&child) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(EngineError::Setup(format!(
+                "could not assign the QEMU process to its job object: {error}"
+            )));
+        }
 
         Ok(Self {
             child,
@@ -88,6 +109,8 @@ impl QemuSession {
             agent: None,
             qmp: None,
             exit_code: None,
+            #[cfg(windows)]
+            job: Some(job),
         })
     }
 
@@ -169,6 +192,11 @@ impl Drop for QemuSession {
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
+
+        // Close the job after the child is reaped so kill-on-close also ends
+        // any process the engine started in the job.
+        #[cfg(windows)]
+        drop(self.job.take());
     }
 }
 

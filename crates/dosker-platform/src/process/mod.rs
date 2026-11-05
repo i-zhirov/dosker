@@ -10,6 +10,9 @@ mod unix;
 #[cfg(windows)]
 mod windows;
 
+#[cfg(windows)]
+pub use windows::JobObject;
+
 /// Controls how dosker starts and cleans up child processes.
 pub trait ProcessSupervisor: Send + Sync {
     /// Starts the child in a session of its own.
@@ -19,6 +22,9 @@ pub trait ProcessSupervisor: Send + Sync {
     fn prepare_engine(&self, cmd: &mut Command) -> Result<(), PlatformError>;
 
     /// Kills every process in the group.
+    ///
+    /// On Windows this ends the named process. The Job Object ends the engine
+    /// when the supervisor exits.
     fn kill_group(&self, pgid: u32) -> Result<(), PlatformError>;
 
     /// Reports whether a process is still running.

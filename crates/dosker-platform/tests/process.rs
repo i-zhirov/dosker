@@ -1,9 +1,11 @@
 //! Process cleanup and detached spawn behavior.
 
 use std::process::Command;
-#[cfg(unix)]
+#[cfg(windows)]
+use std::process::Stdio;
+#[cfg(any(unix, windows))]
 use std::thread;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::time::{Duration, Instant};
 
 use dosker_platform::process::{ProcessSupervisor, system};
@@ -108,12 +110,74 @@ fn process_alive_is_true_for_current_process() {
 
 #[cfg(windows)]
 #[test]
-fn kill_group_is_unsupported_on_windows() {
-    let result = system().kill_group(1);
-    assert!(matches!(
-        result,
-        Err(dosker_platform::PlatformError::Unsupported(_))
-    ));
+fn job_object_kills_an_assigned_process_when_dropped() {
+    use dosker_platform::process::JobObject;
+
+    let job = JobObject::kill_on_close().expect("create the job object");
+    let mut child = windows_long_running_command()
+        .spawn()
+        .expect("spawn a long-running child");
+    let pid = child.id();
+    job.assign_child(&child).expect("assign the child");
+
+    assert!(
+        system().process_alive(pid),
+        "the assigned process is not alive"
+    );
+
+    drop(job);
+
+    assert!(
+        wait_until_process_exits(pid, Duration::from_secs(5)),
+        "the job object did not kill the assigned process"
+    );
+    let _ = child.wait();
+}
+
+#[cfg(windows)]
+#[test]
+fn job_object_keeps_an_assigned_process_alive_while_open() {
+    use dosker_platform::process::JobObject;
+
+    let job = JobObject::kill_on_close().expect("create the job object");
+    let mut child = windows_long_running_command()
+        .spawn()
+        .expect("spawn a long-running child");
+    let pid = child.id();
+    job.assign_child(&child).expect("assign the child");
+
+    thread::sleep(Duration::from_millis(200));
+
+    assert!(
+        system().process_alive(pid),
+        "the open job object ended the assigned process"
+    );
+    assert!(
+        child.try_wait().expect("poll the child").is_none(),
+        "the assigned process exited while the job object was open"
+    );
+
+    let _ = child.kill();
+    let _ = child.wait();
+    drop(job);
+}
+
+#[cfg(windows)]
+#[test]
+fn kill_group_terminates_the_named_process_on_windows() {
+    let processes = system();
+    let mut child = windows_long_running_command()
+        .spawn()
+        .expect("spawn a long-running child");
+    let pid = child.id();
+
+    processes.kill_group(pid).expect("kill the named process");
+
+    assert!(
+        wait_until_process_exits(pid, Duration::from_secs(5)),
+        "kill_group did not terminate the process"
+    );
+    let _ = child.wait();
 }
 
 #[cfg(unix)]
@@ -126,6 +190,28 @@ fn trivial_command() -> Command {
     let mut command = Command::new("cmd");
     command.args(["/C", "exit", "0"]);
     command
+}
+
+#[cfg(windows)]
+fn windows_long_running_command() -> Command {
+    let mut command = Command::new("cmd");
+    command.args(["/C", "ping -n 30 127.0.0.1 > NUL"]);
+    command.stdout(Stdio::null());
+    command.stderr(Stdio::null());
+    command
+}
+
+#[cfg(windows)]
+fn wait_until_process_exits(pid: u32, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if !system().process_alive(pid) {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+
+    !system().process_alive(pid)
 }
 
 #[cfg(unix)]

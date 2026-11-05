@@ -442,7 +442,7 @@ exactly these names.
     - **Verify**: `cargo test -p dosker-engine-qemu`
     - **Verify (Windows)**: `cargo test -p dosker-engine-qemu --test session_endpoints`
 
-- [ ] **Task 5: Windows Job Object and process termination**
+- [x] **Task 5: Windows Job Object and process termination**
 
     - **Implements**: FR-023, design Process Model and Host Platform
       Abstraction.
