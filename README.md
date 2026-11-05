@@ -1,7 +1,8 @@
 # DOSker
 
-DOSker is a Docker-like system for pre-configured DOS systems. The repository
-currently contains the host runtime foundation and the DOS serial agent.
+DOSker is a Docker-like system for pre-configured DOS systems. The host
+runtime runs QEMU containers on Linux x86_64, macOS arm64, and Windows
+x86_64, with a DOS serial agent for command execution and file transfer.
 
 ## CI setup
 
@@ -48,6 +49,23 @@ The macOS arm64 suite runs in
 [`.github/workflows/qemu-nightly.yml`](.github/workflows/qemu-nightly.yml)
 at 03:00 UTC each day and on manual dispatch. macOS arm64 uses TCG, so the
 job is slower and runs nightly.
+
+### Windows runtime
+
+Windows x86_64 uses a named-pipe control channel, loopback TCP engine
+endpoints, and a Job Object for cleanup. See
+[Windows runtime](docs/windows.md) for the full host behavior and environment
+variables.
+
+The `windows-qemu` CI job requires these repository variables:
+
+- `DOSKER_WINDOWS_QEMU_URL`
+- `DOSKER_WINDOWS_QEMU_SHA256`
+- `DOSKER_WINDOWS_QEMU_VERSION`
+- `DOSKER_QEMU_IMAGE_URL`
+
+The job fails when any value is empty. The first three describe the QEMU ZIP
+archive. `DOSKER_QEMU_IMAGE_URL` describes the prepared image.
 
 ### QEMU image URL variable
 
@@ -107,3 +125,4 @@ then runs the Rust QEMU runtime suite.
 - [Agent protocol](.sdd/specs/2026-11-01-dosker/contracts/agent-protocol.md)
 - [Roadmap](.sdd/specs/2026-11-01-dosker/roadmap.md)
 - [DOS agent plan](.sdd/specs/2026-11-01-dosker/plan-dos-agent-serial.md)
+- [Windows runtime](docs/windows.md)

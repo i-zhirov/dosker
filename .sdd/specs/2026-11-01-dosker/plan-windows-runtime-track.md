@@ -662,7 +662,7 @@ exactly these names.
           `windows-qemu` job. Keep the smoke file clippy-clean.
     - **Verify**: `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ci.yml")'`
 
-- [ ] **Task 9: Windows runtime documentation**
+- [x] **Task 9: Windows runtime documentation**
 
     - **Implements**: FR-021, FR-022, FR-023, design Non-Functional
       Requirements and M1-W definition of done.
