@@ -15,7 +15,7 @@ use common::{CliRoot, run_captured, stderr_text, stdout_text};
 use dosker_core::{ContainerId, Status};
 use dosker_engine_qemu::QemuBinary;
 use dosker_engine_qemu::command::free_vnc_port;
-use dosker_test_support::fixtures::{integration_enabled, kill_process, qemu_binary, qemu_image};
+use dosker_test_support::fixtures::{integration_enabled, kill_process, qemu_image};
 
 const CONNECT_RETRY: Duration = Duration::from_millis(50);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -523,9 +523,7 @@ fn engines_and_doctor_report_qemu() {
     };
     let _serial = integration_lock();
     let root = CliRoot::new();
-    let version = QemuBinary::from_path(PathBuf::from(qemu_binary()))
-        .expect("probe QEMU")
-        .version_string();
+    let version = QemuBinary::discover().expect("probe QEMU").version_string();
 
     let engines = root.run_with_qemu(&["engines"]);
     assert_eq!(
