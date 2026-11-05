@@ -301,7 +301,7 @@ exactly these names.
     - **Verify**: `cargo build -p dosker-test-support --bin mock-engine`
     - **Verify**: `cargo test -p dosker-engine -p dosker-engine-qemu -p dosker-test-support -p dosker-runtime`
 
-- [ ] **Task 3: Loopback TCP transport and QMP client**
+- [x] **Task 3: Loopback TCP transport and QMP client**
 
     - **Implements**: FR-021, FR-022, design Host Platform Abstraction and
       Control Endpoint Encoding.

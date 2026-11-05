@@ -106,7 +106,10 @@ impl QemuSession {
                 ));
             }
 
-            self.qmp = Some(QmpClient::connect_until(&self.paths.qmp, deadline)?);
+            self.qmp = Some(QmpClient::connect_until(
+                &EngineEndpointKind::UnixSocket(self.paths.qmp.clone()),
+                deadline,
+            )?);
         }
 
         self.qmp
