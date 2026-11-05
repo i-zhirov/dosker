@@ -6,9 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
+  preflight:
+    name: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required QEMU repository variables
+        env:
+          DOSKER_QEMU_IMAGE_URL: ${{ vars.DOSKER_QEMU_IMAGE_URL }}
+        run: bash .github/scripts/check-qemu-variables.sh DOSKER_QEMU_IMAGE_URL
+
   runtime-macos:
     name: runtime-macos
     runs-on: macos-14
+    needs: preflight
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

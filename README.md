@@ -10,6 +10,10 @@ The CI workflow is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 It runs formatting, the Rust workspace tests on Linux, macOS, and Windows, the
 OpenWatcom agent build, and the QEMU conformance suites.
 
+A `preflight` job checks all required QEMU repository variables before
+`agent-qemu` or `windows-qemu` starts. The macOS nightly has the same check.
+It reports every missing variable and its expected format in one message.
+
 ### FreeDOS source variable
 
 Set the repository variable `DOSKER_FREEDOS_SOURCE` in

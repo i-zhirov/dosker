@@ -15,6 +15,20 @@ jobs:
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
 
+  preflight:
+    name: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required QEMU repository variables
+        env:
+          DOSKER_FREEDOS_SOURCE: ${{ vars.DOSKER_FREEDOS_SOURCE }}
+          DOSKER_QEMU_IMAGE_URL: ${{ vars.DOSKER_QEMU_IMAGE_URL }}
+          DOSKER_WINDOWS_QEMU_URL: ${{ vars.DOSKER_WINDOWS_QEMU_URL }}
+          DOSKER_WINDOWS_QEMU_SHA256: ${{ vars.DOSKER_WINDOWS_QEMU_SHA256 }}
+          DOSKER_WINDOWS_QEMU_VERSION: ${{ vars.DOSKER_WINDOWS_QEMU_VERSION }}
+        run: bash .github/scripts/check-qemu-variables.sh
+
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -80,7 +94,7 @@ jobs:
   agent-qemu:
     name: agent-qemu
     runs-on: ubuntu-latest
-    needs: agent-build
+    needs: [preflight, agent-build]
     timeout-minutes: 45
     env:
       DOSKER_SKIP_BUILD: "1"
@@ -186,7 +200,9 @@ jobs:
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_runtime -- --nocapture
 
   windows-qemu:
+    name: windows-qemu
     runs-on: windows-latest
+    needs: preflight
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
