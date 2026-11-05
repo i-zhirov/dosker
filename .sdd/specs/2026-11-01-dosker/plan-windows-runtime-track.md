@@ -490,7 +490,7 @@ exactly these names.
     - **Verify**: `cargo test -p dosker-engine-qemu`
     - **Verify (Windows)**: `cargo test -p dosker-platform --test process -- --nocapture`
 
-- [ ] **Task 6: Windows QEMU discovery, version checks, and checksum**
+- [x] **Task 6: Windows QEMU discovery, version checks, and checksum**
 
     - **Implements**: FR-021, design Assumptions, Security, and Engine
       Capability Matrix source rule.

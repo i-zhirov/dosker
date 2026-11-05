@@ -271,6 +271,7 @@ dependencies = [
  "dosker-platform",
  "libc",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror",
 ]
