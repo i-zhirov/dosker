@@ -1,14 +1,16 @@
-#![cfg(unix)]
-
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use dosker_core::ContainerId;
-use dosker_engine::{Capability, CapabilitySet, DisplayMode, EngineAdapter, EngineSpec};
+#[cfg(windows)]
+use dosker_engine::EngineError;
+use dosker_engine::{
+    Capability, CapabilitySet, DisplayMode, EngineAdapter, EngineCommand, EngineEndpointKind,
+    EngineSpec,
+};
 use dosker_engine_qemu::command;
-use dosker_engine_qemu::paths::QemuPaths;
-use dosker_engine_qemu::{QemuAdapter, QemuBinary, QemuVersion};
+use dosker_engine_qemu::{QemuAdapter, QemuBinary, QemuEndpoints, QemuVersion};
 use dosker_platform::process::{ProcessSupervisor, system};
 
 fn sample_spec() -> EngineSpec {
@@ -48,10 +50,38 @@ fn has_pair(args: &[String], flag: &str, value: &str) -> bool {
         .any(|pair| pair[0].as_str() == flag && pair[1].as_str() == value)
 }
 
+fn build_command(spec: &EngineSpec) -> EngineCommand {
+    command::build(spec, &sample_binary()).expect("build command")
+}
+
 fn build(spec: &EngineSpec) -> Vec<String> {
-    command::build(spec, &sample_binary())
-        .expect("build command")
-        .args
+    build_command(spec).args
+}
+
+#[cfg(unix)]
+fn unix_path(kind: &EngineEndpointKind) -> &std::path::Path {
+    kind.unix_path().expect("a Unix endpoint")
+}
+
+#[cfg(windows)]
+fn tcp_option_port(value: &str) -> u16 {
+    value
+        .strip_prefix("tcp:127.0.0.1:")
+        .expect("a loopback TCP option")
+        .split(',')
+        .next()
+        .and_then(|port| port.parse().ok())
+        .expect("a TCP port")
+}
+
+#[cfg(windows)]
+fn gdb_option_port(value: &str) -> u16 {
+    value
+        .split(",port=")
+        .nth(1)
+        .and_then(|rest| rest.split(',').next())
+        .and_then(|port| port.parse().ok())
+        .expect("a gdb TCP port")
 }
 
 #[test]
@@ -65,22 +95,29 @@ fn headless_command_uses_display_none() {
 #[test]
 fn command_uses_the_private_disk_and_two_serial_ports() {
     let spec = sample_spec();
-    let paths = QemuPaths::for_spec(&spec);
-    let args = build(&spec);
+    let command = build_command(&spec);
     let drive = format!(
         "file={},format=raw,if=ide,index=0",
         spec.disk_path.display()
     );
 
-    assert!(has_pair(&args, "-drive", &drive));
+    assert!(has_pair(&command.args, "-drive", &drive));
     assert_eq!(
-        args.iter()
+        command
+            .args
+            .iter()
             .filter(|argument| argument.as_str() == "-serial")
             .count(),
         2
     );
-    let agent = format!("unix:{},server=on,wait=off", paths.agent_serial.display());
-    assert!(has_pair(&args, "-serial", &agent));
+
+    #[cfg(unix)]
+    {
+        let endpoints = QemuEndpoints::for_spec(&spec).expect("resolve endpoints");
+        let agent = endpoints.agent_serial.as_ref().expect("an agent endpoint");
+        let expected = format!("unix:{},server=on,wait=off", unix_path(agent).display());
+        assert!(has_pair(&command.args, "-serial", &expected));
+    }
 }
 
 #[test]
@@ -116,59 +153,144 @@ fn command_uses_the_conformance_machine() {
 }
 
 #[test]
-fn command_exposes_qmp_monitor_and_gdb_sockets() {
+fn command_carries_one_endpoint_for_each_engine_channel() {
+    let command = build_command(&sample_spec());
+    let names: Vec<&str> = command
+        .endpoints
+        .iter()
+        .map(|endpoint| endpoint.name.as_str())
+        .collect();
+
+    assert_eq!(names, ["serial_agent", "qmp", "monitor", "gdb"]);
+}
+
+#[test]
+#[cfg(unix)]
+fn command_uses_unix_sockets_on_unix() {
     let spec = sample_spec();
-    let paths = QemuPaths::for_spec(&spec);
+    let endpoints = QemuEndpoints::for_spec(&spec).expect("resolve endpoints");
+    let agent = endpoints.agent_serial.as_ref().expect("an agent endpoint");
     let args = build(&spec);
 
     assert!(has_pair(
         &args,
+        "-serial",
+        &format!("unix:{},server=on,wait=off", unix_path(agent).display())
+    ));
+    assert!(has_pair(
+        &args,
         "-qmp",
-        &format!("unix:{},server=on,wait=off", paths.qmp.display())
+        &format!(
+            "unix:{},server=on,wait=off",
+            unix_path(&endpoints.qmp).display()
+        )
     ));
     assert!(has_pair(
         &args,
         "-monitor",
-        &format!("unix:{},server=on,wait=off", paths.monitor.display())
+        &format!(
+            "unix:{},server=on,wait=off",
+            unix_path(&endpoints.monitor).display()
+        )
     ));
     assert!(has_pair(
         &args,
         "-chardev",
         &format!(
             "socket,id=gdb0,path={},server=on,wait=off",
-            paths.gdb.display()
+            unix_path(&endpoints.gdb).display()
         )
     ));
-    assert!(has_pair(&args, "-gdb", "chardev:gdb0"));
 }
 
 #[test]
-fn command_uses_the_host_agent_socket_for_a_normal_image() {
+#[cfg(windows)]
+fn command_uses_loopback_tcp_on_windows() {
     let spec = sample_spec();
-    let paths = QemuPaths::for_spec(&spec);
+    let endpoints = QemuEndpoints::for_spec(&spec).expect("resolve endpoints");
+    let agent = endpoints.agent_serial.as_ref().expect("an agent endpoint");
     let args = build(&spec);
 
-    let expected = format!("unix:{},server=on,wait=off", paths.agent_serial.display());
-    assert_eq!(value_after(&args, "-serial"), Some("none"));
-    assert!(args.iter().any(|argument| argument == &expected));
+    let serial = match agent {
+        EngineEndpointKind::Tcp { host, port } => format!("tcp:{host}:{port},server=on,wait=off"),
+        EngineEndpointKind::UnixSocket(path) => {
+            panic!("Windows agent endpoint is not TCP: {}", path.display())
+        }
+    };
+    let qmp = match &endpoints.qmp {
+        EngineEndpointKind::Tcp { host, port } => format!("tcp:{host}:{port},server=on,wait=off"),
+        EngineEndpointKind::UnixSocket(path) => {
+            panic!("Windows qmp endpoint is not TCP: {}", path.display())
+        }
+    };
+    let monitor = match &endpoints.monitor {
+        EngineEndpointKind::Tcp { host, port } => format!("tcp:{host}:{port},server=on,wait=off"),
+        EngineEndpointKind::UnixSocket(path) => {
+            panic!("Windows monitor endpoint is not TCP: {}", path.display())
+        }
+    };
+    let gdb = match &endpoints.gdb {
+        EngineEndpointKind::Tcp { host, port } => {
+            format!("socket,id=gdb0,host={host},port={port},server=on,wait=off")
+        }
+        EngineEndpointKind::UnixSocket(path) => {
+            panic!("Windows gdb endpoint is not TCP: {}", path.display())
+        }
+    };
+
+    assert!(has_pair(&args, "-serial", &serial));
+    assert!(has_pair(&args, "-qmp", &qmp));
+    assert!(has_pair(&args, "-monitor", &monitor));
+    assert!(has_pair(&args, "-chardev", &gdb));
+}
+
+#[test]
+#[cfg(windows)]
+fn command_uses_distinct_loopback_ports_on_windows() {
+    use std::collections::HashSet;
+
+    let args = build(&sample_spec());
+    let serial_ports: Vec<u16> = args
+        .windows(2)
+        .filter(|pair| pair[0].as_str() == "-serial" && pair[1].starts_with("tcp:127.0.0.1:"))
+        .map(|pair| tcp_option_port(&pair[1]))
+        .collect();
+    assert_eq!(serial_ports.len(), 1);
+
+    let qmp = tcp_option_port(value_after(&args, "-qmp").expect("the qmp option"));
+    let monitor = tcp_option_port(value_after(&args, "-monitor").expect("the monitor option"));
+    let gdb = gdb_option_port(value_after(&args, "-chardev").expect("the gdb chardev"));
+
+    let unique: HashSet<u16> = [serial_ports[0], qmp, monitor, gdb].into_iter().collect();
+    assert_eq!(unique.len(), 4);
 }
 
 #[test]
 fn booter_command_has_no_agent_socket() {
     let mut spec = sample_spec();
     spec.booter = true;
-    let paths = QemuPaths::for_spec(&spec);
-    let args = build(&spec);
+    let command = build_command(&spec);
 
-    assert!(!args.iter().any(|argument| {
-        argument.contains("agent") || argument.contains(&paths.agent_serial.display().to_string())
-    }));
+    assert!(
+        !command
+            .args
+            .iter()
+            .any(|argument| { argument.contains("agent") || argument.contains("serial_agent") })
+    );
     assert_eq!(
-        args.windows(2)
+        command
+            .args
+            .windows(2)
             .filter(|pair| pair[0].as_str() == "-serial" && pair[1].as_str() == "none")
             .count(),
         2
     );
+    let names: Vec<&str> = command
+        .endpoints
+        .iter()
+        .map(|endpoint| endpoint.name.as_str())
+        .collect();
+    assert_eq!(names, ["qmp", "monitor", "gdb"]);
 }
 
 #[test]
@@ -222,6 +344,34 @@ fn command_uses_a_free_vnc_port_when_vnc_port_is_absent() {
     );
 }
 
+#[test]
+#[cfg(windows)]
+fn vnc_port_does_not_reuse_an_engine_port() {
+    use std::collections::HashSet;
+
+    let mut spec = sample_spec();
+    spec.display = DisplayMode::Vnc;
+    spec.vnc_port = None;
+    let command = build_command(&spec);
+
+    let engine_ports: HashSet<u16> = command
+        .endpoints
+        .iter()
+        .filter_map(|endpoint| endpoint.kind.tcp_addr().map(|address| address.port()))
+        .collect();
+    assert_eq!(engine_ports.len(), 4);
+
+    let value = value_after(&command.args, "-vnc").expect("vnc option");
+    let display: u32 = value
+        .strip_prefix("127.0.0.1:")
+        .expect("vnc address")
+        .parse()
+        .expect("vnc display number");
+    let port = u16::try_from(5900 + display).expect("vnc port in range");
+
+    assert!(!engine_ports.contains(&port));
+}
+
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn command_uses_the_window_display_on_each_host() {
@@ -235,6 +385,18 @@ fn command_uses_the_window_display_on_each_host() {
     };
 
     assert!(has_pair(&args, "-display", expected));
+}
+
+#[test]
+#[cfg(windows)]
+fn windows_rejects_the_window_display() {
+    let mut spec = sample_spec();
+    spec.display = DisplayMode::Window;
+
+    match command::build(&spec, &sample_binary()) {
+        Err(EngineError::Unsupported("window display on Windows")) => {}
+        other => panic!("expected the Windows window display error, got {other:?}"),
+    }
 }
 
 #[test]
@@ -264,4 +426,12 @@ fn capabilities_are_the_proven_set() {
     assert_eq!(adapter.name(), "qemu");
     assert_eq!(adapter.version(), "8.2.0");
     assert_eq!(adapter.capabilities(), expected);
+}
+
+#[test]
+fn capabilities_never_include_nat() {
+    let processes: Arc<dyn ProcessSupervisor> = Arc::new(system());
+    let adapter = QemuAdapter::new(sample_binary(), processes);
+
+    assert!(!adapter.capabilities().contains(Capability::Nat));
 }

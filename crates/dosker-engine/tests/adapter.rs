@@ -177,6 +177,7 @@ fn engine_command_render_quotes_arguments() {
             "name=opt/rom,string=it's".to_owned(),
         ],
         env: vec![("QEMU_LOG".to_owned(), "1".to_owned())],
+        endpoints: Vec::new(),
     };
 
     let rendered = command.render();
@@ -185,6 +186,26 @@ fn engine_command_render_quotes_arguments() {
     assert!(rendered.contains("'gtk,title=My Machine'"));
     assert!(rendered.contains("'name=opt/rom,string=it'\\''s'"));
     assert!(!rendered.contains("QEMU_LOG"));
+}
+
+#[test]
+fn engine_command_carries_its_endpoints() {
+    let command = EngineCommand {
+        program: PathBuf::from("/usr/bin/qemu-system-i386"),
+        args: Vec::new(),
+        env: Vec::new(),
+        endpoints: vec![EngineEndpoint {
+            name: "qmp".to_owned(),
+            kind: EngineEndpointKind::Tcp {
+                host: Ipv4Addr::LOCALHOST,
+                port: 45_001,
+            },
+        }],
+    };
+
+    assert_eq!(command.endpoints.len(), 1);
+    assert_eq!(command.endpoints[0].name, "qmp");
+    assert_eq!(command.endpoints[0].kind.display(), "127.0.0.1:45001");
 }
 
 #[test]

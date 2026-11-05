@@ -71,6 +71,7 @@ pub struct EngineCommand {
     pub program: PathBuf,
     pub args: Vec<String>,
     pub env: Vec<(String, String)>,
+    pub endpoints: Vec<EngineEndpoint>,
 }
 
 impl EngineCommand {

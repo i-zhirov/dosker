@@ -76,15 +76,8 @@ impl EngineAdapter for QemuAdapter {
         }
     }
 
-    #[cfg(unix)]
     fn build_command(&self, spec: &EngineSpec) -> Result<EngineCommand, EngineError> {
         crate::command::build(spec, &self.binary)
-    }
-
-    #[cfg(windows)]
-    fn build_command(&self, spec: &EngineSpec) -> Result<EngineCommand, EngineError> {
-        let _ = spec;
-        Err(EngineError::Unsupported("QEMU command line"))
     }
 
     #[cfg(unix)]

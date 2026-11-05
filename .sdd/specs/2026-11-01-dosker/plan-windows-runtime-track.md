@@ -193,7 +193,7 @@ exactly these names.
     - **Verify**: `cargo build -p dosker-test-support --bin mock-engine`
     - **Verify**: `cargo test -p dosker-engine -p dosker-platform -p dosker-runtime -p dosker-cli --features dosker-cli/mock-engine`
 
-- [ ] **Task 2: QEMU command endpoints and command payload**
+- [x] **Task 2: QEMU command endpoints and command payload**
 
     - **Implements**: FR-021, FR-022, design Process Model, Host Platform
       Abstraction, and Engine Adapter `build_command`.

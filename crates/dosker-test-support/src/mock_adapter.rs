@@ -84,6 +84,7 @@ impl EngineAdapter for MockAdapter {
             program: self.engine_path.clone(),
             args: Vec::new(),
             env: self.child_env.clone(),
+            endpoints: Vec::new(),
         })
     }
 

@@ -144,6 +144,7 @@ fn ready_reports_an_early_exit() {
         program: binary.path.clone(),
         args: vec!["--not-a-qemu-option".to_owned()],
         env: Vec::new(),
+        endpoints: Vec::new(),
     };
     let mut session = QemuSession::spawn(&binary, &spec, &system(), command).expect("start QEMU");
 

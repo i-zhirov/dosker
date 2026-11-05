@@ -409,6 +409,7 @@ impl EngineAdapter for StubAdapter {
             program: PathBuf::from("stub-engine"),
             args: vec![String::from("--stub")],
             env: Vec::new(),
+            endpoints: Vec::new(),
         })
     }
 
@@ -1373,6 +1374,7 @@ fn supervisor_records_the_engine_command() {
         program: engine,
         args: Vec::new(),
         env: Vec::new(),
+        endpoints: Vec::new(),
     }
     .render();
     assert_eq!(command, expected);

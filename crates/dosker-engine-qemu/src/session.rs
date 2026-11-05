@@ -658,6 +658,7 @@ mod tests {
                 program: PathBuf::from("qemu-system-i386"),
                 args: Vec::new(),
                 env: Vec::new(),
+                endpoints: Vec::new(),
             },
             paths: QemuPaths::for_spec(&spec),
             spec,
