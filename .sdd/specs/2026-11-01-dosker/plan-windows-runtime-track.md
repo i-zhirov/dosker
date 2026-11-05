@@ -628,7 +628,7 @@ exactly these names.
     - **Verify (Windows, named pipe)**:
       `cargo test -p dosker-cli --features mock-engine --test detached_lifecycle`
 
-- [ ] **Task 8: Windows QEMU CI job**
+- [x] **Task 8: Windows QEMU CI job**
 
     - **Implements**: FR-021, FR-022, FR-023, design Testing Strategy and
       M1-W definition of done.

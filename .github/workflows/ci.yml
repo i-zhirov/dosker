@@ -184,3 +184,112 @@ jobs:
           DOSKER_QEMU_IMAGE: agent/fixtures/dosker-agent.img
           DOSKER_QEMU: qemu-system-i386
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_runtime -- --nocapture
+
+  windows-qemu:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Check the QEMU prerequisites
+        shell: pwsh
+        env:
+          DOSKER_WINDOWS_QEMU_URL: ${{ vars.DOSKER_WINDOWS_QEMU_URL }}
+          DOSKER_WINDOWS_QEMU_SHA256: ${{ vars.DOSKER_WINDOWS_QEMU_SHA256 }}
+          DOSKER_WINDOWS_QEMU_VERSION: ${{ vars.DOSKER_WINDOWS_QEMU_VERSION }}
+          DOSKER_QEMU_IMAGE_URL: ${{ vars.DOSKER_QEMU_IMAGE_URL }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $missing = @()
+          foreach ($name in @(
+            'DOSKER_WINDOWS_QEMU_URL',
+            'DOSKER_WINDOWS_QEMU_SHA256',
+            'DOSKER_WINDOWS_QEMU_VERSION',
+            'DOSKER_QEMU_IMAGE_URL'
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              $missing += $name
+            }
+          }
+
+          if ($missing.Count -gt 0) {
+            Write-Error ("required repository variables are empty: {0}" -f ($missing -join ', '))
+            exit 1
+          }
+      - name: Install QEMU
+        shell: pwsh
+        env:
+          DOSKER_WINDOWS_QEMU_URL: ${{ vars.DOSKER_WINDOWS_QEMU_URL }}
+          DOSKER_WINDOWS_QEMU_SHA256: ${{ vars.DOSKER_WINDOWS_QEMU_SHA256 }}
+          DOSKER_WINDOWS_QEMU_VERSION: ${{ vars.DOSKER_WINDOWS_QEMU_VERSION }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $archive = "$env:RUNNER_TEMP\qemu.zip"
+          Invoke-WebRequest -Uri $env:DOSKER_WINDOWS_QEMU_URL -OutFile $archive
+
+          $expected = $env:DOSKER_WINDOWS_QEMU_SHA256.ToLowerInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 -Path $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            Write-Error "the QEMU archive checksum does not match DOSKER_WINDOWS_QEMU_SHA256: expected $expected, got $actual"
+            exit 1
+          }
+
+          $extract = "$env:RUNNER_TEMP\qemu"
+          if (Test-Path $extract) {
+            Remove-Item -Recurse -Force $extract
+          }
+          Expand-Archive -Path $archive -DestinationPath $extract -Force
+
+          $binary = Get-ChildItem -Path $extract -Filter 'qemu-system-i386.exe' -Recurse -File | Select-Object -First 1
+          if ($null -eq $binary) {
+            Write-Error 'the QEMU archive does not contain qemu-system-i386.exe'
+            exit 1
+          }
+
+          $binarySha256 = (Get-FileHash -Algorithm SHA256 -Path $binary.FullName).Hash.ToLowerInvariant()
+
+          Add-Content -Path $env:GITHUB_ENV -Value "DOSKER_QEMU=$($binary.FullName)"
+          Add-Content -Path $env:GITHUB_ENV -Value "DOSKER_QEMU_SHA256=$binarySha256"
+          Add-Content -Path $env:GITHUB_ENV -Value "DOSKER_QEMU_VERSION=$($env:DOSKER_WINDOWS_QEMU_VERSION)"
+      - name: Download the prepared image
+        shell: pwsh
+        env:
+          DOSKER_QEMU_IMAGE_URL: ${{ vars.DOSKER_QEMU_IMAGE_URL }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $url = $env:DOSKER_QEMU_IMAGE_URL
+          if ($url -match '(?i)\.zip$') {
+            $archive = "$env:RUNNER_TEMP\dosker-image.zip"
+            Invoke-WebRequest -Uri $url -OutFile $archive
+
+            $extract = "$env:RUNNER_TEMP\dosker-image"
+            if (Test-Path $extract) {
+              Remove-Item -Recurse -Force $extract
+            }
+            Expand-Archive -Path $archive -DestinationPath $extract -Force
+
+            $image = Get-ChildItem -Path $extract -Filter '*.img' -Recurse -File | Select-Object -First 1
+            if ($null -eq $image) {
+              Write-Error "the image archive contains no .img file: $url"
+              exit 1
+            }
+            $imagePath = $image.FullName
+          } else {
+            $imagePath = "$env:RUNNER_TEMP\dosker-agent.img"
+            Invoke-WebRequest -Uri $url -OutFile $imagePath
+          }
+
+          if (-not (Test-Path $imagePath) -or (Get-Item $imagePath).Length -eq 0) {
+            Write-Error "the image download produced no image: $url"
+            exit 1
+          }
+
+          Add-Content -Path $env:GITHUB_ENV -Value "DOSKER_QEMU_IMAGE=$imagePath"
+      - name: Windows QEMU smoke suite
+        env:
+          DOSKER_INTEGRATION: "1"
+        run: cargo test -p dosker-cli --features qemu-engine --test windows_qemu_runtime -- --nocapture
