@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use dosker_core::ContainerId;
 use dosker_engine::{
-    Capability, CapabilitySet, DebugKind, DisplayMode, EngineAdapter, EngineCommand, EngineError,
-    EngineSession, EngineSpec, ExecRequest, ExecResult,
+    Capability, CapabilitySet, DebugKind, DisplayMode, EngineAdapter, EngineCommand,
+    EngineEndpoint, EngineEndpointKind, EngineError, EngineSession, EngineSpec, ExecRequest,
+    ExecResult,
 };
 
 struct StubSession;
@@ -183,6 +185,29 @@ fn engine_command_render_quotes_arguments() {
     assert!(rendered.contains("'gtk,title=My Machine'"));
     assert!(rendered.contains("'name=opt/rom,string=it'\\''s'"));
     assert!(!rendered.contains("QEMU_LOG"));
+}
+
+#[test]
+fn engine_endpoint_tcp_displays_loopback_address() {
+    let endpoint = EngineEndpoint {
+        name: "qmp".to_owned(),
+        kind: EngineEndpointKind::Tcp {
+            host: Ipv4Addr::LOCALHOST,
+            port: 45_000,
+        },
+    };
+
+    assert_eq!(endpoint.kind.display(), "127.0.0.1:45000");
+}
+
+#[test]
+fn engine_endpoint_unix_displays_the_path() {
+    let endpoint = EngineEndpoint {
+        name: "qmp".to_owned(),
+        kind: EngineEndpointKind::UnixSocket(PathBuf::from("/tmp/dosker/qmp.sock")),
+    };
+
+    assert_eq!(endpoint.kind.display(), "/tmp/dosker/qmp.sock");
 }
 
 #[test]

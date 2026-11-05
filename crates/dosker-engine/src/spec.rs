@@ -1,7 +1,8 @@
 //! Engine inputs and command results.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::path::{Path, PathBuf};
 
 use dosker_core::ContainerId;
 use serde::{Deserialize, Serialize};
@@ -101,11 +102,46 @@ fn quote(value: &str) -> String {
     }
 }
 
+/// How an engine endpoint is reachable from the host.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EngineEndpointKind {
+    /// A Unix domain socket path.
+    UnixSocket(PathBuf),
+    /// A TCP address on the loopback interface.
+    Tcp { host: Ipv4Addr, port: u16 },
+}
+
+impl EngineEndpointKind {
+    /// Returns the Unix socket path, when the endpoint is a Unix socket.
+    pub fn unix_path(&self) -> Option<&Path> {
+        match self {
+            Self::UnixSocket(path) => Some(path),
+            Self::Tcp { .. } => None,
+        }
+    }
+
+    /// Returns the TCP address, when the endpoint is TCP.
+    pub fn tcp_addr(&self) -> Option<SocketAddr> {
+        match self {
+            Self::UnixSocket(_) => None,
+            Self::Tcp { host, port } => Some(SocketAddr::from((*host, *port))),
+        }
+    }
+
+    /// Renders the endpoint for a person.
+    pub fn display(&self) -> String {
+        match self {
+            Self::UnixSocket(path) => path.display().to_string(),
+            Self::Tcp { host, port } => format!("{host}:{port}"),
+        }
+    }
+}
+
 /// A named endpoint an engine exposes to the host.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EngineEndpoint {
     pub name: String,
-    pub path: PathBuf,
+    pub kind: EngineEndpointKind,
 }
 
 /// A command to run inside the guest.

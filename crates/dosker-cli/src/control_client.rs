@@ -19,7 +19,7 @@ pub fn request(
     request: &Request,
     timeout: Duration,
 ) -> Result<Response, CliError> {
-    let endpoint = Endpoint::from(endpoint.clone());
+    let endpoint = Endpoint::try_from(endpoint.clone())?;
     let mut connection = connect(&endpoint, CONNECT_TIMEOUT)?;
     let io_timeout = timeout.saturating_add(IO_MARGIN);
     connection.set_read_timeout(Some(io_timeout))?;
@@ -43,7 +43,7 @@ pub fn request(
 
 /// Sends one ping with a hard budget for both connect and I/O.
 pub fn ping(endpoint: &EndpointRecord, budget: Duration) -> Result<(), CliError> {
-    let endpoint = Endpoint::from(endpoint.clone());
+    let endpoint = Endpoint::try_from(endpoint.clone())?;
     let mut connection = connect(&endpoint, budget)?;
     connection.set_read_timeout(Some(budget))?;
     connection.set_write_timeout(Some(budget))?;

@@ -44,7 +44,33 @@ fn endpoint_record_round_trip() {
 
     let record = endpoint.record();
 
-    assert_eq!(Endpoint::from(record), endpoint);
+    assert_eq!(
+        Endpoint::try_from(record).expect("control endpoint"),
+        endpoint
+    );
+}
+
+#[test]
+fn tcp_endpoint_record_round_trips() {
+    let record = EndpointRecord::tcp(45_000);
+
+    let serialized = serde_json::to_value(&record).unwrap();
+    assert_eq!(
+        serialized,
+        serde_json::json!({
+            "kind": "tcp",
+            "host": "127.0.0.1",
+            "port": 45_000,
+        })
+    );
+
+    let restored: EndpointRecord = serde_json::from_value(serialized).unwrap();
+    assert_eq!(restored, record);
+}
+
+#[test]
+fn tcp_endpoint_record_has_no_local_artifact() {
+    assert_eq!(EndpointRecord::tcp(45_000).local_endpoint(), None);
 }
 
 #[test]

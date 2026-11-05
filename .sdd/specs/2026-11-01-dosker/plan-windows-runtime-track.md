@@ -8,7 +8,7 @@
 > expected failure before you implement the task.
 
 - **Date**: 2026-11-04
-- **Status**: Approved
+- **Status**: In Progress
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: `windows-runtime-track`
 - **Depends on**: Slices 1 and 3.
@@ -112,7 +112,7 @@ exactly these names.
 
 ## Tasks
 
-- [ ] **Task 1: Engine endpoint values and TCP state records**
+- [x] **Task 1: Engine endpoint values and TCP state records**
 
     - **Implements**: FR-021, FR-022, design Process Model, Host Platform
       Abstraction, and Data Model `Container.sockets`.

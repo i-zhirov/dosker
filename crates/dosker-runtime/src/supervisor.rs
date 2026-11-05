@@ -11,7 +11,8 @@ use std::time::Duration;
 use chrono::Utc;
 use dosker_core::{ContainerId, CoreError, Status};
 use dosker_engine::{
-    DebugKind, EngineAdapter, EngineError, EngineSession, EngineSpec, ExecRequest,
+    DebugKind, EngineAdapter, EngineEndpoint, EngineEndpointKind, EngineError, EngineSession,
+    EngineSpec, ExecRequest,
 };
 use dosker_image::{DEFAULT_BAUD, DEFAULT_CONTROL_PORT, write_config};
 use dosker_platform::control::{ControlConnection, bind, remove_endpoint};
@@ -86,7 +87,7 @@ impl Supervisor {
         let mut record = store.load(&config.container_id)?;
 
         let endpoint = match record.control_endpoint() {
-            Some(endpoint) => Endpoint::from(endpoint.clone()),
+            Some(endpoint) => Endpoint::try_from(endpoint.clone())?,
             None => {
                 return Err(SupervisorError::Protocol(io::Error::new(
                     io::ErrorKind::NotFound,
@@ -103,6 +104,16 @@ impl Supervisor {
             &mut *adapter,
             &config,
         )
+    }
+}
+
+fn endpoint_record(endpoint: &EngineEndpoint) -> EndpointRecord {
+    match &endpoint.kind {
+        EngineEndpointKind::UnixSocket(path) => EndpointRecord::UnixSocket { path: path.clone() },
+        EngineEndpointKind::Tcp { host, port } => EndpointRecord::Tcp {
+            host: *host,
+            port: *port,
+        },
     }
 }
 
@@ -217,12 +228,9 @@ fn supervise(
     record.engine_pgid = session.process_group();
 
     for endpoint in session.endpoints() {
-        record.sockets.insert(
-            endpoint.name,
-            EndpointRecord::UnixSocket {
-                path: endpoint.path,
-            },
-        );
+        record
+            .sockets
+            .insert(endpoint.name.clone(), endpoint_record(&endpoint));
     }
 
     // Persist the engine identities before waiting for readiness so a

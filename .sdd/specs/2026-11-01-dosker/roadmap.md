@@ -136,7 +136,7 @@ Job Object cleanup after a supervisor crash, `%LOCALAPPDATA%\dosker`, and QMP,
 serial, monitor, gdbstub, and VNC over `127.0.0.1`. QEMU NAT remains in Slice 9.
 Out of scope: the build path and the DOSBox-X and Bochs engines.
 
-- **Status:** Planned
+- **Status:** In Progress
 - **Depends on:** Slices 1 and 3.
 - **Requirements:** FR-021, FR-022, FR-023
 - **Manual prerequisites:** a Windows CI runner with QEMU. A Windows QEMU

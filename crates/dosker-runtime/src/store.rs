@@ -5,9 +5,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use dosker_core::{ContainerId, ContainerName, CoreError};
+use dosker_platform::PlatformError;
 use dosker_platform::control::remove_endpoint;
 use dosker_platform::fs::{ensure_dir_mode, write_atomic};
-use dosker_platform::{Endpoint, PlatformError};
 
 use crate::paths::RuntimePaths;
 use crate::record::{ContainerRecord, RECORD_SCHEMA_VERSION};
@@ -203,8 +203,9 @@ impl StateStore {
     /// A missing endpoint, name lock, or directory is success.
     pub fn remove(&self, record: &ContainerRecord) -> Result<(), StoreError> {
         for recorded in record.sockets.values() {
-            let endpoint = Endpoint::from(recorded.clone());
-            remove_endpoint(&endpoint).map_err(StoreError::from)?;
+            if let Some(endpoint) = recorded.local_endpoint() {
+                remove_endpoint(&endpoint).map_err(StoreError::from)?;
+            }
         }
 
         let name_dir = self.paths.name_dir(&record.name);

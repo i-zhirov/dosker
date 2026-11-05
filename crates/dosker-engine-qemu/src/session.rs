@@ -12,8 +12,8 @@ use dosker_agent_proto::{
     AgentClient, ExecRequest as ProtoExecRequest, MAX_OUTPUT_BYTES, ProtoError,
 };
 use dosker_engine::{
-    DebugKind, EngineCommand, EngineEndpoint, EngineError, EngineSession, EngineSpec, ExecRequest,
-    ExecResult,
+    DebugKind, EngineCommand, EngineEndpoint, EngineEndpointKind, EngineError, EngineSession,
+    EngineSpec, ExecRequest, ExecResult,
 };
 use dosker_platform::process::ProcessSupervisor;
 
@@ -316,21 +316,21 @@ impl EngineSession for QemuSession {
         if !self.spec.booter {
             endpoints.push(EngineEndpoint {
                 name: "serial_agent".to_owned(),
-                path: self.paths.agent_serial.clone(),
+                kind: EngineEndpointKind::UnixSocket(self.paths.agent_serial.clone()),
             });
         }
 
         endpoints.push(EngineEndpoint {
             name: "qmp".to_owned(),
-            path: self.paths.qmp.clone(),
+            kind: EngineEndpointKind::UnixSocket(self.paths.qmp.clone()),
         });
         endpoints.push(EngineEndpoint {
             name: "monitor".to_owned(),
-            path: self.paths.monitor.clone(),
+            kind: EngineEndpointKind::UnixSocket(self.paths.monitor.clone()),
         });
         endpoints.push(EngineEndpoint {
             name: "gdb".to_owned(),
-            path: self.paths.gdb.clone(),
+            kind: EngineEndpointKind::UnixSocket(self.paths.gdb.clone()),
         });
 
         endpoints

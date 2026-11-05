@@ -168,7 +168,10 @@ fn fallback_endpoint_record_round_trips() {
 
     let record = endpoint.record();
 
-    assert_eq!(Endpoint::from(record), endpoint);
+    assert_eq!(
+        Endpoint::try_from(record).expect("control endpoint"),
+        endpoint
+    );
 }
 
 #[test]

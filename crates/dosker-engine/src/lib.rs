@@ -9,5 +9,6 @@ pub use adapter::{EngineAdapter, EngineSession};
 pub use capability::{Capability, CapabilitySet};
 pub use error::EngineError;
 pub use spec::{
-    DebugKind, DisplayMode, EngineCommand, EngineEndpoint, EngineSpec, ExecRequest, ExecResult,
+    DebugKind, DisplayMode, EngineCommand, EngineEndpoint, EngineEndpointKind, EngineSpec,
+    ExecRequest, ExecResult,
 };

@@ -237,6 +237,9 @@ fn run_records_the_control_endpoint_under_the_root() {
         EndpointRecord::NamedPipe { name } => {
             assert_eq!(name, &format!(r"\\.\pipe\dosker-{id}-control"));
         }
+        EndpointRecord::Tcp { host, port } => {
+            panic!("a control endpoint is never tcp: {host}:{port}");
+        }
     }
 }
 

@@ -206,7 +206,7 @@ fn status_uses_the_supervisor_reply_when_reachable() {
         exit_code: Some(0),
     };
     spawn_status_stub(
-        Endpoint::from(endpoint),
+        Endpoint::try_from(endpoint).expect("control endpoint"),
         Reply::Status { container: summary },
     );
 

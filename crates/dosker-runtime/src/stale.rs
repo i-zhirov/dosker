@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use dosker_core::{ContainerId, Status};
 use dosker_platform::control::endpoint_alive as control_endpoint_alive;
 use dosker_platform::process::{ProcessSupervisor, SystemProcesses, system};
-use dosker_platform::{Endpoint, EndpointRecord, PlatformError};
+use dosker_platform::{EndpointRecord, PlatformError};
 
 use crate::record::ContainerRecord;
 use crate::store::{StateStore, StoreError};
@@ -47,7 +47,10 @@ impl HostProbe for SystemProbe {
     }
 
     fn endpoint_alive(&self, endpoint: &EndpointRecord) -> bool {
-        control_endpoint_alive(&Endpoint::from(endpoint.clone()))
+        match endpoint.local_endpoint() {
+            Some(endpoint) => control_endpoint_alive(&endpoint),
+            None => false,
+        }
     }
 
     fn kill_group(&self, pgid: u32) -> Result<(), PlatformError> {

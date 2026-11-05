@@ -1,9 +1,12 @@
 //! Control endpoints.
 
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 
 use dosker_core::ContainerId;
 use serde::{Deserialize, Serialize};
+
+use crate::PlatformError;
 
 /// A host-native control endpoint.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -22,6 +25,27 @@ pub enum EndpointRecord {
     UnixSocket { path: PathBuf },
     /// A Windows named-pipe name.
     NamedPipe { name: String },
+    /// A loopback TCP address.
+    Tcp { host: Ipv4Addr, port: u16 },
+}
+
+impl EndpointRecord {
+    /// Creates a loopback TCP endpoint record.
+    pub fn tcp(port: u16) -> Self {
+        Self::Tcp {
+            host: Ipv4Addr::LOCALHOST,
+            port,
+        }
+    }
+
+    /// Returns the host-native control endpoint, when the record has one.
+    pub fn local_endpoint(&self) -> Option<Endpoint> {
+        match self {
+            Self::UnixSocket { path } => Some(Endpoint::UnixSocket(path.clone())),
+            Self::NamedPipe { name } => Some(Endpoint::NamedPipe(name.clone())),
+            Self::Tcp { .. } => None,
+        }
+    }
 }
 
 /// The maximum length in bytes of a Unix socket path.
@@ -119,11 +143,16 @@ impl Endpoint {
     }
 }
 
-impl From<EndpointRecord> for Endpoint {
-    fn from(record: EndpointRecord) -> Self {
+impl TryFrom<EndpointRecord> for Endpoint {
+    type Error = PlatformError;
+
+    fn try_from(record: EndpointRecord) -> Result<Self, Self::Error> {
         match record {
-            EndpointRecord::UnixSocket { path } => Self::UnixSocket(path),
-            EndpointRecord::NamedPipe { name } => Self::NamedPipe(name),
+            EndpointRecord::UnixSocket { path } => Ok(Self::UnixSocket(path)),
+            EndpointRecord::NamedPipe { name } => Ok(Self::NamedPipe(name)),
+            EndpointRecord::Tcp { host, port } => Err(PlatformError::InvalidEndpoint(format!(
+                "tcp endpoint {host}:{port} is not a local control endpoint"
+            ))),
         }
     }
 }

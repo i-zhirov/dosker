@@ -118,7 +118,7 @@ pub fn run_shell(
     mut input: impl BufRead,
     output: &mut Console,
 ) -> Result<u8, CliError> {
-    let endpoint = Endpoint::from(endpoint.clone());
+    let endpoint = Endpoint::try_from(endpoint.clone())?;
     let mut connection = match connect(&endpoint, CONNECT_TIMEOUT) {
         Ok(connection) => connection,
         Err(_) => return Ok(EXIT_NOT_RUNNING),

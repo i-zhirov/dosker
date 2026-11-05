@@ -394,6 +394,21 @@ fn remove_removes_recorded_control_and_engine_sockets() {
     assert!(!container_dir.exists());
 }
 
+#[test]
+fn remove_ignores_tcp_engine_endpoints() {
+    let (_dir, store) = store();
+    let mut record = record("0000000000f2", "alpha", at(0));
+    store.create(&record).unwrap();
+
+    record
+        .sockets
+        .insert("qmp".to_owned(), EndpointRecord::tcp(45_000));
+
+    store.remove(&record).unwrap();
+
+    assert!(!store.paths().container_dir(&record.id).exists());
+}
+
 #[cfg(unix)]
 #[test]
 fn root_containers_and_container_dir_are_owner_only() {

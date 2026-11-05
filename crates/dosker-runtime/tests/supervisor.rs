@@ -5,6 +5,7 @@ mod support;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufReader, Write};
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -15,7 +16,7 @@ use chrono::Utc;
 use dosker_core::{ContainerId, ContainerName, Status};
 use dosker_engine::{
     Capability, CapabilitySet, DebugKind, EngineAdapter, EngineCommand, EngineEndpoint,
-    EngineError, EngineSession, EngineSpec, ExecRequest, ExecResult,
+    EngineEndpointKind, EngineError, EngineSession, EngineSpec, ExecRequest, ExecResult,
 };
 use dosker_platform::control::{ControlConnection, connect};
 use dosker_platform::process::SystemProcesses;
@@ -1302,11 +1303,11 @@ fn supervisor_records_engine_endpoints() {
         vec![
             EngineEndpoint {
                 name: String::from("serial_agent"),
-                path: root.join("serial_agent.sock"),
+                kind: EngineEndpointKind::UnixSocket(root.join("serial_agent.sock")),
             },
             EngineEndpoint {
                 name: String::from("qmp"),
-                path: root.join("qmp.sock"),
+                kind: EngineEndpointKind::UnixSocket(root.join("qmp.sock")),
             },
         ]
     });
@@ -1323,6 +1324,33 @@ fn supervisor_records_engine_endpoints() {
     assert_eq!(
         sockets.get("qmp"),
         Some(&EndpointRecord::UnixSocket { path: qmp })
+    );
+
+    stop(&mut client);
+    assert_eq!(harness.join(), 0);
+}
+
+#[test]
+fn supervisor_records_tcp_engine_endpoints() {
+    let mut harness = Harness::start_with_endpoints(|_root| {
+        vec![EngineEndpoint {
+            name: String::from("qmp"),
+            kind: EngineEndpointKind::Tcp {
+                host: Ipv4Addr::LOCALHOST,
+                port: 45_000,
+            },
+        }]
+    });
+    let mut client = harness.connect();
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+
+    let sockets = harness.loaded().sockets;
+    assert_eq!(
+        sockets.get("qmp"),
+        Some(&EndpointRecord::Tcp {
+            host: Ipv4Addr::LOCALHOST,
+            port: 45_000,
+        })
     );
 
     stop(&mut client);

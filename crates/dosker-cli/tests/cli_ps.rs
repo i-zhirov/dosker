@@ -318,7 +318,9 @@ fn ps_does_not_connect_to_live_containers() {
     let endpoint = record.control_endpoint().unwrap().clone();
     let connected = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&connected);
-    let listener = dosker_platform::control::bind(&Endpoint::from(endpoint)).unwrap();
+    let listener =
+        dosker_platform::control::bind(&Endpoint::try_from(endpoint).expect("control endpoint"))
+            .unwrap();
     std::thread::spawn(move || {
         if let Ok(Some(_connection)) = listener.accept(Duration::from_millis(500)) {
             flag.store(true, Ordering::SeqCst);
