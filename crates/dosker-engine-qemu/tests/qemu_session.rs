@@ -8,8 +8,7 @@ use dosker_core::ContainerId;
 use dosker_engine::{
     DebugKind, EngineCommand, EngineError, EngineSession, EngineSpec, ExecRequest,
 };
-use dosker_engine_qemu::paths::QemuPaths;
-use dosker_engine_qemu::{QemuBinary, QemuSession, command};
+use dosker_engine_qemu::{QemuBinary, QemuEndpoints, QemuSession, command};
 use dosker_platform::process::{ProcessSupervisor, system};
 
 const READY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -140,11 +139,12 @@ fn ready_reports_an_early_exit() {
     };
     let (_dir, spec) = setup(&image, false);
     let binary = QemuBinary::discover().expect("discover QEMU");
+    let endpoints = QemuEndpoints::for_spec(&spec).expect("resolve the engine endpoints");
     let command = EngineCommand {
         program: binary.path.clone(),
         args: vec!["--not-a-qemu-option".to_owned()],
         env: Vec::new(),
-        endpoints: Vec::new(),
+        endpoints: endpoints.engine_endpoints(),
     };
     let mut session = QemuSession::spawn(&binary, &spec, &system(), command).expect("start QEMU");
 
@@ -174,13 +174,18 @@ fn session_exposes_sockets_for_screenshot_and_debug() {
         .collect();
     assert_eq!(names, ["serial_agent", "qmp", "monitor", "gdb"]);
 
-    let paths = QemuPaths::for_spec(&spec);
-    assert!(paths.gdb.exists(), "the gdb socket is missing");
+    let endpoints = QemuEndpoints::for_spec(&spec).expect("resolve the engine endpoints");
+    let gdb = endpoints
+        .gdb
+        .unix_path()
+        .expect("the gdb endpoint is a Unix socket")
+        .to_path_buf();
+    assert!(gdb.exists(), "the gdb socket is missing");
 
     let endpoint = session
         .debug_endpoint(DebugKind::Gdb)
         .expect("the gdb endpoint is exposed");
-    assert_eq!(PathBuf::from(endpoint), paths.gdb);
+    assert_eq!(PathBuf::from(endpoint), gdb);
 }
 
 #[test]
@@ -253,5 +258,11 @@ fn screenshot_connects_qmp_lazily() {
         "the screenshot does not have a PPM or PNG header: {:?}",
         &bytes[..bytes.len().min(8)]
     );
-    assert!(QemuPaths::for_spec(&spec).qmp.exists());
+    let qmp = QemuEndpoints::for_spec(&spec)
+        .expect("resolve the engine endpoints")
+        .qmp
+        .unix_path()
+        .expect("the QMP endpoint is a Unix socket")
+        .to_path_buf();
+    assert!(qmp.exists());
 }

@@ -80,13 +80,11 @@ impl EngineAdapter for QemuAdapter {
         crate::command::build(spec, &self.binary)
     }
 
-    #[cfg(unix)]
     fn start(&mut self, spec: &EngineSpec) -> Result<Box<dyn EngineSession>, EngineError> {
         let command = self.build_command(spec)?;
         self.start_with_command(spec, &command)
     }
 
-    #[cfg(unix)]
     fn start_with_command(
         &mut self,
         spec: &EngineSpec,
@@ -99,21 +97,5 @@ impl EngineAdapter for QemuAdapter {
             command.clone(),
         )?;
         Ok(Box::new(session))
-    }
-
-    #[cfg(windows)]
-    fn start(&mut self, spec: &EngineSpec) -> Result<Box<dyn EngineSession>, EngineError> {
-        let _ = spec;
-        Err(EngineError::Unsupported("QEMU runtime on this host"))
-    }
-
-    #[cfg(windows)]
-    fn start_with_command(
-        &mut self,
-        spec: &EngineSpec,
-        command: &EngineCommand,
-    ) -> Result<Box<dyn EngineSession>, EngineError> {
-        let _ = (spec, command);
-        Err(EngineError::Unsupported("QEMU runtime on this host"))
     }
 }

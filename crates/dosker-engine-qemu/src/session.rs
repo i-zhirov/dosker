@@ -2,7 +2,6 @@
 
 use std::fs::{self, OpenOptions};
 use std::io::ErrorKind;
-use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
@@ -12,18 +11,21 @@ use dosker_agent_proto::{
     AgentClient, ExecRequest as ProtoExecRequest, MAX_OUTPUT_BYTES, ProtoError,
 };
 use dosker_engine::{
-    DebugKind, EngineCommand, EngineEndpoint, EngineEndpointKind, EngineError, EngineSession,
-    EngineSpec, ExecRequest, ExecResult,
+    DebugKind, EngineCommand, EngineEndpoint, EngineError, EngineSession, EngineSpec, ExecRequest,
+    ExecResult,
 };
 use dosker_platform::process::ProcessSupervisor;
 
 use crate::discovery::{QemuBinary, QemuVersion};
-use crate::paths::QemuPaths;
+use crate::endpoints::QemuEndpoints;
 use crate::qmp::{QMP_CONNECT_TIMEOUT, QmpClient};
 use crate::serial_log::SerialLog;
+use crate::stream::EngineStream;
 
 const BOOTER_ALIVE_PROBE: Duration = Duration::from_millis(250);
 const AGENT_SOCKET_RETRY: Duration = Duration::from_millis(50);
+const AGENT_CONNECT_ATTEMPT: Duration = Duration::from_millis(100);
+const DEBUG_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
 const STOP_POLL: Duration = Duration::from_millis(20);
 const SCREENSHOT_WAIT: Duration = Duration::from_secs(5);
 const SCREENSHOT_POLL: Duration = Duration::from_millis(20);
@@ -39,8 +41,8 @@ pub struct QemuSession {
     binary: QemuBinary,
     spec: EngineSpec,
     command: EngineCommand,
-    paths: QemuPaths,
-    agent: Option<AgentClient<SerialLog<UnixStream>>>,
+    endpoints: QemuEndpoints,
+    agent: Option<AgentClient<SerialLog<EngineStream>>>,
     qmp: Option<QmpClient>,
     exit_code: Option<i32>,
 }
@@ -54,8 +56,8 @@ impl QemuSession {
         command: EngineCommand,
     ) -> Result<Self, EngineError> {
         fs::create_dir_all(&spec.log_dir)?;
-        let paths = QemuPaths::for_spec(spec);
-        paths.remove_stale()?;
+        let endpoints = QemuEndpoints::from_command(&command)?;
+        endpoints.remove_stale()?;
 
         let log_path = spec.log_dir.join("engine.log");
         let log = OpenOptions::new()
@@ -82,7 +84,7 @@ impl QemuSession {
             binary: binary.clone(),
             spec: spec.clone(),
             command,
-            paths,
+            endpoints,
             agent: None,
             qmp: None,
             exit_code: None,
@@ -106,10 +108,8 @@ impl QemuSession {
                 ));
             }
 
-            self.qmp = Some(QmpClient::connect_until(
-                &EngineEndpointKind::UnixSocket(self.paths.qmp.clone()),
-                deadline,
-            )?);
+            let qmp_endpoint = self.endpoints.qmp.clone();
+            self.qmp = Some(QmpClient::connect_until(&qmp_endpoint, deadline)?);
         }
 
         self.qmp
@@ -154,7 +154,7 @@ impl QemuSession {
         Ok(code)
     }
 
-    fn agent_mut(&mut self) -> Result<&mut AgentClient<SerialLog<UnixStream>>, EngineError> {
+    fn agent_mut(&mut self) -> Result<&mut AgentClient<SerialLog<EngineStream>>, EngineError> {
         if self.spec.booter {
             return Err(EngineError::NoAgent);
         }
@@ -177,8 +177,14 @@ impl EngineSession for QemuSession {
         Some(self.child.id())
     }
 
+    #[cfg(unix)]
     fn process_group(&self) -> Option<u32> {
         Some(self.child.id())
+    }
+
+    #[cfg(windows)]
+    fn process_group(&self) -> Option<u32> {
+        None
     }
 
     fn ready(&mut self, timeout: Duration) -> Result<(), EngineError> {
@@ -190,6 +196,12 @@ impl EngineSession for QemuSession {
             };
         }
 
+        let agent_serial = self
+            .endpoints
+            .agent_serial
+            .as_ref()
+            .cloned()
+            .ok_or(EngineError::NoAgent)?;
         let deadline = Instant::now() + timeout;
         let stream = loop {
             if let Some(code) = self.poll_exit()? {
@@ -200,9 +212,20 @@ impl EngineSession for QemuSession {
                 return Err(EngineError::ReadyTimeout(timeout));
             }
 
-            match UnixStream::connect(&self.paths.agent_serial) {
+            let attempt_deadline = (Instant::now() + AGENT_CONNECT_ATTEMPT).min(deadline);
+            match EngineStream::connect(&agent_serial, attempt_deadline) {
                 Ok(stream) => break stream,
-                Err(_) => thread::sleep(AGENT_SOCKET_RETRY),
+                Err(_) => {
+                    if let Some(code) = self.poll_exit()? {
+                        return Err(EngineError::Exited(code));
+                    }
+
+                    if Instant::now() >= deadline {
+                        return Err(EngineError::ReadyTimeout(timeout));
+                    }
+
+                    thread::sleep(AGENT_SOCKET_RETRY);
+                }
             }
         };
 
@@ -314,29 +337,7 @@ impl EngineSession for QemuSession {
     }
 
     fn endpoints(&self) -> Vec<EngineEndpoint> {
-        let mut endpoints = Vec::with_capacity(4);
-
-        if !self.spec.booter {
-            endpoints.push(EngineEndpoint {
-                name: "serial_agent".to_owned(),
-                kind: EngineEndpointKind::UnixSocket(self.paths.agent_serial.clone()),
-            });
-        }
-
-        endpoints.push(EngineEndpoint {
-            name: "qmp".to_owned(),
-            kind: EngineEndpointKind::UnixSocket(self.paths.qmp.clone()),
-        });
-        endpoints.push(EngineEndpoint {
-            name: "monitor".to_owned(),
-            kind: EngineEndpointKind::UnixSocket(self.paths.monitor.clone()),
-        });
-        endpoints.push(EngineEndpoint {
-            name: "gdb".to_owned(),
-            kind: EngineEndpointKind::UnixSocket(self.paths.gdb.clone()),
-        });
-
-        endpoints
+        self.endpoints.engine_endpoints()
     }
 
     fn screenshot(&mut self, destination: &Path) -> Result<(), EngineError> {
@@ -378,10 +379,13 @@ impl EngineSession for QemuSession {
 
     fn debug_endpoint(&mut self, kind: DebugKind) -> Result<String, EngineError> {
         match kind {
-            DebugKind::Gdb if self.paths.gdb.exists() => {
-                Ok(self.paths.gdb.to_string_lossy().into_owned())
+            DebugKind::Gdb => {
+                if EngineStream::probe(&self.endpoints.gdb, DEBUG_PROBE_TIMEOUT) {
+                    Ok(self.endpoints.gdb.display())
+                } else {
+                    Err(EngineError::Unsupported("debugger"))
+                }
             }
-            DebugKind::Gdb => Err(EngineError::Unsupported("debugger")),
         }
     }
 
@@ -431,7 +435,7 @@ fn transfer_error(error: ProtoError) -> EngineError {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::collections::BTreeMap;
     use std::io::{BufRead, BufReader, Read, Write};
@@ -448,7 +452,7 @@ mod tests {
 
     use super::*;
 
-    fn delayed_agent(delay: Duration) -> (AgentClient<SerialLog<UnixStream>>, tempfile::TempDir) {
+    fn delayed_agent(delay: Duration) -> (AgentClient<SerialLog<EngineStream>>, tempfile::TempDir) {
         let directory = tempfile::tempdir().expect("create temporary directory");
         let log = OpenOptions::new()
             .create(true)
@@ -518,7 +522,7 @@ mod tests {
             let _ = read_frame(&mut agent);
         });
 
-        let mut client = AgentClient::new(SerialLog::new(host, log));
+        let mut client = AgentClient::new(SerialLog::new(EngineStream::Unix(host), log));
         client
             .handshake(Duration::from_secs(1))
             .expect("handshake succeeds");
@@ -626,6 +630,26 @@ mod tests {
         assert_stopped_within_grace(started, GRACE);
     }
 
+    #[test]
+    fn debug_endpoint_reports_unsupported_for_a_missing_gdb_path() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let spec = session_spec(directory.path());
+        let gdb = QemuEndpoints::for_spec(&spec)
+            .expect("resolve the engine endpoints")
+            .gdb
+            .unix_path()
+            .expect("the gdb endpoint is a Unix socket")
+            .to_path_buf();
+        let _ = fs::remove_file(&gdb);
+
+        let mut session = session_with(None, spec);
+
+        match session.debug_endpoint(DebugKind::Gdb) {
+            Err(EngineError::Unsupported("debugger")) => {}
+            other => panic!("expected an unsupported debugger, got {other:?}"),
+        }
+    }
+
     fn session_spec(root: &Path) -> EngineSpec {
         EngineSpec {
             root: root.to_path_buf(),
@@ -643,13 +667,20 @@ mod tests {
     }
 
     fn session_with(
-        agent: Option<AgentClient<SerialLog<UnixStream>>>,
+        agent: Option<AgentClient<SerialLog<EngineStream>>>,
         spec: EngineSpec,
     ) -> QemuSession {
         let child = Command::new("sleep")
             .arg("30")
             .spawn()
             .expect("start sleep");
+        let endpoints = QemuEndpoints::for_spec(&spec).expect("resolve the engine endpoints");
+        let command = EngineCommand {
+            program: PathBuf::from("qemu-system-i386"),
+            args: Vec::new(),
+            env: Vec::new(),
+            endpoints: endpoints.engine_endpoints(),
+        };
 
         QemuSession {
             child,
@@ -657,13 +688,8 @@ mod tests {
                 path: PathBuf::from("qemu-system-i386"),
                 version: QemuVersion::new(8, 0, 0),
             },
-            command: EngineCommand {
-                program: PathBuf::from("qemu-system-i386"),
-                args: Vec::new(),
-                env: Vec::new(),
-                endpoints: Vec::new(),
-            },
-            paths: QemuPaths::for_spec(&spec),
+            command,
+            endpoints,
             spec,
             agent,
             qmp: None,
@@ -672,7 +698,12 @@ mod tests {
     }
 
     fn bind_stalled_qmp(spec: &EngineSpec) -> UnixListener {
-        let path = QemuPaths::for_spec(spec).qmp;
+        let path = QemuEndpoints::for_spec(spec)
+            .expect("resolve the engine endpoints")
+            .qmp
+            .unix_path()
+            .expect("the QMP endpoint is a Unix socket")
+            .to_path_buf();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create the socket directory");
         }

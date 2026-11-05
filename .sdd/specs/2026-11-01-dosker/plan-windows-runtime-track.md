@@ -359,7 +359,7 @@ exactly these names.
           and re-export `EngineStream`.
     - **Verify**: `cargo test -p dosker-engine-qemu --test stream --test qmp`
 
-- [ ] **Task 4: Windows QEMU session over host endpoints**
+- [x] **Task 4: Windows QEMU session over host endpoints**
 
     - **Implements**: FR-021, FR-022, design Process Model and Engine Adapter
       `start`, `wait_ready`, `stop`, and `debug_endpoint`.
