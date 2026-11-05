@@ -555,7 +555,7 @@ exactly these names.
     - **Verify**: `cargo test -p dosker-engine-qemu --lib discovery::`
     - **Verify**: `cargo test -p dosker-engine-qemu --test discovery`
 
-- [ ] **Task 7: Windows QEMU smoke suite**
+- [x] **Task 7: Windows QEMU smoke suite**
 
     - **Implements**: FR-021, FR-022, FR-023, design Testing Strategy and
       M1-W definition of done.
