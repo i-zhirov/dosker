@@ -18,6 +18,7 @@ jobs:
 
   runtime-macos:
     name: runtime-macos
+    # macOS 14 was retired; macos-15 is the supported arm64 runner.
     runs-on: macos-15
     needs: preflight
     timeout-minutes: 60

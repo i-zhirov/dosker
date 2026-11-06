@@ -38,6 +38,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          # macOS 14 was retired; macos-15 is the supported arm64 runner.
           - macos-15
           - windows-latest
     steps:
