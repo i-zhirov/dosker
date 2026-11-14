@@ -9,10 +9,10 @@ use dosker_engine::{
     Capability, CapabilitySet, DisplayMode, EngineAdapter, EngineCommand, EngineEndpointKind,
     EngineSpec,
 };
-use dosker_engine_qemu::command;
-use dosker_engine_qemu::{QemuAdapter, QemuBinary, QemuVersion};
 #[cfg(unix)]
 use dosker_engine_qemu::QemuEndpoints;
+use dosker_engine_qemu::command;
+use dosker_engine_qemu::{QemuAdapter, QemuBinary, QemuVersion};
 use dosker_platform::process::{ProcessSupervisor, system};
 
 fn sample_spec() -> EngineSpec {
