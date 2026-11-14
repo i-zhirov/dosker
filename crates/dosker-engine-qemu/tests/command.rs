@@ -10,7 +10,9 @@ use dosker_engine::{
     EngineSpec,
 };
 use dosker_engine_qemu::command;
-use dosker_engine_qemu::{QemuAdapter, QemuBinary, QemuEndpoints, QemuVersion};
+use dosker_engine_qemu::{QemuAdapter, QemuBinary, QemuVersion};
+#[cfg(unix)]
+use dosker_engine_qemu::QemuEndpoints;
 use dosker_platform::process::{ProcessSupervisor, system};
 
 fn sample_spec() -> EngineSpec {
