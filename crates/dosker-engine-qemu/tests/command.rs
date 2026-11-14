@@ -206,30 +206,34 @@ fn command_uses_unix_sockets_on_unix() {
 #[test]
 #[cfg(windows)]
 fn command_uses_loopback_tcp_on_windows() {
-    let spec = sample_spec();
-    let endpoints = QemuEndpoints::for_spec(&spec).expect("resolve endpoints");
-    let agent = endpoints.agent_serial.as_ref().expect("an agent endpoint");
-    let args = build(&spec);
+    let command = build(&sample_spec());
+    let endpoint = |name: &str| {
+        command
+            .endpoints
+            .iter()
+            .find(|endpoint| endpoint.name == name)
+            .expect("the command carries the endpoint")
+    };
 
-    let serial = match agent {
+    let serial = match &endpoint("serial_agent").kind {
         EngineEndpointKind::Tcp { host, port } => format!("tcp:{host}:{port},server=on,wait=off"),
         EngineEndpointKind::UnixSocket(path) => {
             panic!("Windows agent endpoint is not TCP: {}", path.display())
         }
     };
-    let qmp = match &endpoints.qmp {
+    let qmp = match &endpoint("qmp").kind {
         EngineEndpointKind::Tcp { host, port } => format!("tcp:{host}:{port},server=on,wait=off"),
         EngineEndpointKind::UnixSocket(path) => {
             panic!("Windows qmp endpoint is not TCP: {}", path.display())
         }
     };
-    let monitor = match &endpoints.monitor {
+    let monitor = match &endpoint("monitor").kind {
         EngineEndpointKind::Tcp { host, port } => format!("tcp:{host}:{port},server=on,wait=off"),
         EngineEndpointKind::UnixSocket(path) => {
             panic!("Windows monitor endpoint is not TCP: {}", path.display())
         }
     };
-    let gdb = match &endpoints.gdb {
+    let gdb = match &endpoint("gdb").kind {
         EngineEndpointKind::Tcp { host, port } => {
             format!("socket,id=gdb0,host={host},port={port},server=on,wait=off")
         }
@@ -238,10 +242,10 @@ fn command_uses_loopback_tcp_on_windows() {
         }
     };
 
-    assert!(has_pair(&args, "-serial", &serial));
-    assert!(has_pair(&args, "-qmp", &qmp));
-    assert!(has_pair(&args, "-monitor", &monitor));
-    assert!(has_pair(&args, "-chardev", &gdb));
+    assert!(has_pair(&command.args, "-serial", &serial));
+    assert!(has_pair(&command.args, "-qmp", &qmp));
+    assert!(has_pair(&command.args, "-monitor", &monitor));
+    assert!(has_pair(&command.args, "-chardev", &gdb));
 }
 
 #[test]
