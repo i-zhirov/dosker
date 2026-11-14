@@ -617,7 +617,7 @@ This design covers the whole system and spans several independent subsystems. Th
 | Do we add a shared L2 network? | User | Deferred. It needs a virtual switch and per-engine NIC mapping. |
 | Which Windows engine builds are the most reliable? | M1-W and M4 spikes | Verify the QEMU build in M1-W and the DOSBox-X and Bochs builds in M4. |
 | Can the control protocol run over Windows named pipes without change? | M1-W spike | Implement the `dosker-platform` transport and run the contract suite. |
-| Do Windows engine endpoints behave the same over localhost TCP? | M1-W spike | Test QMP, serial, monitor, gdbstub, VNC, and NAT. |
+| Do Windows engine endpoints behave the same over localhost TCP? | M1-W spike | Test QMP, serial, monitor, gdbstub, and VNC. QEMU NAT is deferred to Slice 9. |
 | Do we support Windows arm64? | User | Deferred. It needs arm64 engine builds and a separate CI runner. |
 | Do we add a `commit` command or `CD-ROM`/ISO media? | User | Deferred. |
 | Do we add `ARG`, multi-stage builds, or `ENTRYPOINT`? | User | Deferred. They add syntax and cache rules. |

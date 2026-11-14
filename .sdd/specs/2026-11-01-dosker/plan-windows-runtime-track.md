@@ -8,7 +8,7 @@
 > expected failure before you implement the task.
 
 - **Date**: 2026-11-04
-- **Status**: In Progress
+- **Status**: Implemented
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: `windows-runtime-track`
 - **Depends on**: Slices 1 and 3.
@@ -703,6 +703,23 @@ exactly these names.
     - **Verify**: `git add -N docs/windows.md && git diff --check`
     - **Verify**: `rg -n "DOSKER_WINDOWS_QEMU|DOSKER_QEMU_SHA256|Job Object|127\\.0\\.0\\.1" README.md docs/windows.md`
 
+## Deviations
+
+- **QEMU NAT** stays in Slice 9. The design's M1-W open question now
+  tests QMP, serial, monitor, gdbstub, and VNC only; NAT is recorded for
+  Slice 9. Reason: the roadmap and plan defer it, and no M1-W requirement
+  needs it.
+- **Windows QEMU artifact** is the official NSIS installer, not a ZIP.
+  The CI job verifies and installs it silently. Reason: the official
+  Windows build is distributed as an installer.
+- **macOS runner** is `macos-15`, because GitHub retired `macos-14`.
+  Reason: keep the matrix on a supported arm64 runner.
+- **Non-detached run tests** capture output to files and enforce a 30 s
+  child wait. Reason: inherited pipes let the old test hang on Windows.
+- **Windows command tests** assert endpoints produced by the same
+  `build` call. Reason: Windows TCP ports are allocated per call, so
+  recomputing them produced different ports.
+
 ## Approval Handoff
 
 When the user approves this plan:
@@ -715,4 +732,3 @@ When the user approves this plan:
 
 Do not start implementation before these three updates. The plan stays
 `Draft` until the user approves it.
-
