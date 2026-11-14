@@ -206,7 +206,7 @@ fn command_uses_unix_sockets_on_unix() {
 #[test]
 #[cfg(windows)]
 fn command_uses_loopback_tcp_on_windows() {
-    let command = build(&sample_spec());
+    let command = build_command(&sample_spec());
     let endpoint = |name: &str| {
         command
             .endpoints
