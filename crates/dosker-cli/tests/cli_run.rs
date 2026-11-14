@@ -1,8 +1,9 @@
 mod common;
 
+use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -144,7 +145,7 @@ fn stdout_text(output: &Output) -> String {
 
 const CHILD_TIMEOUT: Duration = Duration::from_secs(30);
 
-fn wait_with_timeout(child: Child, timeout: Duration) -> Output {
+fn wait_with_timeout(mut child: Child, timeout: Duration) -> ExitStatus {
     let pid = child.id();
     let finished = Arc::new(AtomicBool::new(false));
     let watched = Arc::clone(&finished);
@@ -162,21 +163,25 @@ fn wait_with_timeout(child: Child, timeout: Duration) -> Output {
         }
     });
 
-    let output = child
-        .wait_with_output()
-        .expect("wait for the dosker binary");
+    let status = child.wait().expect("wait for the dosker binary");
     finished.store(true, Ordering::SeqCst);
     watchdog.join().expect("join the child watchdog");
-    output
+    status
 }
 
 fn spawn_with_stdin(root: &RunRoot, args: &[&str], stdin: &str) -> Output {
+    let capture = tempfile::tempdir().expect("create an output directory");
+    let stdout_path = capture.path().join("stdout.log");
+    let stderr_path = capture.path().join("stderr.log");
+    let stdout = File::create(&stdout_path).expect("create stdout capture");
+    let stderr = File::create(&stderr_path).expect("create stderr capture");
+
     let mut child = root
         .command()
         .args(args)
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
         .spawn()
         .expect("spawn the dosker binary");
     let mut input = child.stdin.take().expect("stdin is piped");
@@ -184,7 +189,15 @@ fn spawn_with_stdin(root: &RunRoot, args: &[&str], stdin: &str) -> Output {
         .write_all(stdin.as_bytes())
         .expect("write scripted stdin");
     drop(input);
-    wait_with_timeout(child, CHILD_TIMEOUT)
+
+    let status = wait_with_timeout(child, CHILD_TIMEOUT);
+    let stdout = std::fs::read(stdout_path).expect("read captured stdout");
+    let stderr = std::fs::read(stderr_path).expect("read captured stderr");
+    Output {
+        status,
+        stdout,
+        stderr,
+    }
 }
 
 fn run_ok(root: &RunRoot, args: &[&str]) -> String {
