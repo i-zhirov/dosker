@@ -2,7 +2,10 @@ mod common;
 
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
@@ -139,6 +142,34 @@ fn stdout_text(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout is utf-8")
 }
 
+const CHILD_TIMEOUT: Duration = Duration::from_secs(30);
+
+fn wait_with_timeout(child: Child, timeout: Duration) -> Output {
+    let pid = child.id();
+    let finished = Arc::new(AtomicBool::new(false));
+    let watched = Arc::clone(&finished);
+    let watchdog = thread::spawn(move || {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if watched.load(Ordering::SeqCst) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        if !watched.load(Ordering::SeqCst) {
+            eprintln!("dosker child {pid} did not exit within {timeout:?}; killing it");
+            kill_process(pid);
+        }
+    });
+
+    let output = child
+        .wait_with_output()
+        .expect("wait for the dosker binary");
+    finished.store(true, Ordering::SeqCst);
+    watchdog.join().expect("join the child watchdog");
+    output
+}
+
 fn spawn_with_stdin(root: &RunRoot, args: &[&str], stdin: &str) -> Output {
     let mut child = root
         .command()
@@ -148,15 +179,12 @@ fn spawn_with_stdin(root: &RunRoot, args: &[&str], stdin: &str) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn the dosker binary");
-    child
-        .stdin
-        .take()
-        .expect("stdin is piped")
+    let mut input = child.stdin.take().expect("stdin is piped");
+    input
         .write_all(stdin.as_bytes())
         .expect("write scripted stdin");
-    child
-        .wait_with_output()
-        .expect("wait for the dosker binary")
+    drop(input);
+    wait_with_timeout(child, CHILD_TIMEOUT)
 }
 
 fn run_ok(root: &RunRoot, args: &[&str]) -> String {
