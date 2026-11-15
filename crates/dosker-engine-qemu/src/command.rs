@@ -32,8 +32,13 @@ pub fn build(spec: &EngineSpec, binary: &QemuBinary) -> Result<EngineCommand, En
         &engine_ports,
     )?);
     args.push("-drive".to_owned());
+    let interface = if spec.disk_interface == "floppy" {
+        "floppy"
+    } else {
+        "ide"
+    };
     args.push(format!(
-        "file={},format=raw,if=ide,index=0",
+        "file={},format=raw,if={interface},index=0",
         spec.disk_path.display()
     ));
 

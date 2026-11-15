@@ -49,6 +49,7 @@ fn setup(image: &Path, booter: bool) -> (tempfile::TempDir, EngineSpec) {
         expects_agent: !booter,
         log_dir: container,
         disk_path: disk,
+        disk_interface: "ide".to_owned(),
         booter,
         display: Default::default(),
         vnc_port: None,

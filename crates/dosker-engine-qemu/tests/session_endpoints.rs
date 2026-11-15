@@ -20,6 +20,7 @@ fn spec(root: &Path, booter: bool) -> EngineSpec {
         expects_agent: !booter,
         log_dir: root.to_path_buf(),
         disk_path: root.join("disk.img"),
+        disk_interface: "ide".to_owned(),
         booter,
         display: Default::default(),
         vnc_port: None,

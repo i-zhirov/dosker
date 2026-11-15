@@ -54,6 +54,12 @@ The macOS arm64 suite runs in
 at 03:00 UTC each day and on manual dispatch. macOS arm64 uses TCG, so the
 job is slower and runs nightly.
 
+### Images
+
+DOSker stores images in the local OCI layout and provides `image import`,
+`images`, `tag`, and `rmi`. See [Images](docs/images.md) for the store layout,
+the media types, and the untag-only `rmi` behavior.
+
 ### Windows runtime
 
 Windows x86_64 uses a named-pipe control channel, loopback TCP engine

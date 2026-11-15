@@ -49,3 +49,6 @@ dosker-agent-proto = { path = "crates/dosker-agent-proto" }
 dosker-image = { path = "crates/dosker-image" }
 fatfs = "0.3"
 sha2 = "0.10"
+base64 = "0.22"
+tar = "0.4"
+fs2 = "0.4"

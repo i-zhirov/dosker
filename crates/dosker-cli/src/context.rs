@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use dosker_image::ImageStore;
+use dosker_image::OciStore;
 use dosker_platform::console::Console;
 use dosker_platform::data_root::data_root;
 use dosker_runtime::{RuntimePaths, StateStore};
@@ -13,7 +13,7 @@ use crate::error::CliError;
 pub struct Context {
     pub paths: RuntimePaths,
     pub store: StateStore,
-    pub images: ImageStore,
+    pub images: OciStore,
     pub console: Console,
 }
 
@@ -29,7 +29,7 @@ impl Context {
         Self {
             paths: RuntimePaths::new(root.clone()),
             store: StateStore::new(root.clone()),
-            images: ImageStore::new(root),
+            images: OciStore::new(root),
             console,
         }
     }

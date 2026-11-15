@@ -139,6 +139,84 @@ impl fmt::Display for ImageReference {
     }
 }
 
+/// A content-addressed `sha256:<hex>` image digest.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct ImageDigest(String);
+
+impl ImageDigest {
+    /// Parses a lowercase SHA-256 digest.
+    pub fn parse(value: &str) -> Result<Self, ImageError> {
+        let Some(hex) = value.strip_prefix("sha256:") else {
+            return Err(ImageError::InvalidReference(value.to_owned()));
+        };
+        if hex.len() == 64
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            Ok(Self(value.to_owned()))
+        } else {
+            Err(ImageError::InvalidReference(value.to_owned()))
+        }
+    }
+
+    /// Returns the digest text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ImageDigest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl TryFrom<String> for ImageDigest {
+    type Error = ImageError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(&value)
+    }
+}
+
+impl From<ImageDigest> for String {
+    fn from(value: ImageDigest) -> Self {
+        value.0
+    }
+}
+
+/// A tag or digest reference.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ImageRef {
+    Tag(ImageReference),
+    Digest(ImageDigest),
+}
+
+impl ImageRef {
+    /// Parses a bare name, tag, `name@sha256:...`, or `sha256:...`.
+    pub fn parse(value: &str) -> Result<Self, ImageError> {
+        if value.starts_with("sha256:") {
+            return ImageDigest::parse(value).map(Self::Digest);
+        }
+        if let Some((name, digest)) = value.split_once('@') {
+            ImageName::parse(name)?;
+            return ImageDigest::parse(digest).map(Self::Digest);
+        }
+        ImageReference::parse(value).map(Self::Tag)
+    }
+}
+
+impl fmt::Display for ImageRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Tag(reference) => reference.fmt(formatter),
+            Self::Digest(digest) => digest.fmt(formatter),
+        }
+    }
+}
+
 impl TryFrom<String> for ImageReference {
     type Error = ImageError;
 

@@ -162,11 +162,11 @@ rule, a private writable disk per container, a whiteout of a missing path, and
 the file-versus-directory conflict error. Out of scope: the Doskerfile parser,
 the build instructions, the FAT projection, and the cache invalidation wiring.
 
-- **Status:** Unplanned
+- **Status:** Implemented
 - **Depends on:** Slice 1.
 - **Requirements:** FR-002, FR-003, FR-012, FR-017, FR-018
 - **Manual prerequisites:** none.
-- **Plan:** —
+- **Plan:** [`plan-image-store-and-tree.md`](plan-image-store-and-tree.md)
 - **Done when:** layers apply in order and produce a tree. Two independent
   writes of the same tree produce the same layer digest. A whiteout removes a
   path and a missing whiteout is ignored. The OCI index, manifest, config, and

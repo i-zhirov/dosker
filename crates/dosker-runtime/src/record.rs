@@ -40,6 +40,8 @@ pub struct ContainerRecord {
     pub image_digest: String,
     #[serde(default)]
     pub booter: bool,
+    #[serde(default = "default_disk_interface")]
+    pub disk_interface: String,
     #[serde(default)]
     pub display: DisplayMode,
     #[serde(default)]
@@ -83,6 +85,7 @@ impl ContainerRecord {
             dirty: false,
             image_digest: String::new(),
             booter: false,
+            disk_interface: default_disk_interface(),
             display: DisplayMode::None,
             vnc_port: None,
             cmd: None,
@@ -96,6 +99,12 @@ impl ContainerRecord {
         self.image_digest = digest;
         self.booter = booter;
         self.cmd = cmd;
+        self
+    }
+
+    /// Records the image disk interface.
+    pub fn with_disk_interface(mut self, interface: &str) -> Self {
+        self.disk_interface = interface.to_owned();
         self
     }
 
@@ -143,4 +152,8 @@ impl ContainerRecord {
 
         Ok(())
     }
+}
+
+fn default_disk_interface() -> String {
+    "ide".to_owned()
 }

@@ -32,6 +32,7 @@ fn spec(log_dir: &Path) -> EngineSpec {
         expects_agent: false,
         log_dir: log_dir.to_path_buf(),
         disk_path: log_dir.join("disk.img"),
+        disk_interface: "ide".to_owned(),
         booter: false,
         display: dosker_engine::DisplayMode::None,
         vnc_port: None,

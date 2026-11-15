@@ -19,6 +19,17 @@ pub fn make_fat16_image(
     partition_length: u64,
     total_size: u64,
 ) {
+    make_fat16_image_with_label(path, partition_offset, partition_length, total_size, None);
+}
+
+/// Creates a FAT16 image with an optional volume label.
+pub fn make_fat16_image_with_label(
+    path: &Path,
+    partition_offset: u64,
+    partition_length: u64,
+    total_size: u64,
+    label: Option<[u8; 11]>,
+) {
     let file = File::create(path).expect("create image");
     file.set_len(total_size).expect("size image");
 
@@ -32,9 +43,12 @@ pub fn make_fat16_image(
         .open(path)
         .expect("open image");
     let region = Region::new(file, partition_offset, partition_length);
-    let options = FormatVolumeOptions::new()
+    let mut options = FormatVolumeOptions::new()
         .fat_type(FatType::Fat16)
         .total_sectors((partition_length / SECTOR_SIZE) as u32);
+    if let Some(label) = label {
+        options = options.volume_label(label);
+    }
     format_volume(region, options).expect("format FAT16");
 }
 
@@ -63,6 +77,39 @@ pub fn write_fat_file(path: &Path, partition_offset: u64, name: &str, data: &[u8
     }
 
     fs.unmount().expect("unmount FAT");
+}
+
+/// Creates a directory in the FAT root.
+pub fn write_fat_dir(path: &Path, partition_offset: u64, name: &str) {
+    with_volume(path, partition_offset, |root| {
+        root.create_dir(name).expect("create directory");
+    });
+}
+
+/// Writes a file with an explicit short name. Long names are rejected by the reader.
+pub fn write_fat_long_name(path: &Path, partition_offset: u64, name: &str, data: &[u8]) {
+    write_fat_file(path, partition_offset, name, data);
+}
+
+fn with_volume<T>(
+    path: &Path,
+    partition_offset: u64,
+    action: impl FnOnce(&fatfs::Dir<'_, Region>) -> T,
+) -> T {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .expect("open image");
+    let file_size = file.metadata().expect("image metadata").len();
+    let region = Region::new(file, partition_offset, file_size - partition_offset);
+    let fs = FileSystem::new(region, FsOptions::new()).expect("mount FAT");
+    let result = {
+        let root = fs.root_dir();
+        action(&root)
+    };
+    fs.unmount().expect("unmount FAT");
+    result
 }
 
 fn write_mbr(path: &Path, partition_offset: u64, partition_length: u64) {

@@ -492,6 +492,7 @@ struct RecordingAdapter {
     inner: MockAdapter,
     builds: Arc<AtomicUsize>,
     built_commands: Arc<Mutex<Vec<EngineCommand>>>,
+    built_interfaces: Arc<Mutex<Vec<String>>>,
     session_commands: Arc<Mutex<Vec<String>>>,
 }
 
@@ -519,6 +520,10 @@ impl EngineAdapter for RecordingAdapter {
             )));
         }
         let command = self.inner.build_command(spec)?;
+        self.built_interfaces
+            .lock()
+            .expect("lock the built interfaces")
+            .push(spec.disk_interface.clone());
         self.built_commands
             .lock()
             .expect("lock the built commands")
@@ -1395,9 +1400,11 @@ fn supervisor_records_the_engine_command() {
 fn supervisor_executes_the_recorded_command() {
     let builds = Arc::new(AtomicUsize::new(0));
     let built_commands = Arc::new(Mutex::new(Vec::new()));
+    let built_interfaces = Arc::new(Mutex::new(Vec::new()));
     let session_commands = Arc::new(Mutex::new(Vec::new()));
     let adapter_builds = Arc::clone(&builds);
     let adapter_built = Arc::clone(&built_commands);
+    let adapter_interfaces = Arc::clone(&built_interfaces);
     let adapter_sessions = Arc::clone(&session_commands);
 
     let mut harness = Harness::start_full(
@@ -1411,6 +1418,7 @@ fn supervisor_executes_the_recorded_command() {
                 inner: MockAdapter::new(engine, Arc::new(SystemProcesses)),
                 builds: adapter_builds,
                 built_commands: adapter_built,
+                built_interfaces: adapter_interfaces,
                 session_commands: adapter_sessions,
             })
         },
@@ -1671,4 +1679,44 @@ fn supervisor_fails_when_the_disk_is_missing() {
         )),
         "the failure names the missing disk: {container_log:?}"
     );
+}
+
+#[test]
+fn supervisor_passes_the_disk_interface_to_the_spec() {
+    let builds = Arc::new(AtomicUsize::new(0));
+    let built_commands = Arc::new(Mutex::new(Vec::new()));
+    let built_interfaces = Arc::new(Mutex::new(Vec::new()));
+    let session_commands = Arc::new(Mutex::new(Vec::new()));
+    let adapter_builds = Arc::clone(&builds);
+    let adapter_built = Arc::clone(&built_commands);
+    let adapter_interfaces = Arc::clone(&built_interfaces);
+    let adapter_sessions = Arc::clone(&session_commands);
+
+    let mut harness = Harness::start_full(
+        DEFAULT_READY_TIMEOUT,
+        false,
+        None,
+        true,
+        None,
+        move |engine| {
+            Box::new(RecordingAdapter {
+                inner: MockAdapter::new(engine, Arc::new(SystemProcesses)),
+                builds: adapter_builds,
+                built_commands: adapter_built,
+                built_interfaces: adapter_interfaces,
+                session_commands: adapter_sessions,
+            })
+        },
+    );
+    let mut client = harness.connect();
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+    assert_eq!(
+        built_interfaces
+            .lock()
+            .expect("lock the built interfaces")
+            .first(),
+        Some(&"ide".to_owned())
+    );
+    stop(&mut client);
+    assert_eq!(harness.join(), 0);
 }

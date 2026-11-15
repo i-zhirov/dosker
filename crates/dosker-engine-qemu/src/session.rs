@@ -688,6 +688,7 @@ mod tests {
             expects_agent: true,
             log_dir: root.to_path_buf(),
             disk_path: root.join("disk.img"),
+            disk_interface: "ide".to_owned(),
             booter: false,
             display: DisplayMode::None,
             vnc_port: None,

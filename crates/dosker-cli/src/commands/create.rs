@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use dosker_core::{ContainerId, ContainerName};
 use dosker_engine::DisplayMode;
-use dosker_image::ImageReference;
+use dosker_image::ImageRef;
 use dosker_platform::endpoint::control_endpoint;
 use dosker_runtime::ContainerRecord;
 
@@ -62,7 +62,7 @@ pub fn create_container(
         return Err(CliError::Usage(format!("unknown engine: {engine}")));
     }
 
-    let reference = ImageReference::parse(image)?;
+    let reference = ImageRef::parse(image)?;
     let image_record = context.images.load(&reference)?;
 
     let id = ContainerId::generate();
@@ -82,10 +82,11 @@ pub fn create_container(
         now,
     )
     .with_image(
-        image_record.digest.clone(),
+        image_record.manifest_digest.clone(),
         image_record.is_booter(),
         image_record.cmd.clone(),
     )
+    .with_disk_interface(&image_record.disk_interface)
     .with_display(display, vnc_port);
 
     context.store.create(&record)?;

@@ -27,6 +27,7 @@ fn sample_spec() -> EngineSpec {
         expects_agent: true,
         log_dir: root.join("containers").join(id.as_str()),
         disk_path: root.join("containers").join(id.as_str()).join("disk.img"),
+        disk_interface: "ide".to_owned(),
         booter: false,
         display: DisplayMode::None,
         vnc_port: None,
@@ -123,22 +124,21 @@ fn command_uses_the_private_disk_and_two_serial_ports() {
 }
 
 #[test]
-fn command_uses_ide_for_the_disk_and_booter() {
-    for booter in [false, true] {
-        let mut spec = sample_spec();
-        spec.booter = booter;
-        let args = build(&spec);
-        let joined = args.join(" ");
+fn command_uses_ide_for_a_partitioned_disk() {
+    let mut spec = sample_spec();
+    spec.disk_interface = "ide".to_owned();
+    let args = build(&spec);
+    assert!(args.join(" ").contains("if=ide"));
+    assert!(!args.join(" ").contains("if=floppy"));
+}
 
-        assert!(
-            joined.contains("if=ide"),
-            "missing if=ide for booter={booter}"
-        );
-        assert!(
-            !joined.contains("if=floppy"),
-            "unexpected if=floppy for booter={booter}"
-        );
-    }
+#[test]
+fn command_uses_floppy_for_a_superfloppy() {
+    let mut spec = sample_spec();
+    spec.disk_interface = "floppy".to_owned();
+    let args = build(&spec);
+    assert!(args.join(" ").contains("if=floppy"));
+    assert!(!args.join(" ").contains("if=ide"));
 }
 
 #[test]

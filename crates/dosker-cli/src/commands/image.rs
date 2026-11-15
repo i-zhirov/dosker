@@ -28,7 +28,7 @@ fn import_image(
     let record = context.images.import(&args.file, &reference, media, now)?;
     context.console.line(&format!(
         "imported {}:{} {} {} bytes",
-        record.name, record.tag, record.digest, record.size
+        record.name, record.tag, record.manifest_digest, record.size
     ))?;
 
     Ok(EXIT_OK)

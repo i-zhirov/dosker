@@ -45,6 +45,9 @@ pub enum Command {
     Restart(RestartArgs),
     Rm(RmArgs),
     Image(ImageArgs),
+    Images(ImagesArgs),
+    Rmi(RmiArgs),
+    Tag(TagArgs),
     Engines(EnginesArgs),
     Doctor(DoctorArgs),
     #[command(name = "__supervise", hide = true)]
@@ -142,6 +145,24 @@ pub struct ImageImportArgs {
     pub file: PathBuf,
 
     pub reference: String,
+}
+
+/// Arguments for `images`.
+#[derive(Debug, Args)]
+pub struct ImagesArgs {}
+
+/// Arguments for `rmi`.
+#[derive(Debug, Args)]
+pub struct RmiArgs {
+    #[arg(help = "A tag untags; a sha256 digest removes an untagged image")]
+    pub reference: String,
+}
+
+/// Arguments for `tag`.
+#[derive(Debug, Args)]
+pub struct TagArgs {
+    pub source: String,
+    pub target: String,
 }
 
 /// Arguments for `engines`.
@@ -349,6 +370,18 @@ fn dispatch(command: Command) -> Result<u8, CliError> {
         Command::Image(args) => {
             let mut context = Context::load()?;
             commands::image::execute(args, &mut context, Utc::now())
+        }
+        Command::Images(args) => {
+            let mut context = Context::load()?;
+            commands::images::execute(args, &mut context)
+        }
+        Command::Rmi(args) => {
+            let mut context = Context::load()?;
+            commands::rmi::execute(args, &mut context)
+        }
+        Command::Tag(args) => {
+            let mut context = Context::load()?;
+            commands::tag::execute(args, &mut context)
         }
         Command::Engines(args) => {
             let mut context = Context::load()?;

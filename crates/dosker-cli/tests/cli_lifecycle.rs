@@ -10,7 +10,7 @@ use chrono::Utc;
 use common::{CliRoot, stderr_text, stdout_text};
 use dosker_core::{ContainerId, ContainerName, Status};
 use dosker_engine::DisplayMode;
-use dosker_image::{ImageReference, ImageStore};
+use dosker_image::{ImageRef, ImageReference, OciStore};
 #[cfg(unix)]
 use dosker_platform::control::bind;
 use dosker_platform::endpoint::control_endpoint;
@@ -77,19 +77,36 @@ fn create_copies_the_image_to_a_private_disk() {
     let disk = record.disk_path.expect("the record has a private disk");
     assert!(disk.is_file(), "missing {}", disk.display());
 
-    let image = root.path().join("images/freedos-test/latest/disk.img");
+    let images = OciStore::new(root.path().to_path_buf());
+    let image = images
+        .load(&ImageRef::Tag(
+            ImageReference::parse("freedos-test:latest").unwrap(),
+        ))
+        .unwrap();
+    let raw = images
+        .blob_path(image.raw_disk_digest.as_ref().unwrap())
+        .unwrap();
     assert_eq!(
         fs::read(&disk).expect("read the private disk"),
-        fs::read(&image).expect("read the image disk")
+        fs::read(&raw).expect("read the image disk")
     );
+    assert_eq!(record.disk_interface, "ide");
 }
 
 #[test]
 fn create_does_not_modify_the_image() {
     let root = CliRoot::new();
     root.import_image_as("freedos-test:latest");
-    let image = root.path().join("images/freedos-test/latest/disk.img");
-    let before = fs::read(&image).expect("read the image disk");
+    let images = OciStore::new(root.path().to_path_buf());
+    let image = images
+        .load(&ImageRef::Tag(
+            ImageReference::parse("freedos-test:latest").unwrap(),
+        ))
+        .unwrap();
+    let raw = images
+        .blob_path(image.raw_disk_digest.as_ref().unwrap())
+        .unwrap();
+    let before = fs::read(&raw).expect("read the image disk");
 
     let output = root.run(&["create", "freedos-test:latest", "--name", "alpha"]);
     assert_eq!(
@@ -99,7 +116,7 @@ fn create_does_not_modify_the_image() {
         stderr_text(&output)
     );
 
-    let after = fs::read(&image).expect("read the image disk");
+    let after = fs::read(&raw).expect("read the image disk");
     assert_eq!(before, after);
 }
 
@@ -124,14 +141,14 @@ fn create_records_the_digest_and_booter_flag() {
         stderr_text(&booter)
     );
 
-    let images = ImageStore::new(root.path().to_path_buf());
+    let images = OciStore::new(root.path().to_path_buf());
     let normal_reference = ImageReference::parse("freedos-test:latest").expect("parse reference");
     let booter_reference = ImageReference::parse("booter-test:latest").expect("parse reference");
     let normal_record = images
-        .load(&normal_reference)
+        .load(&ImageRef::Tag(normal_reference))
         .expect("load the normal image");
     let booter_record = images
-        .load(&booter_reference)
+        .load(&ImageRef::Tag(booter_reference))
         .expect("load the booter image");
 
     let output = root.run(&["create", "freedos-test:latest", "--name", "alpha"]);
@@ -145,7 +162,7 @@ fn create_records_the_digest_and_booter_flag() {
         .store()
         .load(&id_from(&output))
         .expect("load the normal container");
-    assert_eq!(normal.image_digest, normal_record.digest);
+    assert_eq!(normal.image_digest, normal_record.manifest_digest);
     assert!(!normal.booter);
 
     let output = root.run(&["create", "booter-test:latest", "--name", "booted"]);
@@ -159,7 +176,7 @@ fn create_records_the_digest_and_booter_flag() {
         .store()
         .load(&id_from(&output))
         .expect("load the booter container");
-    assert_eq!(booted.image_digest, booter_record.digest);
+    assert_eq!(booted.image_digest, booter_record.manifest_digest);
     assert!(booted.booter);
 }
 

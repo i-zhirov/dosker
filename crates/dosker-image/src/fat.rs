@@ -2,11 +2,15 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use fatfs::{FileSystem, FsOptions};
+use chrono::{Duration, TimeZone, Utc};
+use fatfs::{Dir, FileAttributes, FileSystem, FsOptions};
 
+use crate::boot::{BlobRef, BootLayout, BootMetadata, FatType, Geometry};
 use crate::error::ImageError;
+use crate::path::{DosName, DosPath};
+use crate::tree::{Attributes, LayerDelta, Tree, TreeDir, TreeFile};
 
 /// The directory of the host-managed configuration file.
 pub const CONFIG_DIR: &str = "DOSKER";
@@ -127,6 +131,205 @@ pub fn write_config(image: &Path, control_port: u8, baud: u32) -> Result<(), Ima
     fs.unmount()
         .map_err(|source| corrupt(image, format!("cannot unmount FAT volume: {source}")))?;
     Ok(())
+}
+
+/// Reads the FAT tree rooted at `C:\`.
+pub fn read_tree(image: &Path) -> Result<Tree, ImageError> {
+    let region = fat_region(image)?;
+    let fs = open_volume(image, region)?;
+    let mut delta = LayerDelta::new();
+    walk_dir(&fs.root_dir(), &DosPath::parse("C:")?, &mut delta)?;
+    let mut tree = Tree::new();
+    tree.apply_delta(&delta)?;
+    Ok(tree)
+}
+
+/// Reads the boot metadata of a raw DOS image.
+pub fn read_boot_metadata(image: &Path) -> Result<BootMetadata, ImageError> {
+    let region = fat_region(image)?;
+    let mut file = File::open(image).map_err(|source| ImageError::Io {
+        path: image.to_path_buf(),
+        source,
+    })?;
+    let disk_size = file
+        .metadata()
+        .map_err(|source| ImageError::Io {
+            path: image.to_path_buf(),
+            source,
+        })?
+        .len();
+
+    let mut boot_sector = [0u8; BOOT_SECTOR_BYTES];
+    file.seek(SeekFrom::Start(region.offset))
+        .and_then(|_| file.read_exact(&mut boot_sector))
+        .map_err(|source| ImageError::Io {
+            path: image.to_path_buf(),
+            source,
+        })?;
+    let mbr = match region.layout {
+        FatLayout::MbrPartitioned => {
+            let mut sector = [0u8; BOOT_SECTOR_BYTES];
+            file.seek(SeekFrom::Start(0))
+                .and_then(|_| file.read_exact(&mut sector))
+                .map_err(|source| ImageError::Io {
+                    path: image.to_path_buf(),
+                    source,
+                })?;
+            Some(BlobRef::from_bytes(&sector))
+        }
+        FatLayout::Superfloppy => None,
+    };
+
+    let fs = open_volume(image, region)?;
+    let fat_type = match fs.fat_type() {
+        fatfs::FatType::Fat12 => FatType::Fat12,
+        fatfs::FatType::Fat16 => FatType::Fat16,
+        fatfs::FatType::Fat32 => FatType::Fat32,
+    };
+    let label = fs.volume_label().trim_end().to_owned();
+    let volume_label = if label.is_empty() { None } else { Some(label) };
+    let (sector_size, heads, sectors) = read_bpb_geometry(&boot_sector);
+    let total_sectors = if sector_size == 0 {
+        0
+    } else {
+        region.length / u64::from(sector_size)
+    };
+    let cylinders = if heads == 0 || sectors == 0 {
+        0
+    } else {
+        (total_sectors / (u64::from(heads) * u64::from(sectors))) as u32
+    };
+    let geometry = Geometry {
+        cylinders,
+        heads,
+        sectors,
+        sector_size,
+    };
+    let layout = match region.layout {
+        FatLayout::MbrPartitioned => BootLayout::MbrPartitioned,
+        FatLayout::Superfloppy => BootLayout::Superfloppy,
+    };
+    let (partition_start, partition_sectors) = match layout {
+        BootLayout::MbrPartitioned => (
+            Some((region.offset / SECTOR_SIZE) as u32),
+            Some((region.length / SECTOR_SIZE) as u32),
+        ),
+        _ => (None, None),
+    };
+    Ok(BootMetadata {
+        layout,
+        disk_size,
+        geometry,
+        partition_start,
+        partition_sectors,
+        mbr,
+        boot_sector: Some(BlobRef::from_bytes(&boot_sector)),
+        fat_type: Some(fat_type),
+        volume_label,
+        media_descriptor: Some(boot_sector[21]),
+    })
+}
+
+fn open_volume(image: &Path, region: FatRegion) -> Result<FileSystem<PartitionFile>, ImageError> {
+    let file = File::open(image).map_err(|source| ImageError::Io {
+        path: image.to_path_buf(),
+        source,
+    })?;
+    let disk = PartitionFile::new(file, region.offset, region.length);
+    FileSystem::new(disk, FsOptions::new())
+        .map_err(|source| corrupt(image, format!("cannot mount FAT volume: {source}")))
+}
+
+fn walk_dir(
+    dir: &Dir<'_, PartitionFile>,
+    prefix: &DosPath,
+    delta: &mut LayerDelta,
+) -> Result<(), ImageError> {
+    for entry in dir.iter() {
+        let entry = entry.map_err(|source| ImageError::Corrupt {
+            path: PathBuf::from("fat"),
+            message: format!("cannot read directory entry: {source}"),
+        })?;
+        let attributes = entry.attributes();
+        if attributes.contains(FileAttributes::VOLUME_ID) {
+            continue;
+        }
+        let short = entry.short_file_name();
+        let long = entry.file_name();
+        if long == "." || long == ".." {
+            continue;
+        }
+        if !long.eq_ignore_ascii_case(&short) {
+            return Err(ImageError::InvalidDosPath {
+                path: long,
+                reason: "long file names are not supported".to_owned(),
+            });
+        }
+        let name = DosName::normalize(&short)?;
+        let path = prefix.join(&name);
+        let timestamp = fat_timestamp(entry.modified());
+        let attributes = Attributes {
+            read_only: attributes.contains(FileAttributes::READ_ONLY),
+            hidden: attributes.contains(FileAttributes::HIDDEN),
+            system: attributes.contains(FileAttributes::SYSTEM),
+            archive: attributes.contains(FileAttributes::ARCHIVE),
+        };
+        if entry.is_dir() {
+            delta.add_dir(TreeDir {
+                path: path.clone(),
+                attributes,
+                timestamp,
+            });
+            let child = entry.to_dir();
+            walk_dir(&child, &path, delta)?;
+        } else if entry.is_file() {
+            let mut file = entry.to_file();
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)
+                .map_err(|source| ImageError::Corrupt {
+                    path: PathBuf::from("fat"),
+                    message: format!("cannot read {}: {source}", path),
+                })?;
+            delta.add_file(TreeFile {
+                path,
+                attributes,
+                timestamp,
+                bytes,
+            });
+        } else {
+            return Err(ImageError::InvalidDosPath {
+                path: short,
+                reason: "not a regular file or directory".to_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn fat_timestamp(value: fatfs::DateTime) -> chrono::DateTime<Utc> {
+    Utc.with_ymd_and_hms(
+        i32::from(value.date.year),
+        u32::from(value.date.month),
+        u32::from(value.date.day),
+        u32::from(value.time.hour),
+        u32::from(value.time.min),
+        u32::from(value.time.sec),
+    )
+    .single()
+    .map(|time| time + Duration::milliseconds(i64::from(value.time.millis)))
+    .unwrap_or_else(|| {
+        Utc.timestamp_opt(315_532_800, 0)
+            .single()
+            .expect("fixed timestamp")
+    })
+}
+
+fn read_bpb_geometry(sector: &[u8; BOOT_SECTOR_BYTES]) -> (u32, u32, u32) {
+    (
+        u32::from(le_u16(&sector[11..13])),
+        u32::from(le_u16(&sector[26..28])),
+        u32::from(le_u16(&sector[24..26])),
+    )
 }
 
 /// Reads a file from the image's FAT volume by DOS path.

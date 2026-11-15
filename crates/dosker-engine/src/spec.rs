@@ -60,6 +60,7 @@ pub struct EngineSpec {
     pub expects_agent: bool,
     pub log_dir: PathBuf,
     pub disk_path: PathBuf,
+    pub disk_interface: String,
     pub booter: bool,
     pub display: DisplayMode,
     pub vnc_port: Option<u16>,

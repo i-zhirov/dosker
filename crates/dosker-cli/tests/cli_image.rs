@@ -9,7 +9,7 @@ use std::process::{Command, Output};
 use std::time::Duration;
 
 use common::{CliRoot, make_disk_image, run_captured, stderr_text, stdout_text};
-use dosker_image::{ImageReference, ImageStore};
+use dosker_image::{ImageRef, ImageReference, OciStore};
 
 const MIB: u64 = 1024 * 1024;
 const SECTOR_SIZE: u64 = 512;
@@ -136,7 +136,7 @@ fn image_import_accepts_the_mbr_cli_fixture() {
 }
 
 #[test]
-fn image_import_rejects_a_superfloppy_disk() {
+fn image_import_accepts_a_superfloppy_disk() {
     let root = CliRoot::new();
     let source = disk_source(&root, "superfloppy.img");
     make_superfloppy(&source);
@@ -144,15 +144,20 @@ fn image_import_rejects_a_superfloppy_disk() {
     let output = run_import(&root, &source, "freedos-test:latest");
     assert_eq!(
         output.status.code(),
-        Some(1),
-        "stdout: {}",
-        stdout_text(&output)
-    );
-    assert!(
-        stderr_text(&output).contains("unsupported image layout"),
+        Some(0),
         "stderr: {}",
         stderr_text(&output)
     );
+    let create = root.run(&["create", "freedos-test:latest", "--name", "floppy"]);
+    assert_eq!(
+        create.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&create)
+    );
+    let id = dosker_core::ContainerId::parse(stdout_text(&create).trim()).unwrap();
+    let record = root.store().load(&id).unwrap();
+    assert_eq!(record.disk_interface, "floppy");
 }
 
 #[test]
@@ -191,9 +196,11 @@ fn image_import_without_a_tag_uses_latest() {
     );
     assert!(stdout_text(&output).contains("freedos-test:latest"));
 
-    let store = ImageStore::new(root.path().to_path_buf());
+    let store = OciStore::new(root.path().to_path_buf());
     let reference = ImageReference::parse("freedos-test:latest").expect("parse reference");
-    let record = store.load(&reference).expect("load the imported image");
+    let record = store
+        .load(&ImageRef::Tag(reference))
+        .expect("load the imported image");
     assert_eq!(record.name, "freedos-test");
     assert_eq!(record.tag, "latest");
 }
