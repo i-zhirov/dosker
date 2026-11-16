@@ -10,6 +10,7 @@ members = [
     "crates/dosker-agent-proto",
     "crates/dosker-image",
     "crates/dosker-engine-qemu",
+    "crates/dosker-build",
 ]
 
 [workspace.package]
@@ -48,6 +49,8 @@ dosker-test-support = { path = "crates/dosker-test-support" }
 dosker-cli = { path = "crates/dosker-cli" }
 dosker-agent-proto = { path = "crates/dosker-agent-proto" }
 dosker-image = { path = "crates/dosker-image" }
+dosker-build = { path = "crates/dosker-build" }
+ignore = "0.4"
 fatfs = "0.3"
 sha2 = "0.10"
 base64 = "0.22"
