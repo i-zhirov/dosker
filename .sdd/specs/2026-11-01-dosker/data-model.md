@@ -48,6 +48,7 @@ An image is an OCI manifest plus a config plus ordered layers.
 | `exposed_ports` | list of `PortDeclaration` | Guest TCP ports |
 | `volumes` | list of `VolumeDeclaration` | Drive letters |
 | `engine_pin` | string or null | From `ENGINE` |
+| `engine_config` | map of string to list of string | Ordered raw `ENGINE-CONFIG` lines by engine; omitted when empty |
 | `requires` | list of strings | Capability names |
 | `agent_version` | string or null | Agent that built the image. Null for a booter. |
 | `created_by` | string | Last instruction |
@@ -243,7 +244,7 @@ Rules:
 - Each engine pin has `version` and `source`.
 - The agent pin has `version`.
 - A missing pin is resolved on the next build and written back.
-- A mismatch stops the build unless `--update` or `--allow-engine-mismatch` is used.
+- A mismatch stops the build unless `--update` is used. `--allow-engine-mismatch` is future work.
 
 ## Build Cache
 

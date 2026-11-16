@@ -189,11 +189,11 @@ cache key from parent tree digest, config digest, normalized instruction, and
 input hashes. Out of scope: `RUN` inside DOS, the FreeDOS base builder, and
 agent injection into an imported image.
 
-- **Status:** Unplanned
+- **Status:** Implemented
 - **Depends on:** Slice 5.
 - **Requirements:** FR-001, FR-002, FR-003, FR-013, FR-017
 - **Manual prerequisites:** none.
-- **Plan:** —
+- **Plan:** `.sdd/specs/2026-11-01-dosker/plan-doskerfile-and-host-build.md`
 - **Done when:** a Doskerfile with `FROM` an imported image, `COPY`,
   `RUN --host`, `ENV`, `WORKDIR`, `CMD`, and `MACHINE` builds an image that
   boots with Slice 3. A second build reports a cache hit for every step and
