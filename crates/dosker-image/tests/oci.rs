@@ -1,15 +1,18 @@
 mod support;
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
 use dosker_image::{
-    ImageConfig, ImageDigest, ImageError, ImageMedia, ImageRef, ImageReference, Manifest, OciStore,
-    canonical_json,
+    ANNOTATION_RAW_DISK_DIGEST, Attributes, BootMetadata, Descriptor, DosPath, ImageConfig,
+    ImageDigest, ImageError, ImageMedia, ImageRef, ImageReference, Layer, LayerDelta,
+    MEDIA_TYPE_BOOTER, MEDIA_TYPE_LAYER, Manifest, OciStore, TreeDir, TreeFile, canonical_json,
+    fixed_timestamp,
 };
-use support::{make_fat16_image, write_fat_file};
+use support::{make_fat16_image, sample_boot, sample_config, write_fat_file};
 
 const MIB: u64 = 1024 * 1024;
 
@@ -41,6 +44,50 @@ fn digest_ref(image: &dosker_image::Image) -> ImageRef {
 
 fn store(dir: &Path) -> OciStore {
     OciStore::new(dir.to_path_buf())
+}
+
+fn file(path: &str, bytes: &[u8]) -> TreeFile {
+    TreeFile {
+        path: DosPath::parse(path).unwrap(),
+        attributes: Attributes {
+            archive: true,
+            ..Attributes::default()
+        },
+        timestamp: fixed_timestamp(),
+        bytes: bytes.to_vec(),
+    }
+}
+
+fn tree_dir(path: &str) -> TreeDir {
+    TreeDir {
+        path: DosPath::parse(path).unwrap(),
+        attributes: Attributes::default(),
+        timestamp: fixed_timestamp(),
+    }
+}
+
+fn layer(files: Vec<TreeFile>, dirs: Vec<TreeDir>, parent: Option<String>) -> Layer {
+    Layer::from_delta(
+        &LayerDelta {
+            whiteouts: Vec::new(),
+            files,
+            dirs,
+        },
+        "test",
+        parent,
+        None,
+    )
+    .unwrap()
+}
+
+fn booter_descriptor(store: &OciStore, bytes: &[u8]) -> Descriptor {
+    let blob = store.put_blob(bytes).unwrap();
+    Descriptor {
+        media_type: MEDIA_TYPE_BOOTER.to_owned(),
+        digest: blob.digest,
+        size: blob.size,
+        annotations: None,
+    }
 }
 
 #[test]
@@ -640,6 +687,329 @@ fn index_lock_is_released_after_import() {
         )
         .unwrap();
     assert!(store.load(&ImageRef::Tag(reference("copy:latest"))).is_ok());
+}
+
+#[test]
+fn put_layer_writes_a_canonical_layer_blob() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let value = layer(
+        vec![file("APP/FOO.TXT", b"hello")],
+        vec![tree_dir("APP")],
+        None,
+    );
+    let descriptor = store.put_layer(&value).unwrap();
+    assert_eq!(descriptor.media_type, MEDIA_TYPE_LAYER);
+    assert_eq!(descriptor.digest, value.digest().unwrap());
+    assert!(store.blob_path(&descriptor.digest).unwrap().is_file());
+}
+
+#[test]
+fn load_layer_round_trips_a_layer() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let original = layer(
+        vec![file("APP/FOO.TXT", b"hello")],
+        vec![tree_dir("APP")],
+        None,
+    );
+    let descriptor = store.put_layer(&original).unwrap();
+    let loaded = store.load_layer(&descriptor.digest).unwrap();
+    assert_eq!(loaded.meta, original.meta);
+    assert_eq!(loaded.to_delta(), original.to_delta());
+}
+
+#[test]
+fn layer_descriptor_reports_the_blob_size() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"hello")], Vec::new(), None))
+        .unwrap();
+    let blob_size = fs::metadata(store.blob_path(&descriptor.digest).unwrap())
+        .unwrap()
+        .len();
+    let reported = store.layer_descriptor(&descriptor.digest).unwrap();
+    assert_eq!(reported.media_type, MEDIA_TYPE_LAYER);
+    assert_eq!(reported.digest, descriptor.digest);
+    assert_eq!(reported.size, blob_size);
+}
+
+#[test]
+fn load_manifest_resolves_a_tag_and_a_digest() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"a")], Vec::new(), None))
+        .unwrap();
+    let committed = store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &sample_config(sample_boot()),
+            vec![descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    let by_tag = store
+        .load_manifest(&ImageRef::Tag(reference("demo:latest")))
+        .unwrap();
+    let by_digest = store
+        .load_manifest(&ImageRef::Digest(
+            ImageDigest::parse(&committed.manifest_digest).unwrap(),
+        ))
+        .unwrap();
+    assert_eq!(by_tag, by_digest);
+}
+
+#[test]
+fn load_config_returns_the_stored_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"a")], Vec::new(), None))
+        .unwrap();
+    let mut config = sample_config(sample_boot());
+    config.env.insert("MODE".to_owned(), "test".to_owned());
+    config.cmd = Some("APP.EXE".to_owned());
+    store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &config,
+            vec![descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    let loaded = store
+        .load_config(&ImageRef::Tag(reference("demo:latest")))
+        .unwrap();
+    assert_eq!(loaded, config);
+}
+
+#[test]
+fn load_tree_applies_layers_in_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let first = layer(
+        vec![file("APP/FOO.TXT", b"one")],
+        vec![tree_dir("APP")],
+        None,
+    );
+    let first_descriptor = store.put_layer(&first).unwrap();
+    let second = layer(
+        vec![file("APP/FOO.TXT", b"two")],
+        Vec::new(),
+        Some(first_descriptor.digest.clone()),
+    );
+    let second_descriptor = store.put_layer(&second).unwrap();
+    store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &sample_config(sample_boot()),
+            vec![first_descriptor, second_descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    let tree = store
+        .load_tree(&ImageRef::Tag(reference("demo:latest")))
+        .unwrap();
+    let file = tree
+        .files()
+        .find(|file| file.path.as_str() == "APP/FOO.TXT")
+        .unwrap();
+    assert_eq!(file.bytes, b"two");
+}
+
+#[test]
+fn load_tree_rejects_a_broken_parent_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let first = layer(vec![file("A.TXT", b"a")], Vec::new(), None);
+    let first_descriptor = store.put_layer(&first).unwrap();
+    let second = layer(
+        vec![file("B.TXT", b"b")],
+        Vec::new(),
+        Some("sha256:bad".to_owned()),
+    );
+    let second_descriptor = store.put_layer(&second).unwrap();
+    store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &sample_config(sample_boot()),
+            vec![first_descriptor, second_descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    assert!(matches!(
+        store.load_tree(&ImageRef::Tag(reference("demo:latest"))),
+        Err(ImageError::LayerCorrupt { .. })
+    ));
+}
+
+#[test]
+fn load_tree_rejects_a_booter_image() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = booter_descriptor(&store, &[0x5a; 1024]);
+    store
+        .commit_image(
+            Some(&reference("game:latest")),
+            &sample_config(BootMetadata::opaque(1024)),
+            vec![descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    assert!(matches!(
+        store.load_tree(&ImageRef::Tag(reference("game:latest"))),
+        Err(ImageError::NoTreeImage(_))
+    ));
+}
+
+#[test]
+fn commit_image_writes_config_manifest_and_index() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"a")], Vec::new(), None))
+        .unwrap();
+    let committed = store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &sample_config(sample_boot()),
+            vec![descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    assert!(
+        store
+            .blob_path(&committed.manifest_digest)
+            .unwrap()
+            .is_file()
+    );
+    assert!(store.blob_path(&committed.config_digest).unwrap().is_file());
+    for digest in &committed.layer_digests {
+        assert!(store.blob_path(digest).unwrap().is_file());
+    }
+    assert_eq!(
+        store
+            .load(&ImageRef::Tag(reference("demo:latest")))
+            .unwrap()
+            .manifest_digest,
+        committed.manifest_digest
+    );
+}
+
+#[test]
+fn commit_image_replaces_an_existing_tag() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let first_layer = store
+        .put_layer(&layer(vec![file("A.TXT", b"one")], Vec::new(), None))
+        .unwrap();
+    let first = store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &sample_config(sample_boot()),
+            vec![first_layer],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    let second_layer = store
+        .put_layer(&layer(vec![file("A.TXT", b"two")], Vec::new(), None))
+        .unwrap();
+    let mut second_config = sample_config(sample_boot());
+    second_config.cmd = Some("APP.EXE".to_owned());
+    let second = store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &second_config,
+            vec![second_layer],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    assert_ne!(first.manifest_digest, second.manifest_digest);
+    assert_eq!(
+        store
+            .load(&ImageRef::Tag(reference("demo:latest")))
+            .unwrap()
+            .manifest_digest,
+        second.manifest_digest
+    );
+}
+
+#[test]
+fn commit_image_without_a_tag_leaves_the_index_unchanged() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let index_path = dir.path().join("images/index.json");
+    let before = fs::read(&index_path).ok();
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"a")], Vec::new(), None))
+        .unwrap();
+    let committed = store
+        .commit_image(
+            None,
+            &sample_config(sample_boot()),
+            vec![descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    assert_eq!(fs::read(&index_path).ok(), before);
+    let manifest = store
+        .load_manifest(&ImageRef::Digest(
+            ImageDigest::parse(&committed.manifest_digest).unwrap(),
+        ))
+        .unwrap();
+    assert_eq!(manifest.config.digest, committed.config_digest);
+    assert!(store.list().unwrap().is_empty());
+}
+
+#[test]
+fn commit_image_keeps_the_raw_disk_annotation() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"a")], Vec::new(), None))
+        .unwrap();
+    let raw = store.put_blob(b"raw disk").unwrap();
+    let mut annotations = BTreeMap::new();
+    annotations.insert(ANNOTATION_RAW_DISK_DIGEST.to_owned(), raw.digest.clone());
+    store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &sample_config(sample_boot()),
+            vec![descriptor],
+            annotations,
+        )
+        .unwrap();
+    let manifest = store
+        .load_manifest(&ImageRef::Tag(reference("demo:latest")))
+        .unwrap();
+    assert_eq!(manifest.raw_disk_digest(), Some(raw.digest.as_str()));
+    assert!(
+        manifest
+            .layers
+            .iter()
+            .all(|layer| layer.digest != raw.digest)
+    );
+    assert_eq!(manifest.layers.len(), 1);
+}
+
+#[test]
+fn commit_image_rejects_a_booter_with_tree_layers() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"a")], Vec::new(), None))
+        .unwrap();
+    assert!(matches!(
+        store.commit_image(
+            Some(&reference("game:latest")),
+            &sample_config(BootMetadata::opaque(1024)),
+            vec![descriptor],
+            BTreeMap::new(),
+        ),
+        Err(ImageError::InvalidManifest { .. })
+    ));
 }
 
 fn make_writable(path: &Path) {

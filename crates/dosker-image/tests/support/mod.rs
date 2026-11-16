@@ -2,10 +2,15 @@
 
 //! FAT image fixtures for the image tests.
 
+use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
+use dosker_image::{
+    BlobRef, BootLayout, BootMetadata, DosFlavour, FatType as ImageFatType, Geometry, HistoryEntry,
+    ImageConfig, MachineProfile, fixed_timestamp,
+};
 use fatfs::{FatType, FileSystem, FormatVolumeOptions, FsOptions, format_volume};
 
 const SECTOR_SIZE: u64 = 512;
@@ -127,6 +132,71 @@ fn write_mbr(path: &Path, partition_offset: u64, partition_length: u64) {
     let mut file = OpenOptions::new().write(true).open(path).expect("open MBR");
     file.seek(SeekFrom::Start(0)).expect("seek MBR");
     file.write_all(&sector).expect("write MBR");
+}
+
+/// Builds valid MBR-partitioned boot metadata for tests.
+pub fn sample_boot() -> BootMetadata {
+    BootMetadata {
+        layout: BootLayout::MbrPartitioned,
+        disk_size: 16 * 1024 * 1024,
+        geometry: Geometry {
+            cylinders: 16,
+            heads: 4,
+            sectors: 32,
+            sector_size: 512,
+        },
+        partition_start: Some(1),
+        partition_sectors: Some(32_768),
+        mbr: Some(BlobRef::from_bytes(&[0u8; 512])),
+        boot_sector: Some(BlobRef::from_bytes(&[0u8; 512])),
+        fat_type: Some(ImageFatType::Fat16),
+        volume_label: Some("DOSKER".to_owned()),
+        media_descriptor: Some(0xf8),
+    }
+}
+
+/// Builds a valid tree or booter config for tests.
+pub fn sample_config(boot: BootMetadata) -> ImageConfig {
+    let booter = boot.layout == BootLayout::Opaque;
+    let mut machine = MachineProfile::default();
+    if !booter {
+        machine.disk_interface = match boot.layout {
+            BootLayout::MbrPartitioned => "ide".to_owned(),
+            BootLayout::Superfloppy => "floppy".to_owned(),
+            BootLayout::Opaque => unreachable!("opaque is a booter"),
+        };
+    }
+    ImageConfig {
+        schema_version: 1,
+        dos_flavour: if booter {
+            DosFlavour::None
+        } else {
+            DosFlavour::Other
+        },
+        booter,
+        boot,
+        machine,
+        env: BTreeMap::new(),
+        workdir: if booter {
+            String::new()
+        } else {
+            r"C:\".to_owned()
+        },
+        cmd: None,
+        exposed_ports: Vec::new(),
+        volumes: Vec::new(),
+        engine_pin: None,
+        engine_config: BTreeMap::new(),
+        requires: Vec::new(),
+        agent_version: None,
+        created_by: "test".to_owned(),
+        history: vec![HistoryEntry {
+            created_by: "test".to_owned(),
+            created_at: fixed_timestamp(),
+            empty_layer: false,
+            comment: Some("sample".to_owned()),
+        }],
+    }
 }
 
 /// Returns the on-disk size of a test image.

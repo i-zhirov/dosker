@@ -74,6 +74,10 @@ pub enum ImageError {
     #[error("image {0} has no raw disk; import it again or rebuild it")]
     MissingRawDisk(String),
 
+    /// The image has no tree.
+    #[error("image {0} has no tree")]
+    NoTreeImage(String),
+
     /// An image still has a tag.
     #[error("image {0} is tagged; remove the tags first")]
     ImageInUse(String),

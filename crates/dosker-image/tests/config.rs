@@ -1,7 +1,7 @@
 use chrono::{TimeZone, Utc};
 use dosker_image::{
     BootMetadata, DosFlavour, ImageConfig, MachineProfile, PortDeclaration, PortProtocol,
-    VolumeDeclaration,
+    VolumeDeclaration, canonical_json,
 };
 use std::collections::BTreeMap;
 
@@ -23,6 +23,7 @@ fn config(boot: BootMetadata) -> ImageConfig {
         exposed_ports: Vec::new(),
         volumes: Vec::new(),
         engine_pin: None,
+        engine_config: BTreeMap::new(),
         requires: Vec::new(),
         agent_version: None,
         created_by: "import".to_owned(),
@@ -166,6 +167,72 @@ fn port_declaration_rejects_port_zero() {
     assert!(value.validate().is_err());
     value.exposed_ports[0].port = 65535;
     assert!(value.validate().is_ok());
+}
+
+#[test]
+fn engine_config_defaults_to_empty() {
+    let mut value = serde_json::to_value(config(disk())).unwrap();
+    value.as_object_mut().unwrap().remove("engine_config");
+    let parsed: ImageConfig = serde_json::from_value(value).unwrap();
+    assert!(parsed.engine_config.is_empty());
+}
+
+#[test]
+fn engine_config_round_trips() {
+    let mut value = config(disk());
+    value.engine_config.insert(
+        "qemu".to_owned(),
+        vec!["-no-reboot".to_owned(), "-device sb16".to_owned()],
+    );
+    let json = serde_json::to_string(&value).unwrap();
+    let parsed: ImageConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.engine_config["qemu"], ["-no-reboot", "-device sb16"]);
+    assert_eq!(parsed, value);
+}
+
+#[test]
+fn empty_engine_config_is_omitted_from_json() {
+    let json = canonical_json(&config(disk())).unwrap();
+    let text = String::from_utf8(json).unwrap();
+    assert!(!text.contains("engine_config"));
+}
+
+#[test]
+fn engine_config_rejects_an_unknown_engine() {
+    let mut value = config(disk());
+    value
+        .engine_config
+        .insert("virtualbox".to_owned(), vec!["-no-reboot".to_owned()]);
+    assert!(value.validate().is_err());
+}
+
+#[test]
+fn engine_config_rejects_an_empty_line() {
+    let mut value = config(disk());
+    value
+        .engine_config
+        .insert("qemu".to_owned(), vec![String::new()]);
+    assert!(value.validate().is_err());
+}
+
+#[test]
+fn engine_config_rejects_a_whitespace_line() {
+    let mut value = config(disk());
+    value
+        .engine_config
+        .insert("qemu".to_owned(), vec!["   ".to_owned()]);
+    assert!(value.validate().is_err());
+}
+
+#[test]
+fn booter_config_accepts_engine_config() {
+    let mut value = config(BootMetadata::opaque(1024));
+    value
+        .engine_config
+        .insert("qemu".to_owned(), vec!["-no-reboot".to_owned()]);
+    value.validate().unwrap();
+    let json = serde_json::to_string(&value).unwrap();
+    assert_eq!(serde_json::from_str::<ImageConfig>(&json).unwrap(), value);
 }
 
 #[test]

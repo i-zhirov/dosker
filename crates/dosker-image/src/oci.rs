@@ -24,6 +24,7 @@ use crate::manifest::{
     MEDIA_TYPE_CONFIG, MEDIA_TYPE_LAYER, MEDIA_TYPE_MANIFEST, Manifest, OciLayout,
 };
 use crate::reference::{ImageDigest, ImageRef, ImageReference};
+use crate::tree::Tree;
 
 const DIR_MODE: u32 = 0o700;
 const BLOB_MODE: u32 = 0o444;
@@ -66,6 +67,14 @@ impl Image {
     pub fn expects_agent(&self) -> bool {
         self.media.expects_agent()
     }
+}
+
+/// An image written by the build engine.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommittedImage {
+    pub manifest_digest: String,
+    pub config_digest: String,
+    pub layer_digests: Vec<String>,
 }
 
 /// The result of removing one reference.
@@ -243,6 +252,103 @@ impl OciStore {
         })
     }
 
+    /// Writes a canonical layer tar and returns its descriptor.
+    pub fn put_layer(&self, layer: &Layer) -> Result<Descriptor, ImageError> {
+        let tar = layer.write_tar()?;
+        let blob = self.put_blob(&tar)?;
+        Ok(descriptor(MEDIA_TYPE_LAYER, &blob.digest, blob.size))
+    }
+
+    /// Returns a tree-layer descriptor for a stored blob.
+    pub fn layer_descriptor(&self, digest: &str) -> Result<Descriptor, ImageError> {
+        let path = self.blob_path(digest)?;
+        let metadata = fs::metadata(&path).map_err(|source| ImageError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        Ok(descriptor(MEDIA_TYPE_LAYER, digest, metadata.len()))
+    }
+
+    /// Reads a canonical layer tar by digest.
+    pub fn load_layer(&self, digest: &str) -> Result<Layer, ImageError> {
+        let bytes = self.read_blob(digest)?;
+        Layer::read_tar(&bytes)
+    }
+
+    /// Loads a manifest by tag or digest.
+    pub fn load_manifest(&self, reference: &ImageRef) -> Result<Manifest, ImageError> {
+        let (_, manifest, _) = self.resolve(reference)?;
+        Ok(manifest)
+    }
+
+    /// Loads an image config by tag or digest.
+    pub fn load_config(&self, reference: &ImageRef) -> Result<ImageConfig, ImageError> {
+        let (_, _, config) = self.resolve(reference)?;
+        Ok(config)
+    }
+
+    /// Loads the tree by applying every layer in order.
+    pub fn load_tree(&self, reference: &ImageRef) -> Result<Tree, ImageError> {
+        let (_, manifest, config) = self.resolve(reference)?;
+        if config.booter {
+            return Err(ImageError::NoTreeImage(reference.to_string()));
+        }
+        let mut tree = Tree::new();
+        let mut previous: Option<String> = None;
+        for descriptor in &manifest.layers {
+            let layer = self.load_layer(&descriptor.digest)?;
+            layer.validate_parent(previous.as_deref())?;
+            layer.apply_to(&mut tree)?;
+            previous = Some(descriptor.digest.clone());
+        }
+        Ok(tree)
+    }
+
+    /// Writes a config and manifest, then adds or replaces a tag.
+    pub fn commit_image(
+        &self,
+        reference: Option<&ImageReference>,
+        config: &ImageConfig,
+        layers: Vec<Descriptor>,
+        annotations: BTreeMap<String, String>,
+    ) -> Result<CommittedImage, ImageError> {
+        config.validate()?;
+        let config_bytes = canonical_json(config)?;
+        let config_digest = sha256_digest(&config_bytes);
+        let manifest = Manifest::new(
+            descriptor(MEDIA_TYPE_CONFIG, &config_digest, config_bytes.len() as u64),
+            layers.clone(),
+            if annotations.is_empty() {
+                None
+            } else {
+                Some(annotations)
+            },
+        );
+        manifest.validate(config.booter)?;
+        let manifest_bytes = canonical_json(&manifest)?;
+        let config_blob = self.put_blob(&config_bytes)?;
+        let manifest_blob = self.put_blob(&manifest_bytes)?;
+        if let Some(reference) = reference {
+            let _lock = self.lock_index()?;
+            let mut index = self.load_index()?;
+            index.remove_ref(&reference.to_string());
+            let mut refs = BTreeMap::new();
+            refs.insert(ANNOTATION_REF_NAME.to_owned(), reference.to_string());
+            index.add(Descriptor {
+                media_type: MEDIA_TYPE_MANIFEST.to_owned(),
+                digest: manifest_blob.digest.clone(),
+                size: manifest_blob.size,
+                annotations: Some(refs),
+            });
+            self.write_index(&index)?;
+        }
+        Ok(CommittedImage {
+            manifest_digest: manifest_blob.digest,
+            config_digest: config_blob.digest,
+            layer_digests: layers.iter().map(|layer| layer.digest.clone()).collect(),
+        })
+    }
+
     /// Reads and verifies a blob.
     pub fn read_blob(&self, digest: &str) -> Result<Vec<u8>, ImageError> {
         let path = self.blob_path(digest)?;
@@ -381,39 +487,8 @@ impl OciStore {
 
     /// Loads an image by tag or digest.
     pub fn load(&self, reference: &ImageRef) -> Result<Image, ImageError> {
+        let (descriptor, manifest, config) = self.resolve(reference)?;
         let index = self.load_index()?;
-        let descriptor = match reference {
-            ImageRef::Tag(tag) => index
-                .find_ref(&tag.to_string())
-                .cloned()
-                .ok_or_else(|| ImageError::NotFound(tag.clone()))?,
-            ImageRef::Digest(digest) => index
-                .find_digest(digest.as_str())
-                .into_iter()
-                .next()
-                .cloned()
-                .unwrap_or_else(|| Descriptor {
-                    media_type: MEDIA_TYPE_MANIFEST.to_owned(),
-                    digest: digest.as_str().to_owned(),
-                    size: 0,
-                    annotations: None,
-                }),
-        };
-        let manifest_bytes = self.read_blob(&descriptor.digest)?;
-        let manifest: Manifest =
-            serde_json::from_slice(&manifest_bytes).map_err(|error| ImageError::Corrupt {
-                path: self.blob_path(&descriptor.digest).unwrap_or_default(),
-                message: error.to_string(),
-            })?;
-        let config_bytes = self.read_blob(&manifest.config.digest)?;
-        let config: ImageConfig =
-            serde_json::from_slice(&config_bytes).map_err(|error| ImageError::Corrupt {
-                path: self.blob_path(&manifest.config.digest).unwrap_or_default(),
-                message: error.to_string(),
-            })?;
-        manifest.validate(config.booter)?;
-        config.validate()?;
-
         let (name, tag) = match reference {
             ImageRef::Tag(tag) => (
                 tag.name().as_str().to_owned(),
@@ -620,6 +695,45 @@ impl OciStore {
         }
     }
 
+    fn resolve(
+        &self,
+        reference: &ImageRef,
+    ) -> Result<(Descriptor, Manifest, ImageConfig), ImageError> {
+        let index = self.load_index()?;
+        let descriptor = match reference {
+            ImageRef::Tag(tag) => index
+                .find_ref(&tag.to_string())
+                .cloned()
+                .ok_or_else(|| ImageError::NotFound(tag.clone()))?,
+            ImageRef::Digest(digest) => index
+                .find_digest(digest.as_str())
+                .into_iter()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| Descriptor {
+                    media_type: MEDIA_TYPE_MANIFEST.to_owned(),
+                    digest: digest.as_str().to_owned(),
+                    size: 0,
+                    annotations: None,
+                }),
+        };
+        let manifest_bytes = self.read_blob(&descriptor.digest)?;
+        let manifest: Manifest =
+            serde_json::from_slice(&manifest_bytes).map_err(|error| ImageError::Corrupt {
+                path: self.blob_path(&descriptor.digest).unwrap_or_default(),
+                message: error.to_string(),
+            })?;
+        let config_bytes = self.read_blob(&manifest.config.digest)?;
+        let config: ImageConfig =
+            serde_json::from_slice(&config_bytes).map_err(|error| ImageError::Corrupt {
+                path: self.blob_path(&manifest.config.digest).unwrap_or_default(),
+                message: error.to_string(),
+            })?;
+        manifest.validate(config.booter)?;
+        config.validate()?;
+        Ok((descriptor, manifest, config))
+    }
+
     fn load_index(&self) -> Result<Index, ImageError> {
         let path = self.layout_dir().join("index.json");
         match fs::read(&path) {
@@ -668,6 +782,7 @@ fn import_config(source: &Path, media: ImageMedia, size: u64, now: DateTime<Utc>
         exposed_ports: Vec::new(),
         volumes: Vec::new(),
         engine_pin: None,
+        engine_config: BTreeMap::new(),
         requires: Vec::new(),
         agent_version: None,
         created_by: "import".to_owned(),

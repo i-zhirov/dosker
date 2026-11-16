@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Cursor;
 
 use chrono::{TimeZone, Utc};
@@ -363,6 +364,7 @@ fn effective_boot_uses_the_last_non_null_layer_override() {
         exposed_ports: Vec::new(),
         volumes: Vec::new(),
         engine_pin: None,
+        engine_config: BTreeMap::new(),
         requires: Vec::new(),
         agent_version: None,
         created_by: "test".to_owned(),

@@ -36,7 +36,7 @@ pub use manifest::{
     MEDIA_TYPE_CONFIG, MEDIA_TYPE_INDEX, MEDIA_TYPE_LAYER, MEDIA_TYPE_MANIFEST, Manifest,
     OCI_LAYOUT_VERSION, OciLayout,
 };
-pub use oci::{Blob, Image, IndexLock, OciStore, RemoveOutcome};
+pub use oci::{Blob, CommittedImage, Image, IndexLock, OciStore, RemoveOutcome};
 pub use path::{DosName, DosPath, normalize_tree_member};
 pub use reference::{ImageDigest, ImageName, ImageRef, ImageReference, ImageTag};
 pub use tree::{Attributes, LayerDelta, Tree, TreeDir, TreeFile, TreeKind, TreeNode};

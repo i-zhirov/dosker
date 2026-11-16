@@ -134,6 +134,8 @@ pub struct ImageConfig {
     pub exposed_ports: Vec<PortDeclaration>,
     pub volumes: Vec<VolumeDeclaration>,
     pub engine_pin: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub engine_config: BTreeMap<String, Vec<String>>,
     pub requires: Vec<String>,
     pub agent_version: Option<String>,
     pub created_by: String,
@@ -147,6 +149,14 @@ impl ImageConfig {
             return Err(invalid("unsupported config schema version"));
         }
         self.machine.validate()?;
+        for (engine, lines) in &self.engine_config {
+            if !valid_engine(engine) {
+                return Err(invalid("unknown engine"));
+            }
+            if lines.iter().any(|line| line.trim().is_empty()) {
+                return Err(invalid("engine config line must not be empty"));
+            }
+        }
         if self.booter {
             if self.boot.layout != BootLayout::Opaque {
                 return Err(invalid("a booter image needs the opaque layout"));
@@ -199,6 +209,10 @@ impl ImageConfig {
 /// Returns the canonical config digest.
 pub fn config_digest(config: &ImageConfig) -> Result<String, ImageError> {
     canonical_digest(config)
+}
+
+fn valid_engine(value: &str) -> bool {
+    matches!(value, "qemu" | "dosbox-x" | "bochs")
 }
 
 fn valid_drive(value: &str) -> bool {
