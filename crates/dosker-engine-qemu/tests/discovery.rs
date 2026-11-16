@@ -1,12 +1,9 @@
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-#[cfg(unix)]
-use std::path::Path;
-
-use dosker_engine::EngineError;
-use dosker_engine_qemu::{QemuBinary, QemuVersion};
+use dosker_engine::{EngineError, EngineSource};
+use dosker_engine_qemu::{QemuBinary, QemuVersion, engine_source};
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -217,6 +214,60 @@ fn discover_reports_a_missing_binary() {
         }
         other => panic!("unexpected error: {other}"),
     }
+}
+
+#[test]
+fn source_reports_an_environment_override() {
+    let root = PathBuf::from("/data/dosker");
+    let path = root.join("engines").join("qemu-system-i386");
+
+    let source = engine_source(&path, &root, true);
+
+    assert_eq!(source, EngineSource::Env);
+    assert_eq!(source.as_str(), "env");
+    assert_eq!(EngineSource::parse(source.as_str()), Some(source));
+}
+
+#[test]
+fn source_reports_a_managed_binary() {
+    let root = PathBuf::from("/data/dosker");
+    let path = root.join("engines").join("qemu-system-i386");
+
+    let source = engine_source(&path, &root, false);
+
+    assert_eq!(source, EngineSource::Managed);
+    assert_eq!(source.as_str(), "managed");
+    assert_eq!(EngineSource::parse(source.as_str()), Some(source));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn source_reports_a_homebrew_binary_on_macos() {
+    let root = PathBuf::from("/data/dosker");
+
+    let source = engine_source(
+        Path::new("/opt/homebrew/bin/qemu-system-i386"),
+        &root,
+        false,
+    );
+    assert_eq!(source, EngineSource::Homebrew);
+
+    let intel = engine_source(Path::new("/usr/local/bin/qemu-system-i386"), &root, false);
+    assert_eq!(intel, EngineSource::Homebrew);
+
+    assert_eq!(source.as_str(), "homebrew");
+    assert_eq!(EngineSource::parse(source.as_str()), Some(source));
+}
+
+#[test]
+fn source_reports_a_plain_path() {
+    let root = PathBuf::from("/data/dosker");
+
+    let source = engine_source(Path::new("/usr/bin/qemu-system-i386"), &root, false);
+
+    assert_eq!(source, EngineSource::Path);
+    assert_eq!(source.as_str(), "path");
+    assert_eq!(EngineSource::parse(source.as_str()), Some(source));
 }
 
 #[cfg(unix)]

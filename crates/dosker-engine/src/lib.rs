@@ -3,11 +3,13 @@
 pub mod adapter;
 pub mod capability;
 pub mod error;
+pub mod source;
 pub mod spec;
 
 pub use adapter::{EngineAdapter, EngineSession};
 pub use capability::{Capability, CapabilitySet};
 pub use error::EngineError;
+pub use source::EngineSource;
 pub use spec::{
     DebugKind, DisplayMode, EngineCommand, EngineEndpoint, EngineEndpointKind, EngineSpec,
     ExecRequest, ExecResult,

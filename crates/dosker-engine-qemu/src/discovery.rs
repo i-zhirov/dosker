@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 
-use dosker_engine::EngineError;
+use dosker_engine::{EngineError, EngineSource};
 
 /// The environment variable that overrides QEMU discovery.
 pub const QEMU_ENV: &str = "DOSKER_QEMU";
@@ -162,6 +162,34 @@ impl QemuBinary {
     pub fn version_string(&self) -> String {
         self.version.to_string()
     }
+}
+
+/// Classifies where a QEMU binary was found.
+///
+/// An environment override wins over every other source. Managed binaries live
+/// under `<data_root>/engines`. Homebrew installations are recognized only on
+/// macOS.
+pub fn engine_source(path: &Path, data_root: &Path, from_env: bool) -> EngineSource {
+    if from_env {
+        return EngineSource::Env;
+    }
+
+    if path.starts_with(data_root.join("engines")) {
+        return EngineSource::Managed;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        const HOMEBREW_PREFIXES: [&str; 2] = ["/opt/homebrew", "/usr/local"];
+        if HOMEBREW_PREFIXES
+            .iter()
+            .any(|prefix| path.starts_with(Path::new(prefix)))
+        {
+            return EngineSource::Homebrew;
+        }
+    }
+
+    EngineSource::Path
 }
 
 fn resolve_program(requested: &OsString) -> Result<PathBuf, EngineError> {
