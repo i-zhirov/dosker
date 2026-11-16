@@ -29,6 +29,7 @@ pub struct Cli {
 /// The available commands.
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    Build(BuildArgs),
     Run(RunArgs),
     Ps(PsArgs),
     Inspect(InspectArgs),
@@ -52,6 +53,25 @@ pub enum Command {
     Doctor(DoctorArgs),
     #[command(name = "__supervise", hide = true)]
     Supervise(SuperviseArgs),
+}
+
+/// Arguments for `build`.
+#[derive(Debug, Args)]
+pub struct BuildArgs {
+    #[arg(short = 't', long = "tag")]
+    pub tag: Option<String>,
+
+    #[arg(long = "update")]
+    pub update: bool,
+
+    #[arg(long = "no-cache")]
+    pub no_cache: bool,
+
+    #[arg(long = "timeout", default_value_t = 300)]
+    pub timeout: u64,
+
+    #[arg(default_value = ".")]
+    pub context: PathBuf,
 }
 
 /// Arguments for `run`.
@@ -306,6 +326,10 @@ pub fn run(args: impl IntoIterator<Item = OsString>) -> u8 {
 
 fn dispatch(command: Command) -> Result<u8, CliError> {
     match command {
+        Command::Build(args) => {
+            let mut context = Context::load()?;
+            commands::build::execute(args, &mut context, Utc::now())
+        }
         Command::Ps(args) => {
             let mut context = Context::load()?;
             commands::ps::execute(args, &mut context, &SystemProbe::new(), Utc::now())

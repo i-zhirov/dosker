@@ -2,6 +2,7 @@
 
 use std::io;
 
+use dosker_build::BuildError;
 use dosker_core::CoreError;
 use dosker_image::ImageError;
 use dosker_platform::PlatformError;
@@ -35,6 +36,10 @@ pub enum CliError {
     /// An image operation failed.
     #[error(transparent)]
     Image(#[from] ImageError),
+
+    /// A build operation failed.
+    #[error(transparent)]
+    Build(#[from] BuildError),
 
     /// An input or output operation failed.
     #[error(transparent)]

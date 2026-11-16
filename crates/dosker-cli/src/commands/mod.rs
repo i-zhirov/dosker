@@ -1,6 +1,7 @@
 //! The CLI commands.
 
 pub mod attach;
+pub mod build;
 pub mod cp;
 pub mod create;
 pub mod debug;
