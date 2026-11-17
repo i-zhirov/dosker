@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use common::{CliRoot, run_captured, stderr_text, stdout_text};
 #[cfg(unix)]
-use dosker_core::{BasePin, LOCK_FILE_NAME, LockFile};
+use dosker_core::{AgentPin, BasePin, LOCK_FILE_NAME, LockFile};
 #[cfg(unix)]
 use dosker_image::{ImageDigest, ImageRef, ImageReference, OciStore};
 
@@ -265,7 +265,12 @@ fn build_writes_a_version_one_lock_file() {
     let engine = lock.engines.get("qemu").expect("the engine is pinned");
     assert_eq!(engine.version, "11.1.3");
     assert_eq!(engine.source, "env");
-    assert_eq!(lock.agent, None);
+    assert_eq!(
+        lock.agent,
+        Some(AgentPin {
+            version: "1.0.0".to_owned()
+        })
+    );
 }
 
 #[cfg(unix)]

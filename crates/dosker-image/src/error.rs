@@ -94,6 +94,10 @@ pub enum ImageError {
     #[error("invalid boot metadata: {reason}")]
     InvalidBootMetadata { reason: String },
 
+    /// The tree cannot be projected onto the disk.
+    #[error("cannot project the tree onto the disk: {reason}")]
+    Projection { reason: String },
+
     /// The image content is malformed.
     #[error("corrupt image at {}: {message}", path.display())]
     Corrupt { path: PathBuf, message: String },
@@ -101,6 +105,45 @@ pub enum ImageError {
     /// A file operation failed at a named path.
     #[error("i/o error at {}: {source}", path.display())]
     Io { path: PathBuf, source: io::Error },
+
+    /// The FreeDOS source variable is unset.
+    #[error("DOSKER_FREEDOS_SOURCE is not set; set it to a local FreeDOS 1.3 boot floppy image")]
+    FreedosSourceNotSet,
+
+    /// The FreeDOS source path does not exist.
+    #[error(
+        "FreeDOS source {} is missing; set DOSKER_FREEDOS_SOURCE to a local FreeDOS 1.3 boot floppy image",
+        path.display()
+    )]
+    FreedosSourceMissing { path: PathBuf },
+
+    /// A named FreeDOS input file is absent.
+    #[error("{file} is missing from {}", path.display())]
+    FreedosFileMissing { path: PathBuf, file: String },
+
+    /// A FreeDOS input does not match its pinned digest.
+    #[error("{file} digest mismatch: expected {expected}, got {actual}")]
+    FreedosPinMismatch {
+        file: String,
+        expected: String,
+        actual: String,
+    },
+
+    /// The FreeDOS release is not pinned.
+    #[error("unsupported FreeDOS version {version}; supported: {supported}")]
+    UnsupportedFreedosVersion { version: String, supported: String },
+
+    /// A FreeDOS boot template is malformed.
+    #[error("invalid FreeDOS boot template: {reason}")]
+    FreedosTemplate { reason: String },
+
+    /// The agent cannot be injected into an imported image.
+    #[error("agent injection: {reason}")]
+    AgentInjection { reason: String },
+
+    /// A disk import has no agent executable.
+    #[error("a disk import requires the agent executable")]
+    AgentMissing,
 
     /// A host platform operation failed.
     #[error(transparent)]

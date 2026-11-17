@@ -12,7 +12,14 @@ pub const QEMU_IMAGE_ENV: &str = "DOSKER_QEMU_IMAGE";
 /// The environment variable that overrides the QEMU binary.
 pub const QEMU_ENV: &str = "DOSKER_QEMU";
 
+/// The environment variable that names the FreeDOS source boot floppy image.
+pub const FREEDOS_SOURCE_ENV: &str = "DOSKER_FREEDOS_SOURCE";
+
+/// The environment variable that names the FreeDOS base fixture image.
+pub const FREEDOS_BASE_IMAGE_ENV: &str = "DOSKER_FREEDOS_BASE_IMAGE";
+
 const DEFAULT_QEMU: &str = "qemu-system-i386";
+const DEFAULT_FREEDOS_BASE_IMAGE: &str = "agent/fixtures/freedos-base.img";
 
 /// A temporary directory that removes itself when dropped.
 pub struct TempRoot {
@@ -73,6 +80,49 @@ pub fn qemu_image() -> Result<PathBuf, String> {
         ));
     }
 
+    Ok(path)
+}
+
+/// Resolves the FreeDOS base fixture named by [`FREEDOS_BASE_IMAGE_ENV`].
+///
+/// The value defaults to `agent/fixtures/freedos-base.img`. A relative value
+/// is resolved against the workspace root, which is two levels above this
+/// crate's manifest directory.
+pub fn freedos_base_image() -> Result<PathBuf, String> {
+    let value = std::env::var_os(FREEDOS_BASE_IMAGE_ENV)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| std::ffi::OsString::from(DEFAULT_FREEDOS_BASE_IMAGE));
+
+    let path = PathBuf::from(value);
+    let path = if path.is_absolute() {
+        path
+    } else {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    };
+
+    if !path.is_file() {
+        return Err(format!(
+            "the FreeDOS base image is missing: {}; set {FREEDOS_BASE_IMAGE_ENV} to a base disk image",
+            path.display()
+        ));
+    }
+
+    Ok(path)
+}
+
+/// Resolves the workspace agent executable at `agent/build/DOSKER.EXE`.
+pub fn agent_executable() -> Result<PathBuf, String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("agent/build/DOSKER.EXE");
+    if !path.is_file() {
+        return Err(format!(
+            "the agent executable is missing: {}; build it into agent/build/DOSKER.EXE",
+            path.display()
+        ));
+    }
     Ok(path)
 }
 

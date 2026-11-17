@@ -125,56 +125,7 @@ jobs:
           DOSKER_FREEDOS_SOURCE: ${{ vars.DOSKER_FREEDOS_SOURCE }}
         run: |
           set -euo pipefail
-
-          input="${DOSKER_FREEDOS_SOURCE:-}"
-          if [ -z "$input" ]; then
-            printf '::error::DOSKER_FREEDOS_SOURCE is not set. Set the repository variable to a FreeDOS Floppy Edition ZIP URL, a raw boot floppy image URL, or a local path.\n' >&2
-            exit 1
-          fi
-
-          case "$input" in
-            http://*|https://*)
-              case "$input" in
-                *.zip)
-                  archive="$RUNNER_TEMP/freedos-floppy.zip"
-                  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$archive" "$input"; then
-                    printf '::error::DOSKER_FREEDOS_SOURCE download failed: %s\n' "$input" >&2
-                    exit 1
-                  fi
-
-                  if ! printf '%s  %s\n' \
-                    '75a4e11a7fce6f124e20927b3022b4b715a2a3f7324c5f5bfea42d90d80eb072' \
-                    "$archive" | sha256sum -c -; then
-                    printf '::error::DOSKER_FREEDOS_SOURCE archive checksum mismatch: %s\n' "$input" >&2
-                    exit 1
-                  fi
-
-                  if ! unzip -q -o "$archive" '144m/x86BOOT.img' -d "$RUNNER_TEMP"; then
-                    printf '::error::DOSKER_FREEDOS_SOURCE archive lacks 144m/x86BOOT.img: %s\n' "$input" >&2
-                    exit 1
-                  fi
-
-                  source_path="$RUNNER_TEMP/144m/x86BOOT.img"
-                  ;;
-                *)
-                  source_path="$RUNNER_TEMP/x86BOOT.img"
-                  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$source_path" "$input"; then
-                    printf '::error::DOSKER_FREEDOS_SOURCE download failed: %s\n' "$input" >&2
-                    exit 1
-                  fi
-                  ;;
-              esac
-              ;;
-            *)
-              source_path="$input"
-              ;;
-          esac
-
-          if [ ! -f "$source_path" ]; then
-            printf '::error::DOSKER_FREEDOS_SOURCE is not a file: %s\n' "$source_path" >&2
-            exit 1
-          fi
-
+          source_path="$(bash .github/scripts/fetch-freedos-source.sh)"
           export DOSKER_FREEDOS_SOURCE="$source_path"
           printf 'DOSKER_FREEDOS_SOURCE=%s\n' "$source_path" >> "$GITHUB_ENV"
           agent/tools/build-base-image.sh
@@ -199,11 +150,113 @@ jobs:
           DOSKER_QEMU_IMAGE: agent/fixtures/dosker-agent.img
           DOSKER_QEMU: qemu-system-i386
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_runtime -- --nocapture
+      - name: Rust FreeDOS base and injection suite
+        timeout-minutes: 30
+        env:
+          DOSKER_INTEGRATION: "1"
+          DOSKER_QEMU: qemu-system-i386
+          DOSKER_FREEDOS_BASE_IMAGE: agent/fixtures/freedos-base.img
+        run: cargo test -p dosker-cli --features qemu-engine --test qemu_freedos -- --nocapture
+
+  freedos-base-determinism:
+    name: freedos-base-determinism (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [preflight, agent-build]
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+      - name: Install QEMU
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            brew install qemu
+          else
+            sudo apt-get update
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends qemu-system-x86
+          fi
+      - name: Download the DOS agent binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: dosker-agent-binaries
+          path: agent/build
+      - name: Fetch the FreeDOS source
+        env:
+          DOSKER_FREEDOS_SOURCE: ${{ vars.DOSKER_FREEDOS_SOURCE }}
+        run: |
+          set -euo pipefail
+          source_path="$(bash .github/scripts/fetch-freedos-source.sh)"
+          printf 'DOSKER_FREEDOS_SOURCE=%s\n' "$source_path" >> "$GITHUB_ENV"
+      - name: Build the base in two roots
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/freedos-context"
+          printf 'FROM freedos:1.3\n' > "$RUNNER_TEMP/freedos-context/Doskerfile"
+
+          build_digest() {
+            local root="$1"
+            DOSKER_ROOT="$root" DOSKER_AGENT_EXE=agent/build/DOSKER.EXE \
+              cargo run -q -p dosker-cli -- build -t check:latest "$RUNNER_TEMP/freedos-context" \
+              | sed -n 's/^built check:latest //p'
+          }
+
+          digest_a="$(build_digest "$RUNNER_TEMP/root-a")"
+          digest_b="$(build_digest "$RUNNER_TEMP/root-b")"
+
+          printf '%s\n' "$digest_a" > "$RUNNER_TEMP/freedos-base-digest-a.txt"
+          printf '%s\n' "$digest_b" > "$RUNNER_TEMP/freedos-base-digest-b.txt"
+
+          if [ -z "$digest_a" ] || [ -z "$digest_b" ]; then
+            printf '::error::the FreeDOS base build did not report a digest\n' >&2
+            exit 1
+          fi
+          if [ "$digest_a" != "$digest_b" ]; then
+            printf '::error::the FreeDOS base digests differ: %s vs %s\n' "$digest_a" "$digest_b" >&2
+            exit 1
+          fi
+          printf '%s\n' "$digest_a" > "$RUNNER_TEMP/freedos-base-digest.txt"
+      - name: Upload the determinism digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: freedos-base-digest-${{ matrix.os }}
+          path: ${{ runner.temp }}/freedos-base-digest.txt
+          if-no-files-found: error
+
+  compare-freedos-base:
+    name: compare-freedos-base
+    runs-on: ubuntu-latest
+    needs: freedos-base-determinism
+    steps:
+      - name: Download the Ubuntu digest
+        uses: actions/download-artifact@v4
+        with:
+          name: freedos-base-digest-ubuntu-latest
+          path: ${{ runner.temp }}/digest-ubuntu
+      - name: Download the macOS digest
+        uses: actions/download-artifact@v4
+        with:
+          name: freedos-base-digest-macos-15
+          path: ${{ runner.temp }}/digest-macos
+      - name: Compare the digests
+        run: |
+          set -euo pipefail
+          ubuntu="$(cat "$RUNNER_TEMP/digest-ubuntu/freedos-base-digest.txt")"
+          macos="$(cat "$RUNNER_TEMP/digest-macos/freedos-base-digest.txt")"
+          if [ "$ubuntu" != "$macos" ]; then
+            printf '::error::the FreeDOS base digests differ across hosts: ubuntu=%s macos=%s\n' "$ubuntu" "$macos" >&2
+            exit 1
+          fi
+          printf 'the FreeDOS base digest matches across hosts: %s\n' "$ubuntu"
 
   windows-qemu:
     name: windows-qemu
     runs-on: windows-latest
-    needs: preflight
+    needs: [preflight, agent-build]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -285,6 +338,11 @@ jobs:
           }
 
           Add-Content -Path $env:GITHUB_ENV -Value "DOSKER_QEMU_IMAGE=$imagePath"
+      - name: Download the DOS agent binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: dosker-agent-binaries
+          path: agent/build
       - name: Windows QEMU smoke suite
         env:
           DOSKER_INTEGRATION: "1"

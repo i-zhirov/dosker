@@ -16,11 +16,43 @@ jobs:
           DOSKER_QEMU_IMAGE_URL: ${{ vars.DOSKER_QEMU_IMAGE_URL }}
         run: bash .github/scripts/check-qemu-variables.sh DOSKER_QEMU_IMAGE_URL
 
+  agent-build:
+    name: agent-build
+    runs-on: ubuntu-latest
+    env:
+      WATCOM: /usr/watcom
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OpenWatcom
+        run: |
+          installer="$RUNNER_TEMP/open-watcom-2_0-c-linux-x64"
+          curl -fsSL -o "$installer" \
+            https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/open-watcom-2_0-c-linux-x64
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends unzip
+          sudo mkdir -p "$WATCOM"
+          sudo unzip -q "$installer" -d "$WATCOM"
+          sudo chmod -R +x "$WATCOM/binl64" "$WATCOM/binl"
+      - name: Configure the DOS toolchain
+        run: |
+          printf 'PATH=%s/binl64:%s/binl:%s\n' "$WATCOM" "$WATCOM" "$PATH" >> "$GITHUB_ENV"
+          printf 'INCLUDE=%s/h\n' "$WATCOM" >> "$GITHUB_ENV"
+      - name: Build the DOS agent
+        run: agent/build.sh
+      - name: Upload the DOS agent binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: dosker-agent-binaries
+          path: |
+            agent/build/DOSKER.EXE
+            agent/build/EXITCODE.EXE
+          if-no-files-found: error
+
   runtime-macos:
     name: runtime-macos
     # macOS 14 was retired; macos-15 is the supported arm64 runner.
     runs-on: macos-15
-    needs: preflight
+    needs: [preflight, agent-build]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +109,11 @@ jobs:
           fi
 
           printf 'DOSKER_QEMU_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
+      - name: Download the DOS agent binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: dosker-agent-binaries
+          path: agent/build
       - name: Rust QEMU runtime suite
         env:
           DOSKER_INTEGRATION: "1"

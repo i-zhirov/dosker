@@ -12,7 +12,9 @@ use std::time::{Duration, Instant};
 use dosker_core::ContainerId;
 use dosker_platform::process::{ProcessSupervisor, system};
 use dosker_runtime::StateStore;
-use dosker_test_support::fixtures::{kill_process, mock_engine_path, qemu_binary};
+use dosker_test_support::fixtures::{
+    agent_executable, kill_process, mock_engine_path, qemu_binary,
+};
 use fatfs::{FatType, FileSystem, FormatVolumeOptions, FsOptions, format_volume};
 
 const SECTOR_SIZE: u64 = 512;
@@ -95,7 +97,12 @@ impl CliRoot {
         #[cfg(windows)]
         let dir = tempfile::tempdir().expect("create a temporary directory");
 
-        Self { dir }
+        let root = Self { dir };
+        let agent_dir = root.path().join("agent");
+        fs::create_dir_all(&agent_dir).expect("create the agent directory");
+        fs::write(agent_dir.join("DOSKER.EXE"), b"MZ cli fake agent")
+            .expect("write the fake agent");
+        root
     }
 
     pub fn path(&self) -> &Path {
@@ -110,6 +117,7 @@ impl CliRoot {
     pub fn base_command(&self) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dosker"));
         command.env("DOSKER_ROOT", self.path());
+        command.env("DOSKER_AGENT_EXE", self.path().join("agent/DOSKER.EXE"));
         command
     }
 
@@ -129,6 +137,10 @@ impl CliRoot {
     pub fn command_with_qemu(&self) -> Command {
         let mut command = self.base_command();
         command.env("DOSKER_QEMU", qemu_binary());
+        command.env(
+            "DOSKER_AGENT_EXE",
+            agent_executable().expect("locate the agent executable"),
+        );
         command
     }
 

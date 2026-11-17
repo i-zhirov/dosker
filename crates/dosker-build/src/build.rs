@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use dosker_core::{BasePin, Doskerfile, EngineName, FromSource, Instruction, InstructionKind};
+use dosker_image::freedos::{BaseInputs, FreedosVersion, ensure_freedos_base};
 use dosker_image::{
     CacheKeyInput, CacheStore, Descriptor, DosPath, ImageConfig, ImageError, ImageMedia, ImageRef,
     ImageReference, Layer, OciStore, Tree, cache_key, fixed_timestamp,
@@ -60,6 +61,8 @@ pub struct Builder {
     store: OciStore,
     cache: CacheStore,
     resolver: Box<dyn EngineResolver>,
+    freedos_inputs: Option<BaseInputs>,
+    agent_executable: Option<PathBuf>,
 }
 
 impl Builder {
@@ -76,7 +79,21 @@ impl Builder {
             cache: CacheStore::new(root.clone()),
             root,
             resolver,
+            freedos_inputs: None,
+            agent_executable: None,
         }
+    }
+
+    /// Supplies the pinned inputs the FreeDOS base is built from.
+    pub fn with_freedos_inputs(mut self, inputs: BaseInputs) -> Self {
+        self.freedos_inputs = Some(inputs);
+        self
+    }
+
+    /// Selects the agent executable used by local imports.
+    pub fn with_agent_executable(mut self, path: PathBuf) -> Self {
+        self.agent_executable = Some(path);
+        self
     }
 
     /// Builds the image described by the Doskerfile in `context_dir`.
@@ -254,9 +271,11 @@ impl Builder {
         source: &FromSource,
     ) -> Result<ResolvedBase, BuildError> {
         match source {
-            FromSource::Freedos { version } => Err(BuildError::UnsupportedBase {
-                reason: format!("FROM freedos:{version} is not supported"),
-            }),
+            FromSource::Freedos { version } => {
+                let version = FreedosVersion::parse(version)?;
+                ensure_freedos_base(&self.store, self.freedos_inputs.as_ref(), &version)?;
+                self.load_stored_base(&format!("freedos:{}", version.as_str()))
+            }
             FromSource::Image(value) => self.load_stored_base(value),
             FromSource::LocalPath(path) => self.import_base(context.root(), path, ImageMedia::Disk),
             FromSource::BooterPath(path) => {
@@ -302,25 +321,45 @@ impl Builder {
             context_root.join(source_path)
         };
         let source_digest = hash_file(&path)?;
-        let hex = source_digest
-            .strip_prefix("sha256:")
-            .unwrap_or(&source_digest);
-        let reference = ImageReference::parse(&format!("dosker-build:{hex}"))?;
+        let agent = match media {
+            ImageMedia::Disk => Some(self.load_agent()?),
+            ImageMedia::Booter => None,
+        };
+        let reference = import_reference(media, &source_digest, agent.as_deref())?;
         let image_ref = ImageRef::Tag(reference.clone());
-        let image = match self.store.load(&image_ref) {
-            Ok(image) => image,
-            Err(ImageError::NotFound(_)) => {
-                match self
-                    .store
-                    .import(&path, &reference, media, fixed_timestamp())
-                {
+
+        let mut image = match self.store.load(&image_ref) {
+            Ok(image) => Some(image),
+            Err(ImageError::NotFound(_)) => None,
+            Err(error) => return Err(error.into()),
+        };
+        let reusable = match image.as_ref() {
+            Some(_) if media == ImageMedia::Disk => {
+                self.is_reusable_disk_import(&image_ref, &source_digest)?
+            }
+            _ => true,
+        };
+        if !reusable {
+            self.store.remove(&image_ref)?;
+            image = None;
+        }
+        let image = match image {
+            Some(image) => image,
+            None => {
+                match self.store.import(
+                    &path,
+                    &reference,
+                    media,
+                    agent.as_deref(),
+                    fixed_timestamp(),
+                ) {
                     Ok(image) => image,
                     Err(ImageError::AlreadyExists(_)) => self.store.load(&image_ref)?,
                     Err(error) => return Err(error.into()),
                 }
             }
-            Err(error) => return Err(error.into()),
         };
+
         let manifest = self.store.load_manifest(&image_ref)?;
         let config = self.store.load_config(&image_ref)?;
         let tree = if config.booter {
@@ -328,23 +367,10 @@ impl Builder {
         } else {
             Some(self.store.load_tree(&image_ref)?)
         };
-        match media {
-            ImageMedia::Disk => {
-                if manifest.raw_disk_digest() != Some(source_digest.as_str()) {
-                    return Err(BuildError::UnsupportedBase {
-                        reason: format!(
-                            "imported image {source_path} does not match the source digest"
-                        ),
-                    });
-                }
-            }
-            ImageMedia::Booter => {
-                if !config.booter {
-                    return Err(BuildError::UnsupportedBase {
-                        reason: format!("{source_path} is not a booter image"),
-                    });
-                }
-            }
+        if media == ImageMedia::Booter && !config.booter {
+            return Err(BuildError::UnsupportedBase {
+                reason: format!("{source_path} is not a booter image"),
+            });
         }
         let annotations = manifest.annotations.clone().unwrap_or_default();
         Ok(ResolvedBase {
@@ -358,6 +384,34 @@ impl Builder {
                 digest: image.manifest_digest,
             },
         })
+    }
+
+    fn load_agent(&self) -> Result<Vec<u8>, BuildError> {
+        match &self.agent_executable {
+            Some(path) => fs::read(path).map_err(|source| BuildError::Io {
+                path: path.clone(),
+                source,
+            }),
+            None => Ok(dosker_image::load_agent_executable()?),
+        }
+    }
+
+    fn is_reusable_disk_import(
+        &self,
+        reference: &ImageRef,
+        source_digest: &str,
+    ) -> Result<bool, BuildError> {
+        let manifest = self.store.load_manifest(reference)?;
+        let config = self.store.load_config(reference)?;
+        let Some(raw_digest) = manifest.raw_disk_digest() else {
+            return Ok(false);
+        };
+        let Ok(raw_path) = self.store.blob_path(raw_digest) else {
+            return Ok(false);
+        };
+        Ok(manifest.source_disk_digest() == Some(source_digest)
+            && config.agent_version.as_deref() == Some(dosker_image::freedos::AGENT_VERSION)
+            && raw_path.exists())
     }
 }
 
@@ -499,6 +553,22 @@ fn base_identity(value: &str, reference: &ImageRef) -> (String, String) {
         ),
         ImageRef::Digest(_) => (String::new(), String::new()),
     }
+}
+
+fn import_reference(
+    media: ImageMedia,
+    source_digest: &str,
+    agent: Option<&[u8]>,
+) -> Result<ImageReference, BuildError> {
+    let key = match (media, agent) {
+        (ImageMedia::Disk, Some(bytes)) => {
+            let agent_digest = dosker_image::sha256_digest(bytes);
+            dosker_image::sha256_digest(format!("{source_digest}\n{agent_digest}").as_bytes())
+        }
+        _ => source_digest.to_owned(),
+    };
+    let hex = key.strip_prefix("sha256:").unwrap_or(&key);
+    Ok(ImageReference::parse(&format!("dosker-build:{hex}"))?)
 }
 
 fn hash_file(path: &Path) -> Result<String, BuildError> {

@@ -215,13 +215,13 @@ the pinned inputs, the `LASTDRIVE=Z`, `FILES=20`, and `BUFFERS=10` settings,
 and `FROM freedos:<version>`. Out of scope: `RUN` inside DOS, which needs the
 read-back path from Slice 8.
 
-- **Status:** Unplanned
+- **Status:** Implemented
 - **Depends on:** Slices 5 and 6. The FreeDOS builder spike is a manual
   prerequisite.
 - **Requirements:** FR-004, FR-005
 - **Manual prerequisites:** the FreeDOS binary distribution and the boot
   sector inputs. Before this slice, the deterministic FreeDOS builder spike.
-- **Plan:** —
+- **Plan:** `.sdd/specs/2026-11-01-dosker/plan-freedos-base-builder.md`
 - **Done when:** a clean build of the base image from the pinned inputs
   produces the same digest on two hosts. The image boots on QEMU and reaches
   the agent handshake. `FROM freedos:<version>` resolves the built base. An
@@ -242,12 +242,12 @@ read-back of MBR, partition table, and boot sector, the exclusion of
 `C:\DOSKER` from the delta, and the private writable disk for the build VM. Out
 of scope: batching consecutive `RUN` steps.
 
-- **Status:** Unplanned
+- **Status:** In Progress
 - **Depends on:** Slices 2, 5, 6, and 7.
 - **Requirements:** FR-002, FR-003, FR-007
 - **Manual prerequisites:** QEMU. The FreeDOS base and the agent from Slices
   2 and 7.
-- **Plan:** —
+- **Plan:** `.sdd/specs/2026-11-01-dosker/plan-in-dos-run.md`
 - **Done when:** a `RUN` that writes a file changes the tree and produces a
   layer. A `RUN` that changes the boot sector updates the layer boot metadata.
   A non-zero exit fails the build and commits no layer. A command that reboots

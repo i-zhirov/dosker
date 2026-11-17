@@ -1,31 +1,24 @@
 use std::fs;
-use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::{DateTime, TimeZone, Utc};
 use dosker_build::{
-    BuildError, BuildOptions, BuildOutcome, BuildReporter, Builder, EngineResolver, ResolvedEngine,
+    BuildError, BuildOptions, BuildOutcome, Builder, EngineResolver, ResolvedEngine,
 };
 use dosker_core::{LOCK_FILE_NAME, LockFile};
+use dosker_image::inject::WRAPPED_AUTOEXEC_BYTES;
 use dosker_image::{
-    DosPath, ImageError, ImageRef, ImageReference, OciStore, TreeNode, sha256_digest,
+    DosPath, ImageError, ImageRef, ImageReference, OciStore, TreeNode, read_tree, sha256_digest,
 };
-use support::{empty_tree, store_booter_base, store_tree_base, write_fat_image};
+use support::{
+    FakeResolver, TestReporter, empty_tree, store_booter_base, store_tree_base, write_fat_image,
+};
 
 mod support;
 
-struct FakeResolver;
-
-impl EngineResolver for FakeResolver {
-    fn resolve(&self, engine: &str) -> Result<ResolvedEngine, BuildError> {
-        Ok(ResolvedEngine {
-            name: engine.to_owned(),
-            version: "qemu 9.0.0".to_owned(),
-            source: "path".to_owned(),
-        })
-    }
-}
+const AGENT_A: &[u8] = b"MZ fake agent A";
+const AGENT_B: &[u8] = b"MZ fake agent B";
 
 struct MissingEngine;
 
@@ -38,30 +31,6 @@ impl EngineResolver for MissingEngine {
     }
 }
 
-#[derive(Default)]
-struct TestReporter {
-    lines: Vec<String>,
-    output: Vec<u8>,
-}
-
-impl BuildReporter for TestReporter {
-    fn line(&mut self, text: &str) -> io::Result<()> {
-        self.lines.push(text.to_owned());
-        Ok(())
-    }
-
-    fn output(&mut self, bytes: &[u8]) -> io::Result<()> {
-        self.output.extend_from_slice(bytes);
-        Ok(())
-    }
-}
-
-impl TestReporter {
-    fn output_text(&self) -> String {
-        String::from_utf8_lossy(&self.output).into_owned()
-    }
-}
-
 struct Fixture {
     root: tempfile::TempDir,
     context: tempfile::TempDir,
@@ -69,10 +38,12 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        Self {
+        let fixture = Self {
             root: tempfile::tempdir().expect("the data root is created"),
             context: tempfile::tempdir().expect("the context is created"),
-        }
+        };
+        fixture.write("agent/DOSKER.EXE", AGENT_A);
+        fixture
     }
 
     fn root_path(&self) -> &Path {
@@ -81,6 +52,10 @@ impl Fixture {
 
     fn context_path(&self) -> &Path {
         self.context.path()
+    }
+
+    fn agent_path(&self) -> PathBuf {
+        self.context_path().join("agent/DOSKER.EXE")
     }
 
     fn write(&self, relative: &str, bytes: &[u8]) {
@@ -101,7 +76,11 @@ impl Fixture {
 
     fn build(&self, options: &BuildOptions) -> (Result<BuildOutcome, BuildError>, TestReporter) {
         let mut reporter = TestReporter::default();
-        let result = builder(self.root.path()).build(self.context.path(), options, &mut reporter);
+        let result = builder(self.root.path(), &self.agent_path()).build(
+            self.context.path(),
+            options,
+            &mut reporter,
+        );
         (result, reporter)
     }
 
@@ -114,8 +93,9 @@ impl Fixture {
     }
 }
 
-fn builder(root: &Path) -> Builder {
+fn builder(root: &Path, agent: &Path) -> Builder {
     Builder::with_resolver(root.to_path_buf(), Box::new(FakeResolver))
+        .with_agent_executable(agent.to_path_buf())
 }
 
 fn fixed_now() -> DateTime<Utc> {
@@ -411,11 +391,23 @@ fn build_imports_a_local_disk_image() {
     result.expect("the build succeeds");
 
     let tree = built_tree(&fixture);
-    assert!(
-        tree_has(&tree, r"C:\AUTOEXEC.BAT"),
-        "the import tree is kept"
-    );
     assert!(tree_has(&tree, r"C:\APP\HELLO.TXT"), "COPY applies");
+    assert!(
+        tree_has(&tree, r"C:\DOSKER\DOSKER.EXE"),
+        "the agent is injected"
+    );
+    assert!(
+        tree_has(&tree, r"C:\DOSKER\AUTOEXEC.OLD"),
+        "the original startup batch is saved"
+    );
+    match tree.get(&dos(r"C:\AUTOEXEC.BAT")) {
+        Some(TreeNode::File(file)) => assert_eq!(file.bytes, WRAPPED_AUTOEXEC_BYTES),
+        other => panic!("expected the wrapped AUTOEXEC.BAT, got {other:?}"),
+    }
+    match tree.get(&dos(r"C:\DOSKER\DOSKER.EXE")) {
+        Some(TreeNode::File(file)) => assert_eq!(file.bytes, AGENT_A),
+        other => panic!("expected the injected agent, got {other:?}"),
+    }
 
     let manifest = fixture
         .store()
@@ -426,6 +418,133 @@ fn build_imports_a_local_disk_image() {
         "the import keeps the raw disk"
     );
     assert_eq!(imports(&fixture).len(), 1, "the import is stored once");
+}
+
+#[test]
+fn build_from_a_local_import_pins_the_agent() {
+    let fixture = Fixture::new();
+    write_fat_image(&fixture.context_path().join("base.img"));
+    fixture.doskerfile("FROM ./base.img\n");
+
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the build succeeds");
+
+    let lock = fixture.lock();
+    assert_eq!(
+        lock.agent.as_ref().map(|agent| agent.version.as_str()),
+        Some("1.0.0")
+    );
+}
+
+#[test]
+fn build_reimports_a_local_image_when_the_agent_changes() {
+    let fixture = Fixture::new();
+    write_fat_image(&fixture.context_path().join("base.img"));
+    fixture.doskerfile("FROM ./base.img\n");
+
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the first build succeeds");
+
+    fixture.write("agent/DOSKER.EXE", AGENT_B);
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the second build succeeds");
+
+    assert_eq!(
+        imports(&fixture).len(),
+        2,
+        "a changed agent produces a new import"
+    );
+    let tree = built_tree(&fixture);
+    match tree.get(&dos(r"C:\DOSKER\DOSKER.EXE")) {
+        Some(TreeNode::File(file)) => assert_eq!(file.bytes, AGENT_B),
+        other => panic!("expected the second agent, got {other:?}"),
+    }
+}
+
+#[test]
+fn build_reimports_a_pre_slice_local_import() {
+    let fixture = Fixture::new();
+    let source = fixture.context_path().join("base.img");
+    write_fat_image(&source);
+    let source_bytes = fs::read(&source).expect("the source reads");
+    let source_digest = sha256_digest(&source_bytes);
+    let hex = source_digest
+        .strip_prefix("sha256:")
+        .expect("the source digest is prefixed");
+    let old_reference = format!("dosker-build:{hex}");
+    store_tree_base(
+        fixture.root_path(),
+        &old_reference,
+        &read_tree(&source).expect("the source tree reads"),
+        Some(&source_bytes),
+        None,
+    );
+    fixture.doskerfile("FROM ./base.img\n");
+
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the build succeeds");
+
+    let tree = built_tree(&fixture);
+    assert!(
+        tree_has(&tree, r"C:\DOSKER\DOSKER.EXE"),
+        "the combined import injects the agent"
+    );
+    assert!(
+        fixture.store().load(&tag(&old_reference)).is_ok(),
+        "the old source-only tag remains"
+    );
+}
+
+#[test]
+fn build_reimports_a_combined_tag_without_the_source_annotation() {
+    let fixture = Fixture::new();
+    let source = fixture.context_path().join("base.img");
+    write_fat_image(&source);
+    let source_bytes = fs::read(&source).expect("the source reads");
+    let source_digest = sha256_digest(&source_bytes);
+    let agent_bytes = fs::read(fixture.agent_path()).expect("the agent reads");
+    let agent_digest = sha256_digest(&agent_bytes);
+    let combined = sha256_digest(format!("{source_digest}\n{agent_digest}").as_bytes());
+    let hex = combined
+        .strip_prefix("sha256:")
+        .expect("the combined digest is prefixed");
+    let combined_reference = format!("dosker-build:{hex}");
+    store_tree_base(
+        fixture.root_path(),
+        &combined_reference,
+        &read_tree(&source).expect("the source tree reads"),
+        Some(&source_bytes),
+        Some("1.0.0"),
+    );
+    fixture.doskerfile("FROM ./base.img\n");
+
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the build succeeds");
+
+    let tree = built_tree(&fixture);
+    assert!(
+        tree_has(&tree, r"C:\DOSKER\DOSKER.EXE"),
+        "the re-import injects the agent"
+    );
+    let manifest = fixture
+        .store()
+        .load_manifest(&tag(&combined_reference))
+        .expect("the combined tag loads");
+    assert_eq!(
+        manifest.source_disk_digest(),
+        Some(source_digest.as_str()),
+        "the re-import records the source annotation"
+    );
 }
 
 #[test]
@@ -490,23 +609,6 @@ fn build_rejects_a_missing_local_image() {
         !fixture.context_path().join(LOCK_FILE_NAME).exists(),
         "a failed build writes no lock"
     );
-}
-
-#[test]
-fn build_rejects_a_freedos_base() {
-    let fixture = Fixture::new();
-    fixture.doskerfile("FROM freedos:1.3\n");
-
-    let (result, _) = fixture.build(&options(Some("built:latest")));
-    match result {
-        Err(BuildError::UnsupportedBase { reason }) => {
-            assert!(
-                reason.contains("freedos"),
-                "the reason names freedos: {reason}"
-            );
-        }
-        other => panic!("expected an unsupported base, got {other:?}"),
-    }
 }
 
 #[test]

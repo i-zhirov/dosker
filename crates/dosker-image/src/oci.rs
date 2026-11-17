@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use chrono::{DateTime, Utc};
 use dosker_platform::CopyOutcome;
-use dosker_platform::fs::{copy_reflink, ensure_dir_mode, write_atomic};
+use dosker_platform::fs::{copy_full, copy_reflink, ensure_dir_mode, write_atomic};
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 
@@ -18,10 +18,12 @@ use crate::config::{DosFlavour, HistoryEntry, ImageConfig, MachineProfile};
 use crate::error::ImageError;
 use crate::fat::{read_boot_metadata, read_tree};
 use crate::image::ImageMedia;
-use crate::layer::Layer;
+use crate::inject::{apply_agent_injection, plan_agent_injection};
+use crate::layer::{Layer, effective_boot};
 use crate::manifest::{
-    ANNOTATION_RAW_DISK_DIGEST, ANNOTATION_REF_NAME, Descriptor, Index, MEDIA_TYPE_BOOTER,
-    MEDIA_TYPE_CONFIG, MEDIA_TYPE_LAYER, MEDIA_TYPE_MANIFEST, Manifest, OciLayout,
+    ANNOTATION_RAW_DISK_DIGEST, ANNOTATION_REF_NAME, ANNOTATION_SOURCE_DISK_DIGEST, Descriptor,
+    Index, MEDIA_TYPE_BOOTER, MEDIA_TYPE_CONFIG, MEDIA_TYPE_LAYER, MEDIA_TYPE_MANIFEST, Manifest,
+    OciLayout,
 };
 use crate::reference::{ImageDigest, ImageRef, ImageReference};
 use crate::tree::Tree;
@@ -304,6 +306,19 @@ impl OciStore {
         Ok(tree)
     }
 
+    /// Loads the effective boot metadata after applying every layer override.
+    pub fn load_effective_boot(&self, reference: &ImageRef) -> Result<BootMetadata, ImageError> {
+        let (_, manifest, config) = self.resolve(reference)?;
+        if config.booter {
+            return Ok(config.boot);
+        }
+        let mut layers = Vec::with_capacity(manifest.layers.len());
+        for descriptor in &manifest.layers {
+            layers.push(self.load_layer(&descriptor.digest)?);
+        }
+        Ok(effective_boot(&config, &layers))
+    }
+
     /// Writes a config and manifest, then adds or replaces a tag.
     pub fn commit_image(
         &self,
@@ -398,6 +413,7 @@ impl OciStore {
         source: &Path,
         reference: &ImageReference,
         media: ImageMedia,
+        agent: Option<&[u8]>,
         now: DateTime<Utc>,
     ) -> Result<Image, ImageError> {
         let _lock = self.lock_index()?;
@@ -408,37 +424,97 @@ impl OciStore {
 
         let mut created = Vec::new();
         let result = (|| {
-            let raw = self.put_blob_from_file(source)?;
-            if raw.created {
-                created.push(raw.digest.clone());
-            }
-            let mut config = import_config(source, media, raw.size, now);
-            let layer_descriptor = match media {
+            let size = fs::metadata(source).map_or(0, |metadata| metadata.len());
+            let mut config = import_config(source, media, size, now);
+            let mut annotations = BTreeMap::new();
+            let layers = match media {
                 ImageMedia::Booter => {
+                    let raw = self.put_blob_from_file(source)?;
+                    if raw.created {
+                        created.push(raw.digest.clone());
+                    }
                     config.boot = BootMetadata::opaque(raw.size);
                     config.booter = true;
                     config.dos_flavour = DosFlavour::None;
-                    descriptor(MEDIA_TYPE_BOOTER, &raw.digest, raw.size)
+                    vec![descriptor(MEDIA_TYPE_BOOTER, &raw.digest, raw.size)]
                 }
                 ImageMedia::Disk => {
+                    let agent = agent.ok_or(ImageError::AgentMissing)?;
+                    let source_boot = read_boot_metadata(source)?;
+                    let original_tree = read_tree(source)?;
+                    let injection = plan_agent_injection(&original_tree, agent)?;
+
+                    let raw = if injection.applied {
+                        self.ensure_layout()?;
+                        let temp = self.blobs_dir().join(format!(
+                            ".import.{}.{}",
+                            std::process::id(),
+                            TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+                        ));
+                        let stored = copy_full(source, &temp)
+                            .map_err(ImageError::from)
+                            .and_then(|()| apply_agent_injection(&temp, &injection))
+                            .and_then(|()| self.put_blob_from_file(&temp));
+                        let _ = fs::remove_file(&temp);
+                        stored?
+                    } else {
+                        self.put_blob_from_file(source)?
+                    };
+                    if raw.created {
+                        created.push(raw.digest.clone());
+                    }
+
                     let blob_path = self.blob_path(&raw.digest)?;
                     let boot = read_boot_metadata(&blob_path)?;
-                    let tree = read_tree(&blob_path)?;
-                    let layer = Layer::from_delta(&tree.to_delta(), "import", None, None)?;
-                    let tar = layer.write_tar()?;
-                    let blob = self.put_blob(&tar)?;
-                    if blob.created {
-                        created.push(blob.digest.clone());
+                    if boot != source_boot {
+                        return Err(ImageError::Corrupt {
+                            path: blob_path,
+                            message: "agent injection changed the boot metadata".to_owned(),
+                        });
                     }
+
+                    let first = Layer::from_delta(&original_tree.to_delta(), "import", None, None)?;
+                    let first_blob = self.put_blob(&first.write_tar()?)?;
+                    if first_blob.created {
+                        created.push(first_blob.digest.clone());
+                    }
+                    let first_descriptor =
+                        descriptor(MEDIA_TYPE_LAYER, &first_blob.digest, first_blob.size);
+                    let mut layers = vec![first_descriptor.clone()];
+
+                    if injection.applied {
+                        let second = Layer::from_delta(
+                            &injection.delta,
+                            "agent-inject",
+                            Some(first_descriptor.digest.clone()),
+                            None,
+                        )?;
+                        let second_blob = self.put_blob(&second.write_tar()?)?;
+                        if second_blob.created {
+                            created.push(second_blob.digest.clone());
+                        }
+                        layers.push(descriptor(
+                            MEDIA_TYPE_LAYER,
+                            &second_blob.digest,
+                            second_blob.size,
+                        ));
+                    }
+
                     config.boot = boot.clone();
                     config.booter = false;
                     config.dos_flavour = DosFlavour::Other;
+                    config.agent_version = Some(dosker_agent_proto::AGENT_VERSION.to_owned());
                     config.machine.disk_interface = match boot.layout {
                         BootLayout::MbrPartitioned => "ide".to_owned(),
                         BootLayout::Superfloppy => "floppy".to_owned(),
                         BootLayout::Opaque => unreachable!("disk import is not opaque"),
                     };
-                    descriptor(MEDIA_TYPE_LAYER, &blob.digest, blob.size)
+                    annotations.insert(ANNOTATION_RAW_DISK_DIGEST.to_owned(), raw.digest.clone());
+                    annotations.insert(
+                        ANNOTATION_SOURCE_DISK_DIGEST.to_owned(),
+                        sha256_file(source)?,
+                    );
+                    layers
                 }
             };
             config.validate()?;
@@ -446,13 +522,9 @@ impl OciStore {
             if config_blob.created {
                 created.push(config_blob.digest.clone());
             }
-            let mut annotations = BTreeMap::new();
-            if media == ImageMedia::Disk {
-                annotations.insert(ANNOTATION_RAW_DISK_DIGEST.to_owned(), raw.digest.clone());
-            }
             let manifest = Manifest::new(
                 descriptor(MEDIA_TYPE_CONFIG, &config_blob.digest, config_blob.size),
-                vec![layer_descriptor],
+                layers,
                 if annotations.is_empty() {
                     None
                 } else {
@@ -793,6 +865,26 @@ fn import_config(source: &Path, media: ImageMedia, size: u64, now: DateTime<Utc>
             comment: Some(source.display().to_string()),
         }],
     }
+}
+
+fn sha256_file(path: &Path) -> Result<String, ImageError> {
+    let mut file = File::open(path).map_err(|source| ImageError::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer).map_err(|source| ImageError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("sha256:{}", hex(&hasher.finalize())))
 }
 
 fn descriptor(media_type: &str, digest: &str, size: u64) -> Descriptor {

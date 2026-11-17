@@ -27,14 +27,26 @@ gh variable set DOSKER_FREEDOS_SOURCE \
   --body 'https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.3/official/FD13-FloppyEdition.zip'
 ```
 
-The value can be:
+For CI the value can be:
 
 - a FreeDOS Floppy Edition ZIP URL;
 - a raw boot floppy image URL;
 - a local path to a boot floppy image.
 
-For a ZIP, CI verifies the archive and extracts `144m/x86BOOT.img` before it
-builds the base image.
+`.github/scripts/fetch-freedos-source.sh` resolves the value to a local boot
+floppy image before the build. It verifies and extracts a ZIP, downloads a raw
+image, or uses a local path.
+
+The CLI loader is stricter than CI: when it has to build the base, it requires
+`DOSKER_FREEDOS_SOURCE` to name a local boot floppy image. A URL or ZIP is a CI
+repository-variable value only. A stored `freedos:1.3` base is reused without
+the source or agent inputs. The same local path feeds a first build or a
+rebuild.
+
+The base build also needs the DOS agent. It reads `agent/build/DOSKER.EXE` by
+default, or the path in `DOSKER_AGENT_EXE`. See
+[FreeDOS base images](docs/base-images.md) for the pinned inputs, the source
+layout, and the update procedure.
 
 ### QEMU runtime suites
 
@@ -108,8 +120,8 @@ SHA-256:
 75a4e11a7fce6f124e20927b3022b4b715a2a3f7324c5f5bfea42d90d80eb072
 ```
 
-The workflow checks this hash with `sha256sum -c` before it extracts the boot
-floppy.
+The fetch script checks this hash with `sha256sum` or `shasum -a 256` before
+it extracts the boot floppy.
 
 ### OpenWatcom install
 
@@ -135,4 +147,5 @@ then runs the Rust QEMU runtime suite.
 - [Agent protocol](.sdd/specs/2026-11-01-dosker/contracts/agent-protocol.md)
 - [Roadmap](.sdd/specs/2026-11-01-dosker/roadmap.md)
 - [DOS agent plan](.sdd/specs/2026-11-01-dosker/plan-dos-agent-serial.md)
+- [FreeDOS base images](docs/base-images.md)
 - [Windows runtime](docs/windows.md)

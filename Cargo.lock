@@ -352,6 +352,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "chrono",
+ "dosker-agent-proto",
  "dosker-core",
  "dosker-platform",
  "fatfs",

@@ -25,7 +25,14 @@ fn import_image(
         ImageMedia::Disk
     };
 
-    let record = context.images.import(&args.file, &reference, media, now)?;
+    let agent = if media == ImageMedia::Disk {
+        Some(dosker_image::freedos::load_agent_executable()?)
+    } else {
+        None
+    };
+    let record = context
+        .images
+        .import(&args.file, &reference, media, agent.as_deref(), now)?;
     context.console.line(&format!(
         "imported {}:{} {} {} bytes",
         record.name, record.tag, record.manifest_digest, record.size

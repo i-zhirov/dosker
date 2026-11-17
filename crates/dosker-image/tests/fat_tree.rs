@@ -1,8 +1,9 @@
 mod support;
 
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::{Seek, SeekFrom, Write};
 
-use dosker_image::{BootLayout, FatType, read_boot_metadata, read_tree};
+use dosker_image::{BootLayout, FatType, ImageError, read_boot_metadata, read_tree};
 use support::{make_fat16_image, make_fat16_image_with_label, write_fat_dir, write_fat_file};
 
 const MIB: u64 = 1024 * 1024;
@@ -120,4 +121,43 @@ fn read_boot_metadata_rejects_a_non_bootable_file() {
     let path = dir.path().join("blank.img");
     fs::write(&path, vec![0u8; 4096]).unwrap();
     assert!(read_boot_metadata(&path).is_err());
+}
+
+#[test]
+fn read_tree_names_a_non_bootable_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("plain.img");
+    fs::write(&path, vec![0u8; 4096]).unwrap();
+
+    match read_tree(&path) {
+        Err(ImageError::NotBootable(reported)) => assert_eq!(reported, path),
+        other => panic!("expected NotBootable, got {other:?}"),
+    }
+}
+
+#[test]
+fn read_boot_metadata_names_a_non_bootable_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("plain.img");
+    fs::write(&path, vec![0u8; 4096]).unwrap();
+
+    match read_boot_metadata(&path) {
+        Err(ImageError::NotBootable(reported)) => assert_eq!(reported, path),
+        other => panic!("expected NotBootable, got {other:?}"),
+    }
+}
+
+#[test]
+fn read_tree_names_a_file_with_a_corrupt_volume() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = mbr_image(dir.path());
+    let mut file = OpenOptions::new().write(true).open(&path).unwrap();
+    file.seek(SeekFrom::Start(MIB)).unwrap();
+    file.write_all(&[0u8; 512]).unwrap();
+    drop(file);
+
+    match read_tree(&path) {
+        Err(ImageError::Corrupt { path: reported, .. }) => assert_eq!(reported, path),
+        other => panic!("expected Corrupt, got {other:?}"),
+    }
 }

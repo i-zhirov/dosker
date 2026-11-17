@@ -91,6 +91,65 @@ pub fn write_fat_dir(path: &Path, partition_offset: u64, name: &str) {
     });
 }
 
+/// Sets one attribute byte on a root-directory short-name entry.
+pub fn set_fat_attribute(image: &Path, partition_offset: u64, short_name: &str, attribute: u8) {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(image)
+        .expect("open image");
+    let mut boot = [0u8; SECTOR_SIZE as usize];
+    file.seek(SeekFrom::Start(partition_offset))
+        .expect("seek boot sector");
+    file.read_exact(&mut boot).expect("read boot sector");
+
+    let bytes_per_sector = u64::from(u16::from_le_bytes([boot[11], boot[12]]));
+    let reserved_sectors = u64::from(u16::from_le_bytes([boot[14], boot[15]]));
+    let fat_count = u64::from(boot[16]);
+    let root_entries = u64::from(u16::from_le_bytes([boot[17], boot[18]]));
+    let sectors_per_fat = u64::from(u16::from_le_bytes([boot[22], boot[23]]));
+    let root_offset =
+        partition_offset + (reserved_sectors + fat_count * sectors_per_fat) * bytes_per_sector;
+
+    let wanted = short_name_bytes(short_name);
+    for index in 0..root_entries {
+        let entry_offset = root_offset + index * 32;
+        let mut record = [0u8; 32];
+        file.seek(SeekFrom::Start(entry_offset))
+            .expect("seek directory entry");
+        file.read_exact(&mut record).expect("read directory entry");
+        if record[0] == 0x00 {
+            break;
+        }
+        if record[0] == 0xE5 {
+            continue;
+        }
+        if record[..11] == wanted {
+            file.seek(SeekFrom::Start(entry_offset + 11))
+                .expect("seek attribute byte");
+            file.write_all(&[attribute]).expect("write attribute byte");
+            file.flush().expect("flush attribute byte");
+            return;
+        }
+    }
+    panic!("directory entry {short_name} was not found");
+}
+
+fn short_name_bytes(name: &str) -> [u8; 11] {
+    let mut bytes = [b' '; 11];
+    let (stem, extension) = match name.split_once('.') {
+        Some((stem, extension)) => (stem, extension),
+        None => (name, ""),
+    };
+    for (slot, byte) in bytes[..8].iter_mut().zip(stem.bytes().take(8)) {
+        *slot = byte.to_ascii_uppercase();
+    }
+    for (slot, byte) in bytes[8..].iter_mut().zip(extension.bytes().take(3)) {
+        *slot = byte.to_ascii_uppercase();
+    }
+    bytes
+}
+
 /// Writes a file with an explicit short name. Long names are rejected by the reader.
 pub fn write_fat_long_name(path: &Path, partition_offset: u64, name: &str, data: &[u8]) {
     write_fat_file(path, partition_offset, name, data);

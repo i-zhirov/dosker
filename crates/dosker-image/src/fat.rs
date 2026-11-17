@@ -56,26 +56,25 @@ pub fn fat_region(image: &Path) -> Result<FatRegion, ImageError> {
         path: image.to_path_buf(),
         source,
     })?;
-    let file_size = file
-        .metadata()
-        .map_err(|source| ImageError::Io {
-            path: image.to_path_buf(),
-            source,
-        })?
-        .len();
+    fat_region_from(&mut file, image)
+}
+
+/// Detects the FAT region from the first sector and the reader's end offset.
+fn fat_region_from<R: Read + Seek>(source: &mut R, path: &Path) -> Result<FatRegion, ImageError> {
+    let file_size = source
+        .seek(SeekFrom::End(0))
+        .map_err(|source| image_io(path, source))?;
+    source
+        .seek(SeekFrom::Start(0))
+        .map_err(|source| image_io(path, source))?;
 
     let mut sector = [0u8; BOOT_SECTOR_BYTES];
-    match file.read_exact(&mut sector) {
+    match source.read_exact(&mut sector) {
         Ok(()) => {}
         Err(source) if source.kind() == ErrorKind::UnexpectedEof => {
-            return Err(ImageError::NotBootable(image.to_path_buf()));
+            return Err(ImageError::NotBootable(path.to_path_buf()));
         }
-        Err(source) => {
-            return Err(ImageError::Io {
-                path: image.to_path_buf(),
-                source,
-            });
-        }
+        Err(source) => return Err(image_io(path, source)),
     }
 
     if has_signature(&sector)
@@ -92,7 +91,41 @@ pub fn fat_region(image: &Path) -> Result<FatRegion, ImageError> {
         });
     }
 
-    Err(ImageError::NotBootable(image.to_path_buf()))
+    Err(ImageError::NotBootable(path.to_path_buf()))
+}
+
+/// The fixed filesystem time used for generated image entries.
+#[derive(Debug)]
+pub(crate) struct FatFixedTime;
+
+impl fatfs::TimeProvider for FatFixedTime {
+    fn get_current_date(&self) -> fatfs::Date {
+        fatfs::Date {
+            year: 1980,
+            month: 1,
+            day: 1,
+        }
+    }
+
+    fn get_current_date_time(&self) -> fatfs::DateTime {
+        fatfs::DateTime {
+            date: self.get_current_date(),
+            time: fatfs::Time {
+                hour: 0,
+                min: 0,
+                sec: 0,
+                millis: 0,
+            },
+        }
+    }
+}
+
+/// The single fixed-time provider for generated FAT volumes.
+pub(crate) static FAT_FIXED_TIME: FatFixedTime = FatFixedTime;
+
+/// Mount options that stamp every generated entry with the fixed time.
+pub(crate) fn fixed_fs_options() -> FsOptions {
+    FsOptions::new().time_provider(&FAT_FIXED_TIME)
 }
 
 /// Writes the agent configuration file into the image's FAT volume.
@@ -135,8 +168,22 @@ pub fn write_config(image: &Path, control_port: u8, baud: u32) -> Result<(), Ima
 
 /// Reads the FAT tree rooted at `C:\`.
 pub fn read_tree(image: &Path) -> Result<Tree, ImageError> {
-    let region = fat_region(image)?;
-    let fs = open_volume(image, region)?;
+    let file = File::open(image).map_err(|source| ImageError::Io {
+        path: image.to_path_buf(),
+        source,
+    })?;
+    read_tree_from(file, image)
+}
+
+/// Reads the FAT tree rooted at `C:\` from any seekable reader.
+pub(crate) fn read_tree_from<R: Read + Write + Seek>(
+    mut source: R,
+    path: &Path,
+) -> Result<Tree, ImageError> {
+    let region = fat_region_from(&mut source, path)?;
+    let disk = PartitionFile::new(source, region.offset, region.length);
+    let fs = FileSystem::new(disk, FsOptions::new())
+        .map_err(|source| corrupt(path, format!("cannot mount FAT volume: {source}")))?;
     let mut delta = LayerDelta::new();
     walk_dir(&fs.root_dir(), &DosPath::parse("C:")?, &mut delta)?;
     let mut tree = Tree::new();
@@ -146,41 +193,43 @@ pub fn read_tree(image: &Path) -> Result<Tree, ImageError> {
 
 /// Reads the boot metadata of a raw DOS image.
 pub fn read_boot_metadata(image: &Path) -> Result<BootMetadata, ImageError> {
-    let region = fat_region(image)?;
-    let mut file = File::open(image).map_err(|source| ImageError::Io {
+    let file = File::open(image).map_err(|source| ImageError::Io {
         path: image.to_path_buf(),
         source,
     })?;
-    let disk_size = file
-        .metadata()
-        .map_err(|source| ImageError::Io {
-            path: image.to_path_buf(),
-            source,
-        })?
-        .len();
+    read_boot_metadata_from(file, image)
+}
+
+/// Reads the boot metadata of a raw DOS image from any seekable reader.
+pub(crate) fn read_boot_metadata_from<R: Read + Write + Seek>(
+    mut source: R,
+    path: &Path,
+) -> Result<BootMetadata, ImageError> {
+    let region = fat_region_from(&mut source, path)?;
+    let disk_size = source
+        .seek(SeekFrom::End(0))
+        .map_err(|source| image_io(path, source))?;
 
     let mut boot_sector = [0u8; BOOT_SECTOR_BYTES];
-    file.seek(SeekFrom::Start(region.offset))
-        .and_then(|_| file.read_exact(&mut boot_sector))
-        .map_err(|source| ImageError::Io {
-            path: image.to_path_buf(),
-            source,
-        })?;
+    source
+        .seek(SeekFrom::Start(region.offset))
+        .and_then(|_| source.read_exact(&mut boot_sector))
+        .map_err(|source| image_io(path, source))?;
     let mbr = match region.layout {
         FatLayout::MbrPartitioned => {
             let mut sector = [0u8; BOOT_SECTOR_BYTES];
-            file.seek(SeekFrom::Start(0))
-                .and_then(|_| file.read_exact(&mut sector))
-                .map_err(|source| ImageError::Io {
-                    path: image.to_path_buf(),
-                    source,
-                })?;
+            source
+                .seek(SeekFrom::Start(0))
+                .and_then(|_| source.read_exact(&mut sector))
+                .map_err(|source| image_io(path, source))?;
             Some(BlobRef::from_bytes(&sector))
         }
         FatLayout::Superfloppy => None,
     };
 
-    let fs = open_volume(image, region)?;
+    let disk = PartitionFile::new(source, region.offset, region.length);
+    let fs = FileSystem::new(disk, FsOptions::new())
+        .map_err(|source| corrupt(path, format!("cannot mount FAT volume: {source}")))?;
     let fat_type = match fs.fat_type() {
         fatfs::FatType::Fat12 => FatType::Fat12,
         fatfs::FatType::Fat16 => FatType::Fat16,
@@ -230,18 +279,8 @@ pub fn read_boot_metadata(image: &Path) -> Result<BootMetadata, ImageError> {
     })
 }
 
-fn open_volume(image: &Path, region: FatRegion) -> Result<FileSystem<PartitionFile>, ImageError> {
-    let file = File::open(image).map_err(|source| ImageError::Io {
-        path: image.to_path_buf(),
-        source,
-    })?;
-    let disk = PartitionFile::new(file, region.offset, region.length);
-    FileSystem::new(disk, FsOptions::new())
-        .map_err(|source| corrupt(image, format!("cannot mount FAT volume: {source}")))
-}
-
-fn walk_dir(
-    dir: &Dir<'_, PartitionFile>,
+fn walk_dir<R: Read + Write + Seek>(
+    dir: &Dir<'_, PartitionFile<R>>,
     prefix: &DosPath,
     delta: &mut LayerDelta,
 ) -> Result<(), ImageError> {
@@ -332,6 +371,38 @@ fn read_bpb_geometry(sector: &[u8; BOOT_SECTOR_BYTES]) -> (u32, u32, u32) {
     )
 }
 
+/// Reads a file by DOS path, returning `None` only when the file is absent.
+pub(crate) fn read_file_if_present(
+    image: &Path,
+    dos_path: &str,
+) -> Result<Option<Vec<u8>>, ImageError> {
+    let region = fat_region(image)?;
+    let file = File::open(image).map_err(|source| ImageError::Io {
+        path: image.to_path_buf(),
+        source,
+    })?;
+    let disk = PartitionFile::new(file, region.offset, region.length);
+    let fs = FileSystem::new(disk, FsOptions::new())
+        .map_err(|source| corrupt(image, format!("cannot mount FAT volume: {source}")))?;
+    let root = fs.root_dir();
+    let mut entry = match root.open_file(&fat_path(dos_path)) {
+        Ok(entry) => entry,
+        Err(source) if source.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(source) => {
+            return Err(corrupt(
+                image,
+                format!("file {dos_path} is unreadable: {source}"),
+            ));
+        }
+    };
+
+    let mut data = Vec::new();
+    entry
+        .read_to_end(&mut data)
+        .map_err(|source| corrupt(image, format!("cannot read {dos_path}: {source}")))?;
+    Ok(Some(data))
+}
+
 /// Reads a file from the image's FAT volume by DOS path.
 pub fn read_file(image: &Path, dos_path: &str) -> Result<Vec<u8>, ImageError> {
     let region = fat_region(image)?;
@@ -364,7 +435,14 @@ fn corrupt(image: &Path, message: String) -> ImageError {
     }
 }
 
-fn fat_path(dos_path: &str) -> String {
+fn image_io(path: &Path, source: io::Error) -> ImageError {
+    ImageError::Io {
+        path: path.to_path_buf(),
+        source,
+    }
+}
+
+pub(crate) fn fat_path(dos_path: &str) -> String {
     let mut path = dos_path;
     let bytes = path.as_bytes();
     if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
@@ -457,18 +535,18 @@ fn le_u32(bytes: &[u8]) -> u32 {
     u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
-/// A read/write/seek view limited to one byte range of a file.
-struct PartitionFile {
-    file: File,
+/// A read/write/seek view limited to one byte range of a readable source.
+pub(crate) struct PartitionFile<R> {
+    inner: R,
     base: u64,
     length: u64,
     position: u64,
 }
 
-impl PartitionFile {
-    fn new(file: File, base: u64, length: u64) -> Self {
+impl<R: Read + Write + Seek> PartitionFile<R> {
+    pub(crate) fn new(inner: R, base: u64, length: u64) -> Self {
         Self {
-            file,
+            inner,
             base,
             length,
             position: 0,
@@ -480,20 +558,21 @@ impl PartitionFile {
     }
 }
 
-impl Read for PartitionFile {
+impl<R: Read + Write + Seek> Read for PartitionFile<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let limit = self.remaining().min(buf.len() as u64) as usize;
         if limit == 0 {
             return Ok(0);
         }
-        self.file.seek(SeekFrom::Start(self.base + self.position))?;
-        let read = self.file.read(&mut buf[..limit])?;
+        self.inner
+            .seek(SeekFrom::Start(self.base + self.position))?;
+        let read = self.inner.read(&mut buf[..limit])?;
         self.position += read as u64;
         Ok(read)
     }
 }
 
-impl Write for PartitionFile {
+impl<R: Read + Write + Seek> Write for PartitionFile<R> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let limit = self.remaining().min(buf.len() as u64) as usize;
         if limit == 0 && !buf.is_empty() {
@@ -502,18 +581,19 @@ impl Write for PartitionFile {
                 "write past the end of the partition",
             ));
         }
-        self.file.seek(SeekFrom::Start(self.base + self.position))?;
-        let written = self.file.write(&buf[..limit])?;
+        self.inner
+            .seek(SeekFrom::Start(self.base + self.position))?;
+        let written = self.inner.write(&buf[..limit])?;
         self.position += written as u64;
         Ok(written)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.file.flush()
+        self.inner.flush()
     }
 }
 
-impl Seek for PartitionFile {
+impl<R: Read + Write + Seek> Seek for PartitionFile<R> {
     fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
         let target = match from {
             SeekFrom::Start(offset) => i128::from(offset),

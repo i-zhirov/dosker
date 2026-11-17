@@ -100,6 +100,13 @@ fn image_import_booter_accepts_an_opaque_blob() {
         stderr_text(&output)
     );
     assert!(stdout_text(&output).contains("booter-test:latest"));
+
+    let store = OciStore::new(root.path().to_path_buf());
+    let reference = ImageReference::parse("booter-test:latest").expect("parse reference");
+    let config = store
+        .load_config(&ImageRef::Tag(reference))
+        .expect("load the booter config");
+    assert_eq!(config.agent_version, None, "a booter has no agent");
 }
 
 #[test]
@@ -132,6 +139,21 @@ fn image_import_accepts_the_mbr_cli_fixture() {
         Some(0),
         "stderr: {}",
         stderr_text(&output)
+    );
+
+    let store = OciStore::new(root.path().to_path_buf());
+    let reference = ImageReference::parse("freedos-test:latest").expect("parse reference");
+    let config = store
+        .load_config(&ImageRef::Tag(reference.clone()))
+        .expect("load the imported config");
+    assert_eq!(config.agent_version.as_deref(), Some("1.0.0"));
+    let tree = store
+        .load_tree(&ImageRef::Tag(reference))
+        .expect("load the imported tree");
+    assert!(
+        tree.files()
+            .any(|file| file.path.as_str() == "DOSKER/DOSKER.EXE"),
+        "the imported image carries the agent"
     );
 }
 

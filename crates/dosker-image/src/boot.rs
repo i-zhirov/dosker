@@ -92,6 +92,20 @@ impl BootMetadata {
         }
     }
 
+    /// Compares the booted artifacts, ignoring inline bytes.
+    ///
+    /// `fat_type`, `volume_label`, and `media_descriptor` are not compared
+    /// because they are covered by the boot-sector digest.
+    pub fn boot_artifacts_equal(&self, other: &Self) -> bool {
+        self.layout == other.layout
+            && self.disk_size == other.disk_size
+            && self.geometry == other.geometry
+            && self.partition_start == other.partition_start
+            && self.partition_sectors == other.partition_sectors
+            && blob_digest(&self.mbr) == blob_digest(&other.mbr)
+            && blob_digest(&self.boot_sector) == blob_digest(&other.boot_sector)
+    }
+
     /// Validates the fields of one layout.
     pub fn validate(&self) -> Result<(), ImageError> {
         if self.disk_size == 0 {
@@ -134,6 +148,10 @@ impl BootMetadata {
         }
         Ok(())
     }
+}
+
+fn blob_digest(blob: &Option<BlobRef>) -> Option<&str> {
+    blob.as_ref().map(|blob| blob.sha256.as_str())
 }
 
 fn validate_fat(metadata: &BootMetadata) -> Result<(), ImageError> {

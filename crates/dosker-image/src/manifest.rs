@@ -20,6 +20,8 @@ pub const MEDIA_TYPE_INDEX: &str = "application/vnd.oci.image.index.v1+json";
 pub const ANNOTATION_REF_NAME: &str = "org.opencontainers.image.ref.name";
 /// The DOSker raw-disk annotation.
 pub const ANNOTATION_RAW_DISK_DIGEST: &str = "org.dosker.rawdisk.digest";
+/// The DOSker source-disk annotation.
+pub const ANNOTATION_SOURCE_DISK_DIGEST: &str = "org.dosker.source.digest";
 /// The OCI layout version.
 pub const OCI_LAYOUT_VERSION: &str = "1.0.0";
 
@@ -67,6 +69,14 @@ impl Manifest {
         self.annotations
             .as_ref()
             .and_then(|map| map.get(ANNOTATION_RAW_DISK_DIGEST))
+            .map(String::as_str)
+    }
+
+    /// Returns the source-disk digest annotation.
+    pub fn source_disk_digest(&self) -> Option<&str> {
+        self.annotations
+            .as_ref()
+            .and_then(|map| map.get(ANNOTATION_SOURCE_DISK_DIGEST))
             .map(String::as_str)
     }
 

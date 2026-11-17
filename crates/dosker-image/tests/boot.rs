@@ -67,3 +67,83 @@ fn volume_label_is_limited_to_eleven_characters() {
     metadata.volume_label = Some("012345678901".to_owned());
     assert!(metadata.validate().is_err());
 }
+
+fn mbr_boot(sector_byte: u8) -> BootMetadata {
+    BootMetadata {
+        layout: BootLayout::MbrPartitioned,
+        disk_size: 16 * 1024 * 1024,
+        geometry: Geometry {
+            cylinders: 16,
+            heads: 16,
+            sectors: 32,
+            sector_size: 512,
+        },
+        partition_start: Some(2048),
+        partition_sectors: Some(16_384),
+        mbr: Some(BlobRef::from_bytes(&[0x11; 512])),
+        boot_sector: Some(BlobRef::from_bytes(&[sector_byte; 512])),
+        fat_type: Some(FatType::Fat16),
+        volume_label: Some("DOSKER".to_owned()),
+        media_descriptor: Some(0xF8),
+    }
+}
+
+#[test]
+fn boot_artifacts_ignore_inline_bytes() {
+    let with_inline = mbr_boot(0xAA);
+    let mut without_inline = with_inline.clone();
+    without_inline.mbr.as_mut().unwrap().bytes_inline = None;
+    without_inline.boot_sector.as_mut().unwrap().bytes_inline = None;
+
+    assert!(with_inline.boot_artifacts_equal(&without_inline));
+    assert!(without_inline.boot_artifacts_equal(&with_inline));
+}
+
+#[test]
+fn boot_artifacts_detect_a_changed_boot_sector() {
+    let before = mbr_boot(0xAA);
+    let after = mbr_boot(0xAB);
+
+    assert!(!before.boot_artifacts_equal(&after));
+    assert!(!after.boot_artifacts_equal(&before));
+}
+
+#[test]
+fn boot_artifacts_detect_a_changed_mbr() {
+    let before = mbr_boot(0xAA);
+    let mut after = before.clone();
+    after.mbr = Some(BlobRef::from_bytes(&[0x22; 512]));
+
+    assert!(!before.boot_artifacts_equal(&after));
+    assert!(!after.boot_artifacts_equal(&before));
+}
+
+#[test]
+fn boot_artifacts_detect_changed_partition_bounds() {
+    let base = mbr_boot(0xAA);
+
+    let mut moved_start = base.clone();
+    moved_start.partition_start = Some(4096);
+    assert!(!base.boot_artifacts_equal(&moved_start));
+
+    let mut resized = base.clone();
+    resized.partition_sectors = Some(8192);
+    assert!(!base.boot_artifacts_equal(&resized));
+
+    let mut resized_disk = base.clone();
+    resized_disk.disk_size += 512;
+    assert!(!base.boot_artifacts_equal(&resized_disk));
+}
+
+#[test]
+fn boot_artifacts_detect_a_changed_geometry() {
+    let base = mbr_boot(0xAA);
+
+    let mut changed_heads = base.clone();
+    changed_heads.geometry.heads = 8;
+    assert!(!base.boot_artifacts_equal(&changed_heads));
+
+    let mut changed_sectors = base.clone();
+    changed_sectors.geometry.sectors = 63;
+    assert!(!base.boot_artifacts_equal(&changed_sectors));
+}

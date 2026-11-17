@@ -3,18 +3,64 @@
 //! Fixtures for the build orchestration tests.
 
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write};
 use std::path::Path;
 
+use dosker_build::{BuildError, BuildReporter, EngineResolver, ResolvedEngine};
 use dosker_image::{
-    ANNOTATION_RAW_DISK_DIGEST, BlobRef, BootLayout, BootMetadata, DosFlavour,
-    FatType as ImageFatType, Geometry, HistoryEntry, ImageConfig, ImageReference, Layer,
-    MEDIA_TYPE_BOOTER, MachineProfile, OciStore, Tree, fixed_timestamp,
+    ANNOTATION_RAW_DISK_DIGEST, BaseInputs, BlobRef, BootLayout, BootMetadata, DosFlavour,
+    FatType as ImageFatType, FreedosPins, Geometry, HistoryEntry, ImageConfig, ImageReference,
+    Layer, MEDIA_TYPE_BOOTER, MachineProfile, OciStore, Tree, fixed_timestamp, sha256_digest,
 };
 use fatfs::{FatType, FileSystem, FormatVolumeOptions, FsOptions, format_volume};
 
 const MIB: u64 = 1024 * 1024;
+
+const FREEDOS_SOURCE_KERNEL: &[u8] = b"synthetic FreeDOS kernel";
+const FREEDOS_SOURCE_COMMAND: &[u8] = b"synthetic FreeDOS command interpreter";
+const FAKE_AGENT: &[u8] = b"MZ synthetic dosker agent";
+
+/// Resolves every engine through a fixed host result.
+pub struct FakeResolver;
+
+impl EngineResolver for FakeResolver {
+    fn resolve(&self, engine: &str) -> Result<ResolvedEngine, BuildError> {
+        Ok(ResolvedEngine {
+            name: engine.to_owned(),
+            version: "qemu 9.0.0".to_owned(),
+            source: "path".to_owned(),
+        })
+    }
+}
+
+/// Collects reporter lines and command output.
+#[derive(Default)]
+pub struct TestReporter {
+    /// The reported progress lines.
+    pub lines: Vec<String>,
+    /// The captured command output.
+    pub output: Vec<u8>,
+}
+
+impl BuildReporter for TestReporter {
+    fn line(&mut self, text: &str) -> io::Result<()> {
+        self.lines.push(text.to_owned());
+        Ok(())
+    }
+
+    fn output(&mut self, bytes: &[u8]) -> io::Result<()> {
+        self.output.extend_from_slice(bytes);
+        Ok(())
+    }
+}
+
+impl TestReporter {
+    /// Returns the captured command output as text.
+    pub fn output_text(&self) -> String {
+        String::from_utf8_lossy(&self.output).into_owned()
+    }
+}
 
 /// Builds a valid MBR-partitioned boot metadata value.
 pub fn sample_boot() -> BootMetadata {
@@ -160,6 +206,71 @@ pub fn write_fat_image(path: &Path) {
             .expect("write AUTOEXEC.BAT");
     }
     fs.unmount().expect("unmount the disk image");
+}
+
+/// Writes a 4 MiB superfloppy FAT16 image holding the FreeDOS inputs.
+pub fn write_freedos_source(path: &Path) -> (Vec<u8>, Vec<u8>) {
+    let size = 4 * MIB;
+    let file = File::create(path).expect("create the FreeDOS source");
+    file.set_len(size).expect("size the FreeDOS source");
+
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .expect("open the FreeDOS source");
+    let options = FormatVolumeOptions::new()
+        .fat_type(FatType::Fat16)
+        .total_sectors((size / 512) as u32);
+    format_volume(file, options).expect("format the FreeDOS source");
+
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .expect("reopen the FreeDOS source");
+    let fs = FileSystem::new(file, FsOptions::new()).expect("mount the FreeDOS source");
+    {
+        let root = fs.root_dir();
+        let mut kernel = root.create_file("KERNEL.SYS").expect("create KERNEL.SYS");
+        kernel
+            .write_all(FREEDOS_SOURCE_KERNEL)
+            .expect("write KERNEL.SYS");
+        let mut command = root.create_file("COMMAND.COM").expect("create COMMAND.COM");
+        command
+            .write_all(FREEDOS_SOURCE_COMMAND)
+            .expect("write COMMAND.COM");
+    }
+    fs.unmount().expect("unmount the FreeDOS source");
+
+    (
+        FREEDOS_SOURCE_KERNEL.to_vec(),
+        FREEDOS_SOURCE_COMMAND.to_vec(),
+    )
+}
+
+/// Writes a small fake agent executable.
+pub fn write_agent(path: &Path) -> Vec<u8> {
+    fs::write(path, FAKE_AGENT).expect("write the agent executable");
+    FAKE_AGENT.to_vec()
+}
+
+/// Builds inputs whose pins match the written source and agent files.
+pub fn synthetic_inputs(source: &Path, agent: &Path) -> BaseInputs {
+    let kernel =
+        dosker_image::read_file(source, "\\KERNEL.SYS").expect("read the source KERNEL.SYS");
+    let command =
+        dosker_image::read_file(source, "\\COMMAND.COM").expect("read the source COMMAND.COM");
+    let agent_bytes = fs::read(agent).expect("read the agent executable");
+    BaseInputs {
+        source: source.to_path_buf(),
+        agent_executable: agent.to_path_buf(),
+        pins: FreedosPins {
+            kernel_sha256: sha256_digest(&kernel),
+            command_sha256: sha256_digest(&command),
+            agent_sha256: sha256_digest(&agent_bytes),
+        },
+    }
 }
 
 /// Returns an empty canonical tree.
