@@ -242,7 +242,7 @@ read-back of MBR, partition table, and boot sector, the exclusion of
 `C:\DOSKER` from the delta, and the private writable disk for the build VM. Out
 of scope: batching consecutive `RUN` steps.
 
-- **Status:** In Progress
+- **Status:** Implemented
 - **Depends on:** Slices 2, 5, 6, and 7.
 - **Requirements:** FR-002, FR-003, FR-007
 - **Manual prerequisites:** QEMU. The FreeDOS base and the agent from Slices

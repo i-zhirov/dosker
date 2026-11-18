@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-15
-- **Status**: In Progress
+- **Status**: Implemented
 - **Design**: [`.sdd/specs/2026-11-01-dosker/design.md`](design.md)
 - **Roadmap**: [`.sdd/specs/2026-11-01-dosker/roadmap.md`](roadmap.md) — slice: `in-dos-run`
 - **Depends on**: Slices 2 (`dos-agent-serial`), 5 (`image-store-and-tree`), 6 (`doskerfile-and-host-build`), and 7 (`freedos-base-builder`), all Implemented
@@ -335,7 +335,7 @@ These names and signatures are used by more than one task and must not drift.
         - `resolve_lock_keeps_existing_engine_pins` — a lock with `qemu` version A, `resolve_lock` for final `dosbox-x`, the returned lock still contains the `qemu` pin.
     - **Verify:** `cargo test -p dosker-build --test run_in_dos` and `cargo test -p dosker-build --test build` and `cargo test -p dosker-build --test freedos_base` and `cargo test -p dosker-build --test lock_resolution`
 
-- [ ] **Task 8: Real QEMU integration, boot metadata, and guest reboot**
+- [x] **Task 8: Real QEMU integration, boot metadata, and guest reboot**
 
     - **Implements:** FR-007; design §Testing Strategy (real-engine integration), §Success Criteria SC-002; roadmap slice `in-dos-run` (`Done when`).
     - **Create `agent/test/setboot.c`** — a 16-bit DOS helper that reads the FreeDOS base partition boot sector at CHS 4/0/1 (LBA 2048) from drive `0x80` with INT 13h AH=02 into a 512-byte buffer, flips the low bit of the volume-label byte at offset 43 (the boot sector stays bootable), writes the sector back with AH=03, and returns 0 on success or 1 when the BIOS sets carry.
@@ -359,7 +359,7 @@ These names and signatures are used by more than one task and must not drift.
         - Leave `agent/build/EXITCODE.EXE` inside the prepared image; do not generate a new exit-code helper.
     - **Verify:** `ruby -ryaml -e 'YAML.load_file(".github/workflows/ci.yml"); YAML.load_file(".github/workflows/qemu-nightly.yml")' && DOSKER_INTEGRATION=1 DOSKER_QEMU_IMAGE="$DOSKER_QEMU_IMAGE" DOSKER_QEMU=qemu-system-i386 DOSKER_FREEDOS_SOURCE="$DOSKER_FREEDOS_SOURCE" cargo test -p dosker-cli --features qemu-engine --test qemu_run -- --nocapture`
 
-- [ ] **Task 9: Documentation and roadmap status**
+- [x] **Task 9: Documentation and roadmap status**
 
     - **Implements:** FR-007; design §Goals (headless, reproducible builds), §Security And Privacy (untrusted images), §Testing Strategy (integration).
     - **Create `docs/builds.md`**
@@ -378,8 +378,8 @@ These names and signatures are used by more than one task and must not drift.
         - An example Doskerfile: `FROM freedos:1.3`, `COPY HELLO.TXT C:\`, `RUN COPY HELLO.TXT MADE.TXT`, and `CMD ECHO BUILT`, with a one-line explanation that `RUN` boots once and `CMD` runs at container start.
     - **Modify `docs/images.md`** — add a "Boot metadata" section: a layer may carry a boot override; the effective boot is the last non-null `boot` in layer order or the image config; a `RUN` that changes the boot artifacts writes the override; the next projection uses it.
     - **Modify `README.md`** — add `- [Builds](docs/builds.md)` to the Documentation list.
-    - **Modify `.sdd/specs/2026-11-01-dosker/roadmap.md`** — set the `in-dos-run` slice to `**Status:** Planned` and `**Plan:** [\`plan-in-dos-run.md\`](plan-in-dos-run.md)`. Do not make this change until the plan is approved and execution starts.
-    - **Verify:** `rg -q 'RUN produced no captured output' docs/builds.md && rg -q '60' docs/builds.md && rg -q 'qemu' docs/builds.md && rg -q 'Boot metadata' docs/images.md && rg -q 'docs/builds.md' README.md && rg -q 'Status:\*\* Planned' .sdd/specs/2026-11-01-dosker/roadmap.md && rg -q 'plan-in-dos-run.md' .sdd/specs/2026-11-01-dosker/roadmap.md && git diff --check`
+    - **Modify `.sdd/specs/2026-11-01-dosker/roadmap.md`** — set the `in-dos-run` slice to `**Status:** Implemented` and `**Plan:** [\`plan-in-dos-run.md\`](plan-in-dos-run.md)`.
+    - **Verify:** `rg -q 'RUN produced no captured output' docs/builds.md && rg -q '60' docs/builds.md && rg -q 'qemu' docs/builds.md && rg -q 'Boot metadata' docs/images.md && rg -q 'docs/builds.md' README.md && rg -q 'Status:\*\* Implemented' .sdd/specs/2026-11-01-dosker/roadmap.md && rg -q 'plan-in-dos-run.md' .sdd/specs/2026-11-01-dosker/roadmap.md && git diff --check`
 
 ## Final Verification
 

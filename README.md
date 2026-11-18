@@ -147,5 +147,6 @@ then runs the Rust QEMU runtime suite.
 - [Agent protocol](.sdd/specs/2026-11-01-dosker/contracts/agent-protocol.md)
 - [Roadmap](.sdd/specs/2026-11-01-dosker/roadmap.md)
 - [DOS agent plan](.sdd/specs/2026-11-01-dosker/plan-dos-agent-serial.md)
+- [Builds](docs/builds.md)
 - [FreeDOS base images](docs/base-images.md)
 - [Windows runtime](docs/windows.md)

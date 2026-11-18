@@ -67,3 +67,10 @@ blobs.
 A digest that still has a tag returns `ImageInUse`; remove its tags first.
 Image import, tag, and remove take an exclusive `images/.lock` while they
 update the index, so concurrent mutations are serialized.
+
+## Boot metadata
+
+A layer may carry a boot override. The effective boot is the last non-null
+`boot` in layer order, or the image config when no layer overrides it. A
+`RUN` that changes the boot artifacts writes the override, and the next
+projection uses it.
