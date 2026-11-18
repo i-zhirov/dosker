@@ -10,8 +10,8 @@ use chrono::{DateTime, Utc};
 use dosker_core::{BasePin, Doskerfile, EngineName, FromSource, Instruction, InstructionKind};
 use dosker_image::freedos::{BaseInputs, FreedosVersion, ensure_freedos_base};
 use dosker_image::{
-    CacheKeyInput, CacheStore, Descriptor, DosPath, ImageConfig, ImageError, ImageMedia, ImageRef,
-    ImageReference, Layer, OciStore, Tree, cache_key, fixed_timestamp,
+    BootMetadata, CacheKeyInput, CacheStore, Descriptor, DosPath, ImageConfig, ImageError,
+    ImageMedia, ImageRef, ImageReference, Layer, OciStore, Tree, cache_key, fixed_timestamp,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -131,9 +131,18 @@ impl Builder {
             tree,
             layers: base_layers,
             annotations,
+            boot,
+            disk_digest,
             ..
         } = base;
-        let mut state = BuildState::new(config, tree, &base_layers, selected_engine);
+        let mut state = BuildState::with_boot(
+            config,
+            tree,
+            &base_layers,
+            selected_engine,
+            boot,
+            disk_digest,
+        );
         let build_cache = BuildCache::new(&self.store, &self.cache, options.no_cache);
         let total = doskerfile.instructions.len().saturating_sub(1);
         let mut cached_steps = 0;
@@ -294,6 +303,8 @@ impl Builder {
         } else {
             Some(self.store.load_tree(&reference)?)
         };
+        let boot = self.store.load_effective_boot(&reference)?;
+        let disk_digest = manifest.raw_disk_digest().map(str::to_owned);
         let (name, tag) = base_identity(value, &reference);
         let annotations = manifest.annotations.clone().unwrap_or_default();
         Ok(ResolvedBase {
@@ -301,6 +312,8 @@ impl Builder {
             tree,
             layers: manifest.layers,
             annotations,
+            boot,
+            disk_digest,
             base_pin: BasePin {
                 name,
                 tag,
@@ -372,12 +385,16 @@ impl Builder {
                 reason: format!("{source_path} is not a booter image"),
             });
         }
+        let boot = self.store.load_effective_boot(&image_ref)?;
+        let disk_digest = manifest.raw_disk_digest().map(str::to_owned);
         let annotations = manifest.annotations.clone().unwrap_or_default();
         Ok(ResolvedBase {
             config,
             tree,
             layers: manifest.layers,
             annotations,
+            boot,
+            disk_digest,
             base_pin: BasePin {
                 name: reference.name().as_str().to_owned(),
                 tag: reference.tag().as_str().to_owned(),
@@ -420,6 +437,8 @@ struct ResolvedBase {
     tree: Option<Tree>,
     layers: Vec<Descriptor>,
     annotations: BTreeMap<String, String>,
+    boot: BootMetadata,
+    disk_digest: Option<String>,
     base_pin: BasePin,
 }
 

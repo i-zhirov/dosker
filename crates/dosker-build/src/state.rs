@@ -6,8 +6,9 @@ use chrono::{DateTime, Utc};
 use dosker_core::{EngineName, Instruction, InstructionKind};
 use dosker_engine::Capability;
 use dosker_image::{
-    Attributes, Descriptor, DosPath, HistoryEntry, ImageConfig, Layer, LayerDelta, MachineProfile,
-    PortDeclaration, PortProtocol, Tree, TreeDir, TreeNode, VolumeDeclaration, fixed_timestamp,
+    Attributes, BootMetadata, Descriptor, DosPath, HistoryEntry, ImageConfig, Layer, LayerDelta,
+    MachineProfile, PortDeclaration, PortProtocol, Tree, TreeDir, TreeNode, VolumeDeclaration,
+    fixed_timestamp,
 };
 
 use crate::error::BuildError;
@@ -25,6 +26,10 @@ pub struct BuildState {
     pub head_layer_digest: Option<String>,
     /// The engine selected by the build.
     pub selected_engine: EngineName,
+    /// The effective boot metadata after the layers applied so far.
+    pub boot: BootMetadata,
+    /// The raw-disk digest selected as the disk template, when there is one.
+    pub disk_digest: Option<String>,
 }
 
 impl BuildState {
@@ -35,12 +40,27 @@ impl BuildState {
         base_layers: &[Descriptor],
         selected_engine: EngineName,
     ) -> Self {
+        let boot = config.boot.clone();
+        Self::with_boot(config, tree, base_layers, selected_engine, boot, None)
+    }
+
+    /// Creates the state with the effective boot metadata and disk template.
+    pub fn with_boot(
+        config: ImageConfig,
+        tree: Option<Tree>,
+        base_layers: &[Descriptor],
+        selected_engine: EngineName,
+        boot: BootMetadata,
+        disk_digest: Option<String>,
+    ) -> Self {
         Self {
             config,
             tree,
             layers: Vec::new(),
             head_layer_digest: base_layers.last().map(|layer| layer.digest.clone()),
             selected_engine,
+            boot,
+            disk_digest,
         }
     }
 
@@ -72,6 +92,9 @@ impl BuildState {
             .as_mut()
             .ok_or_else(|| instruction_error_from_name(normalized, "a booter image has no tree"))?;
         layer.apply_to(tree)?;
+        if let Some(boot) = layer.meta.boot.clone() {
+            self.boot = boot;
+        }
         self.layers.push(descriptor.clone());
         self.head_layer_digest = Some(descriptor.digest);
         self.record(normalized, now, false);

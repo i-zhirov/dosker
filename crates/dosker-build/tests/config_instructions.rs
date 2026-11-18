@@ -90,6 +90,34 @@ fn base_descriptor() -> Descriptor {
     }
 }
 
+fn booted_with(sector_byte: u8) -> BootMetadata {
+    let mut boot = sample_boot();
+    boot.boot_sector = Some(BlobRef::from_bytes(&[sector_byte; 512]));
+    boot
+}
+
+fn run_layer(boot: Option<BootMetadata>) -> (Layer, Descriptor) {
+    let path = DosPath::parse(r"APP\RUN.TXT").expect("the path parses");
+    let mut delta = LayerDelta::new();
+    delta.add_file(TreeFile {
+        path,
+        attributes: Attributes {
+            archive: true,
+            ..Attributes::default()
+        },
+        timestamp: fixed_timestamp(),
+        bytes: b"run".to_vec(),
+    });
+    let layer = Layer::from_delta(&delta, "RUN PROG.EXE", None, boot).expect("the layer builds");
+    let descriptor = Descriptor {
+        media_type: "application/vnd.oci.image.layer.v1.tar".to_owned(),
+        digest: layer.digest().expect("the layer digests"),
+        size: 128,
+        annotations: None,
+    };
+    (layer, descriptor)
+}
+
 fn tree_state() -> BuildState {
     BuildState::new(tree_config(), Some(Tree::new()), &[], EngineName::Qemu)
 }
@@ -244,6 +272,72 @@ fn filesystem_layer_updates_the_head_and_tree() {
     assert!(!history.empty_layer);
     assert_eq!(history.created_at, now);
     assert_eq!(state.config.created_by, "COPY FOO.TXT C:\\APP\\");
+}
+
+#[test]
+fn apply_layer_records_the_effective_boot() {
+    let mut state = tree_state();
+    let boot = booted_with(1);
+    let (layer, descriptor) = run_layer(Some(boot.clone()));
+
+    state
+        .apply_layer(layer, descriptor, "RUN PROG.EXE", Utc::now())
+        .expect("the layer applies");
+
+    assert_eq!(state.boot, boot);
+}
+
+#[test]
+fn apply_layer_without_an_override_keeps_the_effective_boot() {
+    let boot = booted_with(3);
+    let mut state = BuildState::with_boot(
+        tree_config(),
+        Some(Tree::new()),
+        &[],
+        EngineName::Qemu,
+        boot.clone(),
+        None,
+    );
+    assert_ne!(state.boot, state.config.boot);
+    let (layer, descriptor) = run_layer(None);
+
+    state
+        .apply_layer(layer, descriptor, "RUN PROG.EXE", Utc::now())
+        .expect("the layer applies");
+
+    assert_eq!(state.boot, boot);
+}
+
+#[test]
+fn new_state_starts_from_the_config_boot() {
+    let config = tree_config();
+    let boot = config.boot.clone();
+
+    let state = BuildState::new(config, Some(Tree::new()), &[], EngineName::Qemu);
+
+    assert_eq!(state.boot, boot);
+    assert_eq!(state.disk_digest, None);
+}
+
+#[test]
+fn with_boot_keeps_the_supplied_boot_and_digest() {
+    let boot = booted_with(2);
+    let disk_digest = "sha256:disk-template".to_owned();
+    let base = base_descriptor();
+
+    let state = BuildState::with_boot(
+        tree_config(),
+        Some(Tree::new()),
+        &[base.clone()],
+        EngineName::Bochs,
+        boot.clone(),
+        Some(disk_digest.clone()),
+    );
+
+    assert_eq!(state.boot, boot);
+    assert_eq!(state.disk_digest, Some(disk_digest));
+    assert_eq!(state.selected_engine, EngineName::Bochs);
+    assert_eq!(state.head_layer_digest, Some(base.digest));
 }
 
 #[test]

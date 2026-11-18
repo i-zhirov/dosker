@@ -153,7 +153,7 @@ These names and signatures are used by more than one task and must not drift.
     - **Modify `crates/dosker-image/tests/support/mod.rs`** — no new helper; `make_fat16_image_with_label` already exists.
     - **Verify:** `cargo test -p dosker-image --test project`
 
-- [ ] **Task 4: Build state boot and disk template tracking**
+- [x] **Task 4: Build state boot and disk template tracking**
 
     - **Implements:** FR-002; design §Build And Runtime Semantics (RUN boot metadata and image config), data model §Layer (effective boot).
     - **Modify `crates/dosker-build/tests/config_instructions.rs`**
