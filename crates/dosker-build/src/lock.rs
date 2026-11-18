@@ -80,20 +80,15 @@ pub fn resolve_lock(
 ) -> Result<LockFile, BuildError> {
     let existing = read_lock(context_dir)?;
     check_base(&existing, &base, update)?;
-    check_engine(&existing, engine, update)?;
+    check_engine_pin(&existing, engine, update)?;
     if let Some(version) = agent_version {
         check_agent(&existing, version, update)?;
     }
 
     let mut lock = LockFile::new();
     lock.base.push(base);
-    lock.engines.insert(
-        engine.name.clone(),
-        EnginePin {
-            version: engine.version.clone(),
-            source: engine.source.clone(),
-        },
-    );
+    lock.engines = existing.engines.clone();
+    record_engine_pin(&mut lock, engine);
     lock.agent = agent_version.map(|version| AgentPin {
         version: version.to_owned(),
     });
@@ -142,7 +137,8 @@ fn check_base(existing: &LockFile, base: &BasePin, update: bool) -> Result<(), B
     })
 }
 
-fn check_engine(
+/// Checks one resolved engine against the lock, unless `update` refreshes it.
+pub fn check_engine_pin(
     existing: &LockFile,
     engine: &ResolvedEngine,
     update: bool,
@@ -165,6 +161,17 @@ fn check_engine(
             engine.name, pinned.version, engine.version
         ),
     })
+}
+
+/// Records one resolved engine in the lock.
+pub fn record_engine_pin(lock: &mut LockFile, engine: &ResolvedEngine) {
+    lock.engines.insert(
+        engine.name.clone(),
+        EnginePin {
+            version: engine.version.clone(),
+            source: engine.source.clone(),
+        },
+    );
 }
 
 fn check_agent(existing: &LockFile, version: &str, update: bool) -> Result<(), BuildError> {

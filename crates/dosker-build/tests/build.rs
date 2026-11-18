@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, TimeZone, Utc};
 use dosker_build::{
-    BuildError, BuildOptions, BuildOutcome, Builder, EngineResolver, ResolvedEngine,
+    BuildError, BuildOptions, BuildOutcome, Builder, EngineResolver, InDosRunner, ResolvedEngine,
 };
 use dosker_core::{LOCK_FILE_NAME, LockFile};
 use dosker_image::inject::WRAPPED_AUTOEXEC_BYTES;
@@ -81,6 +81,30 @@ impl Fixture {
             options,
             &mut reporter,
         );
+        (result, reporter)
+    }
+
+    #[allow(dead_code)]
+    fn build_with_runner(
+        &self,
+        options: &BuildOptions,
+        runner: Box<dyn InDosRunner>,
+    ) -> (Result<BuildOutcome, BuildError>, TestReporter) {
+        self.build_with_runner_and_resolver(options, Box::new(FakeResolver), runner)
+    }
+
+    #[allow(dead_code)]
+    fn build_with_runner_and_resolver(
+        &self,
+        options: &BuildOptions,
+        resolver: Box<dyn EngineResolver>,
+        runner: Box<dyn InDosRunner>,
+    ) -> (Result<BuildOutcome, BuildError>, TestReporter) {
+        let mut reporter = TestReporter::default();
+        let result = Builder::with_resolver(self.root.path().to_path_buf(), resolver)
+            .with_agent_executable(self.agent_path())
+            .with_in_dos_runner(runner)
+            .build(self.context.path(), options, &mut reporter);
         (result, reporter)
     }
 
@@ -612,7 +636,7 @@ fn build_rejects_a_missing_local_image() {
 }
 
 #[test]
-fn build_rejects_an_in_image_run() {
+fn build_rejects_an_in_image_run_without_an_agent() {
     let fixture = Fixture::new();
     store_tree_base(
         fixture.root_path(),
@@ -625,18 +649,14 @@ fn build_rejects_an_in_image_run() {
 
     let (result, _) = fixture.build(&options(Some("built:latest")));
     match result {
-        Err(BuildError::Instruction {
-            instruction,
-            reason,
-            ..
-        }) => {
-            assert_eq!(instruction, "RUN");
+        Err(BuildError::RunBootFailed { line, reason }) => {
+            assert_eq!(line, 2);
             assert!(
-                reason.contains("RUN --host"),
-                "the reason points at RUN --host: {reason}"
+                reason.contains("no agent"),
+                "the reason names the missing agent: {reason}"
             );
         }
-        other => panic!("expected an instruction error, got {other:?}"),
+        other => panic!("expected a RUN boot error, got {other:?}"),
     }
 }
 

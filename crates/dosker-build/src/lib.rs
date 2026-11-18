@@ -17,7 +17,10 @@ pub use cache::{BuildCache, CacheLookup};
 pub use context::{BuildContext, ResolvedSource, SourceEntry, SourceFile, SourceKind};
 pub use copy::{CopyPlan, plan_copy};
 pub use error::BuildError;
-pub use lock::{EngineResolver, HostEngineResolver, ResolvedEngine, resolve_lock, write_lock};
+pub use lock::{
+    EngineResolver, HostEngineResolver, ResolvedEngine, check_engine_pin, record_engine_pin,
+    resolve_lock, write_lock,
+};
 pub use normalize::{
     build_config_digest, is_reserved_path, normalize_instruction, render_tokens,
     resolve_copy_destination, resolve_dos_path,

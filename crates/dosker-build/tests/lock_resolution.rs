@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use dosker_build::{BuildError, ResolvedEngine, resolve_lock, write_lock};
+use dosker_build::{
+    BuildError, ResolvedEngine, check_engine_pin, record_engine_pin, resolve_lock, write_lock,
+};
 use dosker_core::{AgentPin, BasePin, EnginePin, LOCK_FILE_NAME, LOCK_VERSION, LockFile};
 
 fn base(name: &str, tag: &str, digest: &str) -> BasePin {
@@ -49,6 +51,86 @@ fn write_existing(context: &Path, lock: &LockFile) {
 fn read_lock(context: &Path) -> LockFile {
     let text = fs::read_to_string(context.join(LOCK_FILE_NAME)).expect("read the lock");
     LockFile::from_toml(&text).expect("parse the lock")
+}
+
+#[test]
+fn record_engine_pin_adds_a_second_engine() {
+    let mut lock = LockFile::new();
+
+    record_engine_pin(&mut lock, &engine("qemu", "8.2.0", "homebrew"));
+    record_engine_pin(&mut lock, &engine("dosbox-x", "0.83", "path"));
+
+    assert_eq!(lock.engines.len(), 2);
+    assert_eq!(
+        lock.engines.get("qemu"),
+        Some(&EnginePin {
+            version: "8.2.0".to_owned(),
+            source: "homebrew".to_owned(),
+        })
+    );
+    assert_eq!(
+        lock.engines.get("dosbox-x"),
+        Some(&EnginePin {
+            version: "0.83".to_owned(),
+            source: "path".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn check_engine_pin_rejects_a_mismatched_version() {
+    let existing = existing_lock(base("base", "latest", "sha256:base"), Some("1.0.0"));
+
+    let error = check_engine_pin(&existing, &engine("qemu", "8.3.0", "homebrew"), false)
+        .expect_err("a mismatched version must fail");
+
+    let BuildError::LockMismatch { message } = error else {
+        panic!("unexpected error: {error}");
+    };
+    assert!(message.contains("8.2.0"), "message: {message}");
+    assert!(message.contains("8.3.0"), "message: {message}");
+
+    check_engine_pin(&existing, &engine("qemu", "8.3.0", "homebrew"), true)
+        .expect("update accepts the new version");
+}
+
+#[test]
+fn resolve_lock_keeps_existing_engine_pins() {
+    let dir = tempfile::tempdir().expect("create temp directory");
+    let mut existing = existing_lock(base("base", "latest", "sha256:base"), Some("1.0.0"));
+    existing.engines.insert(
+        "dosbox-x".to_owned(),
+        EnginePin {
+            version: "0.83".to_owned(),
+            source: "path".to_owned(),
+        },
+    );
+    write_existing(dir.path(), &existing);
+
+    let lock = resolve_lock(
+        dir.path(),
+        base("base", "latest", "sha256:base"),
+        Some("1.0.0"),
+        &engine("dosbox-x", "0.83", "path"),
+        false,
+    )
+    .expect("the final engine resolves");
+
+    assert_eq!(
+        lock.engines.get("qemu"),
+        Some(&EnginePin {
+            version: "8.2.0".to_owned(),
+            source: "homebrew".to_owned(),
+        }),
+        "the non-final engine pin is retained"
+    );
+    assert_eq!(
+        lock.engines.get("dosbox-x"),
+        Some(&EnginePin {
+            version: "0.83".to_owned(),
+            source: "path".to_owned(),
+        })
+    );
 }
 
 #[test]

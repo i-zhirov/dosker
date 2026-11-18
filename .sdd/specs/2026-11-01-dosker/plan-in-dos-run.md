@@ -255,7 +255,7 @@ These names and signatures are used by more than one task and must not drift.
         - `command_maps_the_agent_to_the_effective_control_port` — 3/3 produces three pairs with the agent at the third; 2/2 produces two with the agent at the second.
     - **Verify:** `cargo test -p dosker-engine-qemu --test command` and `cargo test -p dosker-build --test run_in_dos_engine` and `cargo test -p dosker-engine --test adapter`
 
-- [ ] **Task 7: Build engine integration for `RUN`**
+- [x] **Task 7: Build engine integration for `RUN`**
 
     - **Implements:** FR-002, FR-003, FR-007; design §Build And Runtime Semantics (RUN, cache key, failed instruction), §Error Handling And Edge Cases, contract §RUN, §Normalization And Cache Keys.
     - **TDD:** write the failing `crates/dosker-build/tests/run_in_dos.rs` cases and support helpers first; they do not compile until the action and error variants land.

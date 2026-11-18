@@ -1,5 +1,6 @@
 //! Build orchestration: base resolution, the instruction loop, and OCI commit.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read;
@@ -19,10 +20,17 @@ use crate::cache::{BuildCache, CacheLookup};
 use crate::context::BuildContext;
 use crate::copy::{CopyPlan, plan_copy};
 use crate::error::BuildError;
-use crate::lock::{EngineResolver, HostEngineResolver, resolve_lock, write_lock};
+use crate::lock::{
+    EngineResolver, HostEngineResolver, ResolvedEngine, check_engine_pin, record_engine_pin,
+    resolve_lock, write_lock,
+};
 use crate::normalize::normalize_instruction;
 use crate::reporter::BuildReporter;
 use crate::run_host::{HostRunRequest, run_host};
+use crate::run_in_dos::{
+    EngineInDosRunner, InDosRunRequest, InDosRunner, RUN_BOOT_TIMEOUT, RUN_EMPTY_OUTPUT_NOTE,
+    RUN_TRUNCATED_NOTE, build_delta,
+};
 use crate::state::BuildState;
 
 /// Options that control one build.
@@ -34,7 +42,7 @@ pub struct BuildOptions {
     pub update_lock: bool,
     /// Whether the build cache is bypassed.
     pub no_cache: bool,
-    /// The time allowed for each `RUN --host` command.
+    /// The time allowed for each `RUN` and `RUN --host` command.
     pub timeout: Duration,
     /// The clock recorded in new history entries.
     pub now: DateTime<Utc>,
@@ -61,6 +69,7 @@ pub struct Builder {
     store: OciStore,
     cache: CacheStore,
     resolver: Box<dyn EngineResolver>,
+    in_dos_runner: RefCell<Box<dyn InDosRunner>>,
     freedos_inputs: Option<BaseInputs>,
     agent_executable: Option<PathBuf>,
 }
@@ -79,9 +88,16 @@ impl Builder {
             cache: CacheStore::new(root.clone()),
             root,
             resolver,
+            in_dos_runner: RefCell::new(Box::new(EngineInDosRunner::new())),
             freedos_inputs: None,
             agent_executable: None,
         }
+    }
+
+    /// Selects the runner that boots in-DOS `RUN` commands.
+    pub fn with_in_dos_runner(mut self, runner: Box<dyn InDosRunner>) -> Self {
+        self.in_dos_runner = RefCell::new(runner);
+        self
     }
 
     /// Supplies the pinned inputs the FreeDOS base is built from.
@@ -112,9 +128,10 @@ impl Builder {
         let doskerfile = Doskerfile::parse_bytes(&bytes)?;
         let source = from_source(&doskerfile)?;
         let base = self.resolve_base(&context, source)?;
-        let selected_engine = select_engine(&doskerfile.instructions, &base.config);
-        let resolved_engine = self.resolver.resolve(selected_engine.as_str())?;
-        let lock = resolve_lock(
+        let initial_engine = initial_engine(&base.config);
+        let final_engine = final_engine(&doskerfile.instructions, &base.config);
+        let resolved_engine = self.resolver.resolve(final_engine.as_str())?;
+        let mut lock = resolve_lock(
             context_dir,
             base.base_pin.clone(),
             base.config.agent_version.as_deref(),
@@ -139,7 +156,7 @@ impl Builder {
             config,
             tree,
             &base_layers,
-            selected_engine,
+            initial_engine,
             boot,
             disk_digest,
         );
@@ -148,7 +165,10 @@ impl Builder {
         let mut cached_steps = 0;
 
         for (step, instruction) in doskerfile.instructions.iter().enumerate().skip(1) {
-            let prepared = prepare_step(&context, &state, instruction)?;
+            let step_engine = self.resolver.resolve(state.selected_engine.as_str())?;
+            check_engine_pin(&lock, &step_engine, options.update_lock)?;
+            record_engine_pin(&mut lock, &step_engine);
+            let prepared = prepare_step(&context, &state, instruction, &step_engine)?;
             let parent_tree_digest = state.parent_tree_digest()?;
             let config_digest = state.config_digest()?;
             let key = cache_key(&CacheKeyInput {
@@ -260,6 +280,129 @@ impl Builder {
                     &prepared.normalized,
                     previous.map(str::to_owned),
                     None,
+                )?;
+                let descriptor = self.store.put_layer(&layer)?;
+                state.apply_layer(layer, descriptor.clone(), &prepared.normalized, options.now)?;
+                cache.store(key, &descriptor.digest, &prepared.normalized, options.now)?;
+            }
+            StepAction::RunInDos { command, workdir } => {
+                let line = instruction.line;
+                let tree = state.tree.as_ref().ok_or_else(|| BuildError::RunInDos {
+                    line,
+                    reason: "the image has no tree".to_owned(),
+                })?;
+                let disk_digest =
+                    state
+                        .disk_digest
+                        .as_deref()
+                        .ok_or_else(|| BuildError::RunInDos {
+                            line,
+                            reason:
+                                "the base image has no raw disk; RUN requires a bootable disk image"
+                                    .to_owned(),
+                        })?;
+                let tmp_root = self.root.join("tmp");
+                fs::create_dir_all(&tmp_root).map_err(|source| BuildError::Io {
+                    path: tmp_root.clone(),
+                    source,
+                })?;
+                let tempdir = tempfile::Builder::new()
+                    .prefix("dosker-run-")
+                    .tempdir_in(&tmp_root)
+                    .map_err(|source| BuildError::Io {
+                        path: tmp_root.clone(),
+                        source,
+                    })?;
+                let disk_path = tempdir.path().join("disk.img");
+                let log_dir = tempdir.path();
+
+                self.store
+                    .copy_blob_to(disk_digest, &disk_path)
+                    .map_err(|error| BuildError::RunInDos {
+                        line,
+                        reason: error.to_string(),
+                    })?;
+                dosker_image::apply_boot_metadata(&disk_path, &state.boot).map_err(|error| {
+                    BuildError::RunInDos {
+                        line,
+                        reason: error.to_string(),
+                    }
+                })?;
+                let projected = dosker_image::project_tree(&disk_path, tree).map_err(|error| {
+                    BuildError::RunInDos {
+                        line,
+                        reason: error.to_string(),
+                    }
+                })?;
+                dosker_image::write_config(
+                    &disk_path,
+                    state.config.machine.control_port,
+                    state.config.machine.baud,
+                )
+                .map_err(|error| BuildError::RunInDos {
+                    line,
+                    reason: error.to_string(),
+                })?;
+                if !state.boot.boot_artifacts_equal(&projected) {
+                    return Err(BuildError::RunInDos {
+                        line,
+                        reason: "the projection changed the boot metadata".to_owned(),
+                    });
+                }
+
+                let outcome = self.in_dos_runner.borrow_mut().run(&InDosRunRequest {
+                    line,
+                    command: command.as_str(),
+                    workdir,
+                    env: &state.config.env,
+                    timeout: options.timeout,
+                    boot_timeout: RUN_BOOT_TIMEOUT,
+                    disk_path: disk_path.as_path(),
+                    disk_interface: state.config.machine.disk_interface.as_str(),
+                    serial_ports: state.config.machine.serial_ports,
+                    control_port: state.config.machine.control_port,
+                    log_dir,
+                    root: tempdir.path(),
+                    engine: state.selected_engine,
+                })?;
+
+                reporter
+                    .output(outcome.output.as_bytes())
+                    .map_err(BuildError::Reporter)?;
+                if outcome.output.is_empty() {
+                    reporter
+                        .line(RUN_EMPTY_OUTPUT_NOTE)
+                        .map_err(BuildError::Reporter)?;
+                }
+                if outcome.truncated {
+                    reporter
+                        .line(RUN_TRUNCATED_NOTE)
+                        .map_err(BuildError::Reporter)?;
+                }
+                if outcome.exit_code != 0 {
+                    return Err(BuildError::RunExited {
+                        line,
+                        code: outcome.exit_code,
+                    });
+                }
+
+                let read_back =
+                    dosker_image::read_tree(&disk_path).map_err(|error| BuildError::RunInDos {
+                        line,
+                        reason: error.to_string(),
+                    })?;
+                let boot_after = dosker_image::read_boot_metadata(&disk_path).map_err(|error| {
+                    BuildError::RunInDos {
+                        line,
+                        reason: error.to_string(),
+                    }
+                })?;
+                let run = build_delta(tree, &read_back, &state.boot, &boot_after);
+                let layer = Layer::from_delta(
+                    &run.delta,
+                    &prepared.normalized,
+                    previous.map(str::to_owned),
+                    run.boot,
                 )?;
                 let descriptor = self.store.put_layer(&layer)?;
                 state.apply_layer(layer, descriptor.clone(), &prepared.normalized, options.now)?;
@@ -452,6 +595,7 @@ struct PreparedStep {
 enum StepAction {
     Copy(CopyPlan),
     RunHost { command: String, workdir: DosPath },
+    RunInDos { command: String, workdir: DosPath },
     Config,
 }
 
@@ -459,6 +603,7 @@ fn prepare_step(
     context: &BuildContext,
     state: &BuildState,
     instruction: &Instruction,
+    step_engine: &ResolvedEngine,
 ) -> Result<PreparedStep, BuildError> {
     let workdir = DosPath::parse(&state.config.workdir)?;
     match &instruction.kind {
@@ -519,10 +664,56 @@ fn prepare_step(
                 action: StepAction::RunHost { command, workdir },
             })
         }
-        InstructionKind::Run { host: false, .. } => Err(instruction_error(
-            instruction,
-            "in-image RUN is not supported; use RUN --host",
-        )),
+        InstructionKind::Run {
+            host: false, raw, ..
+        } => {
+            if state.config.booter {
+                return Err(instruction_error(
+                    instruction,
+                    "a booter image does not support RUN",
+                ));
+            }
+            let agent_version =
+                state
+                    .config
+                    .agent_version
+                    .as_deref()
+                    .ok_or_else(|| BuildError::RunBootFailed {
+                        line: instruction.line,
+                        reason: "the image has no agent".to_owned(),
+                    })?;
+            let disk_digest = state
+                .disk_digest
+                .as_deref()
+                .ok_or_else(|| BuildError::RunInDos {
+                    line: instruction.line,
+                    reason: "the base image has no raw disk; RUN requires a bootable disk image"
+                        .to_owned(),
+                })?;
+            if state.selected_engine != EngineName::Qemu {
+                return Err(BuildError::Engine {
+                    engine: state.selected_engine.as_str().to_owned(),
+                    reason: "in-DOS RUN supports only the qemu engine".to_owned(),
+                });
+            }
+            let normalized = normalize_instruction(instruction, &workdir)?;
+            let staged = state.parent_tree_digest()?;
+            let input_hashes = vec![
+                format!("staged:{staged}"),
+                format!("engine:{}", step_engine.version),
+                format!("agent:{agent_version}"),
+                format!("disk:{disk_digest}"),
+            ];
+            Ok(PreparedStep {
+                normalized,
+                input_hashes,
+                tree_step: true,
+                action: StepAction::RunInDos {
+                    command: raw.clone(),
+                    workdir,
+                },
+            })
+        }
         _ => {
             let normalized = normalize_instruction(instruction, &workdir)
                 .map_err(|error| instruction_error(instruction, error.to_string()))?;
@@ -549,7 +740,15 @@ fn from_source(doskerfile: &Doskerfile) -> Result<&FromSource, BuildError> {
     }
 }
 
-fn select_engine(instructions: &[Instruction], config: &ImageConfig) -> EngineName {
+fn initial_engine(config: &ImageConfig) -> EngineName {
+    config
+        .engine_pin
+        .as_deref()
+        .and_then(EngineName::parse)
+        .unwrap_or(EngineName::Qemu)
+}
+
+fn final_engine(instructions: &[Instruction], config: &ImageConfig) -> EngineName {
     instructions
         .iter()
         .rev()
@@ -557,8 +756,7 @@ fn select_engine(instructions: &[Instruction], config: &ImageConfig) -> EngineNa
             InstructionKind::Engine { name } => Some(*name),
             _ => None,
         })
-        .or_else(|| config.engine_pin.as_deref().and_then(EngineName::parse))
-        .unwrap_or(EngineName::Qemu)
+        .unwrap_or_else(|| initial_engine(config))
 }
 
 fn base_identity(value: &str, reference: &ImageRef) -> (String, String) {
