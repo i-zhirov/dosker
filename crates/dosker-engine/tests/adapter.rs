@@ -84,9 +84,12 @@ fn sample_spec() -> EngineSpec {
         log_dir: PathBuf::from("/tmp/dosker-logs"),
         disk_path: PathBuf::from("/tmp/dosker/containers/0123456789ab/disk.img"),
         disk_interface: "ide".to_owned(),
+        serial_ports: 2,
+        control_port: 2,
         booter: false,
         display: DisplayMode::None,
         vnc_port: None,
+        allow_reboot: false,
     }
 }
 

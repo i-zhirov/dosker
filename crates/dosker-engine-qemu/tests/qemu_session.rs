@@ -50,9 +50,12 @@ fn setup(image: &Path, booter: bool) -> (tempfile::TempDir, EngineSpec) {
         log_dir: container,
         disk_path: disk,
         disk_interface: "ide".to_owned(),
+        serial_ports: 2,
+        control_port: 2,
         booter,
         display: Default::default(),
         vnc_port: None,
+        allow_reboot: false,
     };
 
     (dir, spec)

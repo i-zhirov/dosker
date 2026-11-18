@@ -3,11 +3,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use dosker_core::ContainerId;
-#[cfg(windows)]
-use dosker_engine::EngineError;
 use dosker_engine::{
     Capability, CapabilitySet, DisplayMode, EngineAdapter, EngineCommand, EngineEndpointKind,
-    EngineSpec,
+    EngineError, EngineSpec,
 };
 #[cfg(unix)]
 use dosker_engine_qemu::QemuEndpoints;
@@ -28,9 +26,12 @@ fn sample_spec() -> EngineSpec {
         log_dir: root.join("containers").join(id.as_str()),
         disk_path: root.join("containers").join(id.as_str()).join("disk.img"),
         disk_interface: "ide".to_owned(),
+        serial_ports: 2,
+        control_port: 2,
         booter: false,
         display: DisplayMode::None,
         vnc_port: None,
+        allow_reboot: false,
     }
 }
 
@@ -440,4 +441,88 @@ fn capabilities_never_include_nat() {
     let adapter = QemuAdapter::new(sample_binary(), processes);
 
     assert!(!adapter.capabilities().contains(Capability::Nat));
+}
+
+fn serial_values(args: &[String]) -> Vec<&str> {
+    args.windows(2)
+        .filter(|pair| pair[0].as_str() == "-serial")
+        .map(|pair| pair[1].as_str())
+        .collect()
+}
+
+fn serial_option(kind: &EngineEndpointKind) -> String {
+    match kind {
+        EngineEndpointKind::UnixSocket(path) => {
+            format!("unix:{},server=on,wait=off", path.display())
+        }
+        EngineEndpointKind::Tcp { host, port } => format!("tcp:{host}:{port},server=on,wait=off"),
+    }
+}
+
+#[test]
+fn command_allows_a_reboot_for_a_transient_build() {
+    let mut spec = sample_spec();
+    assert!(
+        build(&spec).iter().any(|argument| argument == "-no-reboot"),
+        "the runtime command must stop a reboot"
+    );
+
+    spec.allow_reboot = true;
+    assert!(
+        !build(&spec).iter().any(|argument| argument == "-no-reboot"),
+        "a transient build must let the guest reboot"
+    );
+}
+
+#[test]
+fn command_maps_the_agent_to_the_effective_control_port() {
+    let mut spec = sample_spec();
+    spec.serial_ports = 3;
+    spec.control_port = 3;
+    let command = build_command(&spec);
+    let agent = agent_serial_option(&command);
+    let values = serial_values(&command.args);
+
+    assert_eq!(values, ["none", "none", agent.as_str()]);
+
+    spec.serial_ports = 2;
+    spec.control_port = 2;
+    let command = build_command(&spec);
+    let agent = agent_serial_option(&command);
+    let values = serial_values(&command.args);
+
+    assert_eq!(values, ["none", agent.as_str()]);
+}
+
+fn agent_serial_option(command: &EngineCommand) -> String {
+    let endpoint = command
+        .endpoints
+        .iter()
+        .find(|endpoint| endpoint.name == "serial_agent")
+        .expect("the command carries an agent endpoint");
+
+    serial_option(&endpoint.kind)
+}
+
+#[test]
+fn command_rejects_a_control_port_outside_the_serial_layout() {
+    let mut spec = sample_spec();
+    spec.control_port = 0;
+    match command::build(&spec, &sample_binary()) {
+        Err(EngineError::Setup(reason)) => assert!(
+            reason.contains("control port"),
+            "unexpected setup reason: {reason}"
+        ),
+        other => panic!("expected a setup error for control port 0, got {other:?}"),
+    }
+
+    spec.serial_ports = 2;
+    spec.control_port = 3;
+    match command::build(&spec, &sample_binary()) {
+        Err(EngineError::Setup(reason)) => assert!(
+            reason.contains("control port"),
+            "unexpected setup reason: {reason}"
+        ),
+        other => panic!("expected a setup error for control port 3, got {other:?}"),
+    }
 }

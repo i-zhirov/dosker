@@ -22,9 +22,12 @@ fn spec_for(root: &Path, id: &ContainerId) -> EngineSpec {
         log_dir: root.join("containers").join(id.as_str()),
         disk_path: root.join("containers").join(id.as_str()).join("disk.img"),
         disk_interface: "ide".to_owned(),
+        serial_ports: 2,
+        control_port: 2,
         booter: false,
         display: Default::default(),
         vnc_port: None,
+        allow_reboot: false,
     }
 }
 

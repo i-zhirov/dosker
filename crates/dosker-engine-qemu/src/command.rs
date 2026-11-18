@@ -11,6 +11,13 @@ const VNC_FIRST_PORT: u16 = 5900;
 
 /// Builds the QEMU command line for one spec.
 pub fn build(spec: &EngineSpec, binary: &QemuBinary) -> Result<EngineCommand, EngineError> {
+    if spec.control_port == 0 || spec.control_port > spec.serial_ports {
+        return Err(EngineError::Setup(format!(
+            "the control port {} is outside the {} configured serial ports",
+            spec.control_port, spec.serial_ports
+        )));
+    }
+
     let endpoints = QemuEndpoints::for_spec(spec)?;
     let engine_ports: Vec<u16> = endpoints
         .engine_endpoints()
@@ -24,8 +31,10 @@ pub fn build(spec: &EngineSpec, binary: &QemuBinary) -> Result<EngineCommand, En
         "486".to_owned(),
         "-m".to_owned(),
         "16".to_owned(),
-        "-no-reboot".to_owned(),
     ];
+    if !spec.allow_reboot {
+        args.push("-no-reboot".to_owned());
+    }
     args.extend(display_arguments(
         spec.display,
         spec.vnc_port,
@@ -42,12 +51,16 @@ pub fn build(spec: &EngineSpec, binary: &QemuBinary) -> Result<EngineCommand, En
         spec.disk_path.display()
     ));
 
-    args.push("-serial".to_owned());
-    args.push("none".to_owned());
-    args.push("-serial".to_owned());
-    match &endpoints.agent_serial {
-        Some(kind) => args.push(socket_option(kind)),
-        None => args.push("none".to_owned()),
+    for port in 1..=spec.serial_ports {
+        args.push("-serial".to_owned());
+        if port == spec.control_port {
+            match &endpoints.agent_serial {
+                Some(kind) => args.push(socket_option(kind)),
+                None => args.push("none".to_owned()),
+            }
+        } else {
+            args.push("none".to_owned());
+        }
     }
 
     args.push("-qmp".to_owned());

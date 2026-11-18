@@ -61,9 +61,12 @@ pub struct EngineSpec {
     pub log_dir: PathBuf,
     pub disk_path: PathBuf,
     pub disk_interface: String,
+    pub serial_ports: u8,
+    pub control_port: u8,
     pub booter: bool,
     pub display: DisplayMode,
     pub vnc_port: Option<u16>,
+    pub allow_reboot: bool,
 }
 
 /// A resolved engine command line.

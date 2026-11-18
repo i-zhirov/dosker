@@ -207,9 +207,12 @@ fn supervise(
         log_dir: paths.container_dir(&record.id),
         disk_path: disk_path.clone(),
         disk_interface: record.disk_interface.clone(),
+        serial_ports: 2,
+        control_port: 2,
         booter: record.booter,
         display: record.display,
         vnc_port: record.vnc_port,
+        allow_reboot: false,
     };
 
     let command = match adapter.build_command(&spec) {

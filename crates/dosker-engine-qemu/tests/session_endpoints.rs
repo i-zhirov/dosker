@@ -21,9 +21,12 @@ fn spec(root: &Path, booter: bool) -> EngineSpec {
         log_dir: root.to_path_buf(),
         disk_path: root.join("disk.img"),
         disk_interface: "ide".to_owned(),
+        serial_ports: 2,
+        control_port: 2,
         booter,
         display: Default::default(),
         vnc_port: None,
+        allow_reboot: false,
     }
 }
 

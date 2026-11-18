@@ -50,6 +50,26 @@ pub enum BuildError {
     #[error("engine {engine}: {reason}")]
     Engine { engine: String, reason: String },
 
+    /// An in-DOS `RUN` could not prepare or read the disk.
+    #[error("Doskerfile line {line}: RUN: {reason}")]
+    RunInDos { line: usize, reason: String },
+
+    /// An in-DOS `RUN` command exited with a non-zero code.
+    #[error("Doskerfile line {line}: RUN exited with code {code}")]
+    RunExited { line: usize, code: i32 },
+
+    /// An in-DOS `RUN` command exceeded its timeout.
+    #[error("Doskerfile line {line}: the RUN command timed out")]
+    RunTimeout { line: usize },
+
+    /// The build VM could not boot or stop cleanly.
+    #[error("Doskerfile line {line}: {reason}")]
+    RunBootFailed { line: usize, reason: String },
+
+    /// The guest rebooted while the command ran.
+    #[error("Doskerfile line {line}: the guest rebooted during the command")]
+    GuestRebooted { line: usize },
+
     /// A Doskerfile instruction failed.
     #[error("Doskerfile line {line}: {instruction}: {reason}")]
     Instruction {

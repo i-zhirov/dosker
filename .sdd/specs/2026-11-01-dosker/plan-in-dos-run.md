@@ -207,7 +207,7 @@ These names and signatures are used by more than one task and must not drift.
     - **Modify `crates/dosker-build/src/lib.rs`** — re-export the module symbols.
     - **Verify:** `cargo test -p dosker-build --test run_in_dos_delta`
 
-- [ ] **Task 6: QEMU build VM runner**
+- [x] **Task 6: QEMU build VM runner**
 
     - **Implements:** FR-007, FR-009; design §Process Model (transient build VM), §Component Interfaces (Engine Adapter), §Error Handling And Edge Cases (boot timeout, guest reboot), contract §RUN.
     - **TDD:** write the failing `crates/dosker-build/tests/run_in_dos_engine.rs` cases, including the long-path socket case, and the `command_allows_a_reboot_for_a_transient_build` case first.

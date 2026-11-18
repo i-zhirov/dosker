@@ -1,5 +1,9 @@
 //! In-DOS `RUN` requests and read-back tree deltas.
 
+pub mod engine;
+
+pub use engine::{EngineInDosRunner, EngineOpener, QemuEngineOpener};
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::Duration;
