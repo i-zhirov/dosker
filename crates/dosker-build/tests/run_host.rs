@@ -252,6 +252,44 @@ fn run_host_provides_root_workdir_and_env() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn run_host_exports_the_windows_environment() {
+    let tree = tree(&[], &[(r"C:\HELLO.TXT", b"staged")]);
+    let workdir = dos(r"C:\PROJECT");
+    let env = BTreeMap::from([("GREETING".to_owned(), "hello world".to_owned())]);
+    let work_root = tempfile::tempdir().expect("the work root is created");
+    let mut reporter = TestReporter::default();
+    let request = HostRunRequest {
+        line: LINE,
+        command: "set DOSKER_ROOT & set DOSKER_WORKDIR & set DOSKER_ENV_GREETING",
+        workdir: &workdir,
+        env: &env,
+        timeout: Duration::from_secs(30),
+    };
+
+    let result = run_host(&tree, &request, work_root.path(), &mut reporter);
+    result.expect("the environment is exported");
+
+    let output = String::from_utf8_lossy(&reporter.output).replace("\r\n", "\n");
+    let root = output
+        .lines()
+        .find_map(|line| line.strip_prefix("DOSKER_ROOT="))
+        .expect("DOSKER_ROOT is exported");
+    assert!(
+        root.contains("dosker-build-"),
+        "DOSKER_ROOT does not name the staging root: {root:?}"
+    );
+    assert!(
+        output.contains("DOSKER_WORKDIR=C:\\PROJECT"),
+        "DOSKER_WORKDIR is missing or wrong: {output:?}"
+    );
+    assert!(
+        output.contains("DOSKER_ENV_GREETING=hello world"),
+        "DOSKER_ENV_GREETING is missing or wrong: {output:?}"
+    );
+}
+
 #[test]
 fn run_host_uses_the_staged_tree_as_the_working_directory() {
     let tree = tree(&[], &[(r"C:\HELLO.TXT", b"hello from tree")]);
