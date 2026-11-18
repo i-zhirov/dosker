@@ -20,18 +20,32 @@ const DIR_MODE: u32 = 0o700;
 /// the replace steps, while another process replaces the state file. Retry
 /// only those transient cases.
 fn read_state(path: &Path) -> io::Result<Vec<u8>> {
-    let mut attempts = 0;
+    read_state_with(
+        || fs::read(path),
+        |source| {
+            cfg!(windows)
+                && (source.kind() == io::ErrorKind::NotFound
+                    || matches!(source.raw_os_error(), Some(32 | 33)))
+        },
+        || thread::sleep(STATE_READ_RETRY_DELAY),
+    )
+}
+
+const STATE_READ_RETRIES: usize = 20;
+const STATE_READ_RETRY_DELAY: Duration = Duration::from_millis(10);
+
+fn read_state_with(
+    mut read: impl FnMut() -> io::Result<Vec<u8>>,
+    mut retry: impl FnMut(&io::Error) -> bool,
+    mut wait: impl FnMut(),
+) -> io::Result<Vec<u8>> {
+    let mut retries = 0;
     loop {
-        match fs::read(path) {
+        match read() {
             Ok(bytes) => return Ok(bytes),
-            Err(source)
-                if cfg!(windows)
-                    && (source.kind() == io::ErrorKind::NotFound
-                        || matches!(source.raw_os_error(), Some(32 | 33)))
-                    && attempts < 20 =>
-            {
-                attempts += 1;
-                thread::sleep(Duration::from_millis(10));
+            Err(source) if retries < STATE_READ_RETRIES && retry(&source) => {
+                retries += 1;
+                wait();
             }
             Err(source) => return Err(source),
         }
@@ -325,5 +339,52 @@ fn io_error(path: &Path, source: io::Error) -> StoreError {
     StoreError::Io {
         path: path.to_path_buf(),
         source,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use super::*;
+
+    #[test]
+    fn read_state_retries_a_transient_missing_file() {
+        let reads = Cell::new(0);
+        let result = read_state_with(
+            || {
+                let next = reads.get() + 1;
+                reads.set(next);
+                if next < 3 {
+                    Err(io::Error::from(io::ErrorKind::NotFound))
+                } else {
+                    Ok(b"state".to_vec())
+                }
+            },
+            |source| source.kind() == io::ErrorKind::NotFound,
+            || {},
+        );
+
+        assert_eq!(result.expect("the transient miss recovers"), b"state");
+        assert_eq!(reads.get(), 3);
+    }
+
+    #[test]
+    fn read_state_stops_at_the_retry_budget() {
+        let reads = Cell::new(0);
+        let result = read_state_with(
+            || {
+                reads.set(reads.get() + 1);
+                Err(io::Error::from(io::ErrorKind::NotFound))
+            },
+            |source| source.kind() == io::ErrorKind::NotFound,
+            || {},
+        );
+
+        assert_eq!(
+            result.expect_err("the missing file is reported").kind(),
+            io::ErrorKind::NotFound
+        );
+        assert_eq!(reads.get(), STATE_READ_RETRIES + 1);
     }
 }
