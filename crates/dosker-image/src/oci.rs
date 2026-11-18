@@ -29,6 +29,7 @@ use crate::reference::{ImageDigest, ImageRef, ImageReference};
 use crate::tree::Tree;
 
 const DIR_MODE: u32 = 0o700;
+#[cfg(unix)]
 const BLOB_MODE: u32 = 0o444;
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 

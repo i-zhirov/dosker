@@ -47,11 +47,13 @@ struct Root {
 impl Root {
     fn short() -> Self {
         let dir = temp_root();
-        Self {
+        let root = Self {
             path: dir.path().to_path_buf(),
             _dirs: vec![dir],
             env: Vec::new(),
-        }
+        };
+        root.write_fake_agent();
+        root
     }
 
     #[cfg(unix)]
@@ -59,11 +61,20 @@ impl Root {
         let dir = temp_root();
         let path = dir.path().join("x".repeat(200));
         fs::create_dir(&path).expect("create the long root directory");
-        Self {
+        let root = Self {
             path,
             _dirs: vec![dir],
             env: Vec::new(),
-        }
+        };
+        root.write_fake_agent();
+        root
+    }
+
+    fn write_fake_agent(&self) {
+        let agent_dir = self.path.join("agent");
+        fs::create_dir_all(&agent_dir).expect("create the agent directory");
+        fs::write(agent_dir.join("DOSKER.EXE"), b"MZ cli fake agent")
+            .expect("write the fake agent");
     }
 
     fn with_env(mut self, key: &'static str, value: &Path) -> Self {
@@ -125,12 +136,15 @@ impl Root {
         let dir = tempfile::tempdir().expect("create an image source directory");
         let source = dir.path().join("disk.img");
         common::make_disk_image(&source);
-        let output = self.run(&[
+        let mut command = self.command();
+        command.env("DOSKER_AGENT_EXE", self.path.join("agent/DOSKER.EXE"));
+        command.args([
             "image",
             "import",
             source.to_str().expect("source path is utf-8"),
             "freedos:latest",
         ]);
+        let output = run_captured(&mut command, Duration::from_secs(45));
         assert_eq!(
             output.status.code(),
             Some(0),
