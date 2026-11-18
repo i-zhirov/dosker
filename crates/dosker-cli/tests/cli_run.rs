@@ -34,6 +34,10 @@ impl RunRoot {
         let dir = tempfile::tempdir().expect("create a temporary directory");
 
         let root = Self { dir };
+        let agent_dir = root.path().join("agent");
+        std::fs::create_dir_all(&agent_dir).expect("create the agent directory");
+        std::fs::write(agent_dir.join("DOSKER.EXE"), b"MZ cli fake agent")
+            .expect("write the fake agent");
         root.import_image();
         root
     }
@@ -66,12 +70,15 @@ impl RunRoot {
         let dir = tempfile::tempdir().expect("create an image source directory");
         let source = dir.path().join("disk.img");
         make_disk_image(&source);
-        let output = self.run(&[
+        let mut command = self.command();
+        command.env("DOSKER_AGENT_EXE", self.path().join("agent/DOSKER.EXE"));
+        command.args([
             "image",
             "import",
             source.to_str().expect("source path is utf-8"),
             "freedos:latest",
         ]);
+        let output = run_captured(&mut command, Duration::from_secs(15));
         assert_eq!(
             output.status.code(),
             Some(0),
