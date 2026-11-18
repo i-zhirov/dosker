@@ -16,8 +16,9 @@ use crate::record::{ContainerRecord, RECORD_SCHEMA_VERSION};
 
 const DIR_MODE: u32 = 0o700;
 
-/// Windows can briefly report a sharing violation while another process
-/// replaces the state file. Retry only that transient case.
+/// Windows can briefly report a sharing violation, or a missing file between
+/// the replace steps, while another process replaces the state file. Retry
+/// only those transient cases.
 fn read_state(path: &Path) -> io::Result<Vec<u8>> {
     let mut attempts = 0;
     loop {
@@ -25,7 +26,8 @@ fn read_state(path: &Path) -> io::Result<Vec<u8>> {
             Ok(bytes) => return Ok(bytes),
             Err(source)
                 if cfg!(windows)
-                    && matches!(source.raw_os_error(), Some(32 | 33))
+                    && (source.kind() == io::ErrorKind::NotFound
+                        || matches!(source.raw_os_error(), Some(32 | 33)))
                     && attempts < 20 =>
             {
                 attempts += 1;
