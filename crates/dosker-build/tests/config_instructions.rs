@@ -328,7 +328,7 @@ fn with_boot_keeps_the_supplied_boot_and_digest() {
     let state = BuildState::with_boot(
         tree_config(),
         Some(Tree::new()),
-        &[base.clone()],
+        std::slice::from_ref(&base),
         EngineName::Bochs,
         boot.clone(),
         Some(disk_digest.clone()),

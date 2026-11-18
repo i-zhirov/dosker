@@ -173,7 +173,7 @@ These names and signatures are used by more than one task and must not drift.
         - Destructure the new fields and build state with `BuildState::with_boot(config, tree, &base_layers, selected_engine, boot, disk_digest)`.
     - **Verify:** `cargo test -p dosker-build --test config_instructions` and `cargo test -p dosker-build --test build`
 
-- [ ] **Task 5: In-DOS run request and read-back delta**
+- [x] **Task 5: In-DOS run request and read-back delta**
 
     - **Implements:** FR-002, FR-007; design §Build And Runtime Semantics (RUN tree delta, `C:\DOSKER` exclusion, boot metadata), contract §RUN.
     - **Create `crates/dosker-build/tests/run_in_dos_delta.rs`**
