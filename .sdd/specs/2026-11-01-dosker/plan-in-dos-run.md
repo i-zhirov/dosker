@@ -30,7 +30,7 @@
 - A cache hit boots no VM. A failed `RUN` commits no layer and writes no cache record.
 - `RUN` output is reported after the agent `EXEC` returns. Empty output reports `RUN produced no captured output`; a truncated result reports `RUN output was truncated`.
 - A non-zero exit, command timeout, boot failure, missing agent, or guest reboot fails the build. A guest reboot surfaces as `BuildError::GuestRebooted`.
-- The build VM omits QEMU `-no-reboot` so a guest reboot produces a second agent `HELLO`; the runtime keeps `-no-reboot`.
+- The build VM uses QEMU `-no-reboot`; a clean QEMU exit while the command runs is mapped to `GuestRebooted`. The runtime keeps its own reboot policy.
 - The build VM passes the image disk interface and serial layout, and writes the effective control port and baud into `CONFIG.INI`. The QEMU adapter maps `serial_ports` serial ports and places the agent on `control_port`; the default is two ports with the agent on COM2. QEMU CPU, memory, video, sound, and network defaults stay as the adapter defines them.
 - The build VM creates `<root>/containers/<id>` before `start` and, on Unix, when any of the four engine socket paths falls back for a long root, creates `dosker_platform::short_socket_dir()` with mode `0700` before `start`.
 - The build VM has no NIC in this slice; a `RUN` must not depend on network access.
@@ -228,7 +228,7 @@ These names and signatures are used by more than one task and must not drift.
                 - `ensure_dir_mode(&request.root.join("containers").join(id.as_str()), SOCKET_DIR_MODE)`.
                 - On Unix, iterate `["agent", "qmp", "monitor", "gdb"]`; if **any** `dosker_platform::engine_socket_path(root, &id, name)` is under `dosker_platform::short_socket_dir()`, `ensure_dir_mode` that directory with `SOCKET_DIR_MODE`. Checking `monitor` alone is not enough because it is the longest path and can fall back while the others fit.
                 - Map `PlatformError` to `RunBootFailed`.
-            - Build `EngineSpec { root: request.root.to_path_buf(), container_id: id, workdir: request.workdir.to_dos_string(), env: request.env.clone(), cmd: None, expects_agent: true, log_dir: request.log_dir.to_path_buf(), disk_path: request.disk_path.to_path_buf(), disk_interface: request.disk_interface.to_owned(), serial_ports: request.serial_ports, control_port: request.control_port, booter: false, display: DisplayMode::None, vnc_port: None, allow_reboot: true }`.
+            - Build `EngineSpec { root: request.root.to_path_buf(), container_id: id, workdir: request.workdir.to_dos_string(), env: request.env.clone(), cmd: None, expects_agent: true, log_dir: request.log_dir.to_path_buf(), disk_path: request.disk_path.to_path_buf(), disk_interface: request.disk_interface.to_owned(), serial_ports: request.serial_ports, control_port: request.control_port, booter: false, display: DisplayMode::None, vnc_port: None, allow_reboot: false }`.
             - `start`, then `ready(request.boot_timeout)`; map start/ready errors to `RunBootFailed`, with specific messages for `ReadyTimeout` and `Exited(code)`; kill on a ready error.
             - `exec` with the command, env, workdir, and timeout; map `ExecTimeout` to `RunTimeout`, `GuestRebooted` to `GuestRebooted`, `NoAgent` to `RunBootFailed` naming the missing agent, and other errors to `RunBootFailed`; kill on error.
             - `stop(RUN_STOP_GRACE)`; a stop error kills and returns `RunBootFailed` with "the guest did not shut down cleanly".
@@ -236,7 +236,7 @@ These names and signatures are used by more than one task and must not drift.
     - **Modify `crates/dosker-build/src/run_in_dos.rs`** — `pub mod engine;` and re-export.
     - **Modify `crates/dosker-build/tests/run_in_dos_engine.rs`**
         - `FakeOpener`/`FakeAdapter`/`FakeSession` recording the spec and scripted results in `Arc<Mutex<FakeEngineState>>`.
-        - `runner_boots_headless_with_reboot_allowed`.
+        - `runner_boots_headless_with_reboot_disabled`.
         - `runner_passes_the_serial_layout`.
         - `runner_passes_the_workdir_environment_and_disk`.
         - `runner_uses_the_command_timeout`.
@@ -339,7 +339,7 @@ These names and signatures are used by more than one task and must not drift.
 
     - **Implements:** FR-007; design §Testing Strategy (real-engine integration), §Success Criteria SC-002; roadmap slice `in-dos-run` (`Done when`).
     - **Create `agent/test/setboot.c`** — a 16-bit DOS helper that reads the FreeDOS base partition boot sector at CHS 4/0/1 (LBA 2048) from drive `0x80` with INT 13h AH=02 into a 512-byte buffer, flips the low bit of the volume-label byte at offset 43 (the boot sector stays bootable), writes the sector back with AH=03, and returns 0 on success or 1 when the BIOS sets carry.
-    - **Create `agent/test/reboot.c`** — a 16-bit DOS helper that performs a warm boot with INT 19h and never returns.
+    - **Create `agent/test/reboot.c`** — a 16-bit DOS helper that resets through an empty IDT and a fault, so QEMU sees a system reset and exits under `-no-reboot`.
     - **Modify `agent/build.sh`** — add `SETBOOT.EXE` and `REBOOT.EXE` artifacts compiled from `agent/test/setboot.c` and `agent/test/reboot.c` with the same `wcc`/`wlink` pattern as `EXITCODE.EXE`.
     - **Modify `agent/tools/build-fixture.sh`** — add `DOSKER_SETBOOT_EXE` and `DOSKER_REBOOT_EXE` defaults, copy `SETBOOT.EXE` and `REBOOT.EXE` to `::/DOSKER/`, and update `agent/tools/fixture-test.sh` expected-file list.
     - **Modify `agent/tools/fixture-test.sh`** — create dummy `SETBOOT.EXE` and `REBOOT.EXE` in `$TMP`, export `DOSKER_SETBOOT_EXE` and `DOSKER_REBOOT_EXE` for every `build-fixture.sh` call, and add both names to the expected-file loop so the standalone fixture test still runs without a compiled helper.
@@ -402,5 +402,5 @@ Run the full workspace checks after Task 9:
 - The RUN VM uses the QEMU adapter's CPU, memory, video, and sound defaults; applying the full machine profile is outside this slice.
 - The RUN VM has no NIC because the QEMU adapter emits `-nic none`; user-mode NAT arrives in a later release.
 - The projection writes default attributes and fixed timestamps; the RUN delta compares kind and content, so attribute-only and timestamp-only differences do not create a layer.
-- The build VM omits `-no-reboot` so a guest reboot is detected as a second agent `HELLO`; the runtime keeps `-no-reboot`.
+- The build VM uses `-no-reboot` and maps a clean QEMU exit during EXEC to `GuestRebooted`; the runtime keeps its own reboot policy.
 - `SETBOOT.EXE` and `REBOOT.EXE` are test-only DOS helpers built by `agent/build.sh` and copied into the integration context; they are not shipped product files.

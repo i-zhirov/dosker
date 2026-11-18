@@ -35,6 +35,7 @@ struct FakeState {
     exec: Option<ExecRequest>,
     calls: Vec<&'static str>,
     killed: bool,
+    exit_code: Option<i32>,
     script: FakeScript,
 }
 
@@ -143,7 +144,7 @@ impl EngineSession for FakeSession {
     }
 
     fn try_exit(&mut self) -> Result<Option<i32>, EngineError> {
-        Ok(None)
+        Ok(self.state.lock().expect("lock the fake state").exit_code)
     }
 }
 
@@ -235,7 +236,7 @@ fn recorded_spec(state: &Arc<Mutex<FakeState>>) -> EngineSpec {
 }
 
 #[test]
-fn runner_boots_headless_with_reboot_allowed() {
+fn runner_boots_headless_with_reboot_disabled() {
     let fixture = Fixture::new();
     let (mut runner, state) = runner();
     let request = fixture.request("ECHO HELLO");
@@ -244,7 +245,7 @@ fn runner_boots_headless_with_reboot_allowed() {
 
     let spec = recorded_spec(&state);
     assert_eq!(spec.display, DisplayMode::None);
-    assert!(spec.allow_reboot);
+    assert!(!spec.allow_reboot);
     assert!(!spec.booter);
     assert!(spec.expects_agent);
     assert_eq!(spec.cmd, None);
@@ -371,6 +372,28 @@ fn runner_maps_a_guest_reboot() {
     let fixture = Fixture::new();
     let (mut runner, state) = runner();
     state.lock().expect("lock the fake state").script.exec = Some(Err(EngineError::GuestRebooted));
+    let request = fixture.request("REBOOT");
+
+    match runner.run(&request) {
+        Err(BuildError::GuestRebooted { line }) => assert_eq!(line, request.line),
+        other => panic!("expected a guest reboot, got {other:?}"),
+    }
+
+    assert!(state.lock().expect("lock the fake state").killed);
+}
+
+#[test]
+fn runner_maps_a_clean_engine_exit_to_a_guest_reboot() {
+    let fixture = Fixture::new();
+    let (mut runner, state) = runner();
+    {
+        let mut state = state.lock().expect("lock the fake state");
+        state.script.exec = Some(Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "guest reset",
+        ))));
+        state.exit_code = Some(0);
+    }
     let request = fixture.request("REBOOT");
 
     match runner.run(&request) {

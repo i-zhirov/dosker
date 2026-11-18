@@ -103,7 +103,7 @@ impl InDosRunner for EngineInDosRunner {
             booter: false,
             display: DisplayMode::None,
             vnc_port: None,
-            allow_reboot: true,
+            allow_reboot: false,
         };
 
         let mut session = adapter
@@ -125,6 +125,10 @@ impl InDosRunner for EngineInDosRunner {
         let result = match session.exec(&exec) {
             Ok(result) => result,
             Err(error) => {
+                if reboot_exit(&mut *session) {
+                    let _ = session.kill();
+                    return Err(BuildError::GuestRebooted { line });
+                }
                 let _ = session.kill();
                 return Err(command_failure(line, error));
             }
@@ -178,6 +182,19 @@ fn ready_failure(timeout: Duration, error: &EngineError) -> String {
         }
         other => other.to_string(),
     }
+}
+
+/// A build VM uses `-no-reboot`, so a guest reset exits QEMU cleanly. Treat a
+/// clean engine exit while the command is running as the guest reboot signal.
+fn reboot_exit(session: &mut dyn dosker_engine::EngineSession) -> bool {
+    for _ in 0..20 {
+        match session.try_exit() {
+            Ok(Some(0)) => return true,
+            Ok(Some(_)) | Err(_) => return false,
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+        }
+    }
+    false
 }
 
 fn command_failure(line: usize, error: EngineError) -> BuildError {
