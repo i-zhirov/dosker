@@ -339,7 +339,7 @@ These names and signatures are used by more than one task and must not drift.
 
     - **Implements:** FR-007; design §Testing Strategy (real-engine integration), §Success Criteria SC-002; roadmap slice `in-dos-run` (`Done when`).
     - **Create `agent/test/setboot.c`** — a 16-bit DOS helper that reads the FreeDOS base partition boot sector at CHS 4/0/1 (LBA 2048) from drive `0x80` with INT 13h AH=02 into a 512-byte buffer, flips the low bit of the volume-label byte at offset 43 (the boot sector stays bootable), writes the sector back with AH=03, and returns 0 on success or 1 when the BIOS sets carry.
-    - **Create `agent/test/reboot.c`** — a 16-bit DOS helper that resets through an empty IDT and a fault, so QEMU sees a system reset and exits under `-no-reboot`.
+    - **Create `agent/test/reboot.c`** — a 16-bit DOS helper that jumps to the BIOS reset vector, so QEMU sees a system reset and exits under `-no-reboot`.
     - **Modify `agent/build.sh`** — add `SETBOOT.EXE` and `REBOOT.EXE` artifacts compiled from `agent/test/setboot.c` and `agent/test/reboot.c` with the same `wcc`/`wlink` pattern as `EXITCODE.EXE`.
     - **Modify `agent/tools/build-fixture.sh`** — add `DOSKER_SETBOOT_EXE` and `DOSKER_REBOOT_EXE` defaults, copy `SETBOOT.EXE` and `REBOOT.EXE` to `::/DOSKER/`, and update `agent/tools/fixture-test.sh` expected-file list.
     - **Modify `agent/tools/fixture-test.sh`** — create dummy `SETBOOT.EXE` and `REBOOT.EXE` in `$TMP`, export `DOSKER_SETBOOT_EXE` and `DOSKER_REBOOT_EXE` for every `build-fixture.sh` call, and add both names to the expected-file loop so the standalone fixture test still runs without a compiled helper.
