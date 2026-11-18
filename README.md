@@ -136,7 +136,7 @@ archive directly into `/usr/watcom`, makes the `binl64` and `binl` tools
 executable, and sets `PATH` and `INCLUDE`. This avoids the installer's
 terminfo floating-point exception on the runner.
 
-The `agent-build` job uploads `DOSKER.EXE` and `EXITCODE.EXE`. The
+The `agent-build` job uploads `DOSKER.EXE`, `EXITCODE.EXE`, `SETBOOT.EXE`, and `REBOOT.EXE`. The
 `agent-qemu` job downloads that artifact, sets `DOSKER_SKIP_BUILD=1`, builds
 the FreeDOS image, and runs the QEMU conformance and self-check scripts. It
 then runs the Rust QEMU runtime suite.

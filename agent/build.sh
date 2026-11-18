@@ -7,6 +7,8 @@ TEST_DIR="$AGENT_DIR/test"
 BUILD_DIR="$AGENT_DIR/build"
 ARTIFACT="$BUILD_DIR/DOSKER.EXE"
 EXITCODE_ARTIFACT="$BUILD_DIR/EXITCODE.EXE"
+SETBOOT_ARTIFACT="$BUILD_DIR/SETBOOT.EXE"
+REBOOT_ARTIFACT="$BUILD_DIR/REBOOT.EXE"
 
 usage() {
     printf 'usage: build.sh [--clean|--print-artifact]\n' >&2
@@ -66,6 +68,18 @@ wcc -0 -bt=dos -ml -zq -wx -we -i="$SRC_DIR" \
     -fo="$BUILD_DIR/exitcode.obj" "$TEST_DIR/exitcode.c"
 
 wlink system dos name "$EXITCODE_ARTIFACT" file "$BUILD_DIR/exitcode.obj" \
+    option stack=8192
+
+wcc -0 -bt=dos -ml -zq -wx -we -i="$SRC_DIR" \
+    -fo="$BUILD_DIR/setboot.obj" "$TEST_DIR/setboot.c"
+
+wlink system dos name "$SETBOOT_ARTIFACT" file "$BUILD_DIR/setboot.obj" \
+    option stack=8192
+
+wcc -0 -bt=dos -ml -zq -wx -we -i="$SRC_DIR" \
+    -fo="$BUILD_DIR/reboot.obj" "$TEST_DIR/reboot.c"
+
+wlink system dos name "$REBOOT_ARTIFACT" file "$BUILD_DIR/reboot.obj" \
     option stack=8192
 
 printf 'built %s\n' "$ARTIFACT"

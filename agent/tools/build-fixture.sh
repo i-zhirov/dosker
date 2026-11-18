@@ -21,6 +21,8 @@ OUTPUT="$1"
 BASE="${DOSKER_BASE_IMAGE:-$ROOT/agent/fixtures/freedos-base.img}"
 AGENT="${DOSKER_AGENT_EXE:-$ROOT/agent/build/DOSKER.EXE}"
 EXITCODE="${DOSKER_EXITCODE_EXE:-$ROOT/agent/build/EXITCODE.EXE}"
+SETBOOT="${DOSKER_SETBOOT_EXE:-$ROOT/agent/build/SETBOOT.EXE}"
+REBOOT="${DOSKER_REBOOT_EXE:-$ROOT/agent/build/REBOOT.EXE}"
 OFFSET="${DOSKER_IMAGE_OFFSET:-1048576}"
 SELF_TEST="${DOSKER_FIXTURE_TEST:-0}"
 
@@ -37,6 +39,8 @@ need() {
   die "missing base image: $BASE (build it with agent/tools/build-base-image.sh)"
 [ -f "$AGENT" ] || die "missing agent executable: $AGENT"
 [ -f "$EXITCODE" ] || die "missing exit-code helper: $EXITCODE"
+[ -f "$SETBOOT" ] || die "missing setboot helper: $SETBOOT"
+[ -f "$REBOOT" ] || die "missing reboot helper: $REBOOT"
 
 for tool in mcopy mmd mdir mtype mformat; do
   need "$tool"
@@ -93,6 +97,8 @@ fi
 
 mtools_mcopy "$AGENT" ::/DOSKER/DOSKER.EXE
 mtools_mcopy "$EXITCODE" ::/DOSKER/EXITCODE.EXE
+mtools_mcopy "$SETBOOT" ::/DOSKER/SETBOOT.EXE
+mtools_mcopy "$REBOOT" ::/DOSKER/REBOOT.EXE
 mtools_mcopy "$TMP/BIG.TXT" ::/DOSKER/BIG.TXT
 mtools_mcopy "$TMP/TWO.TXT" ::/DOSKER/TWO.TXT
 mtools_mcopy "$TMP/CONFIG.INI" ::/DOSKER/CONFIG.INI

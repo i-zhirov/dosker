@@ -81,8 +81,16 @@ jobs:
         run: |
           printf 'PATH=%s/binl64:%s/binl:%s\n' "$WATCOM" "$WATCOM" "$PATH" >> "$GITHUB_ENV"
           printf 'INCLUDE=%s/h\n' "$WATCOM" >> "$GITHUB_ENV"
-      - name: Build the DOS agent
-        run: agent/build.sh
+      - name: Build the DOS agent and RUN test helpers
+        run: |
+          set -euo pipefail
+          agent/build.sh
+          for helper in SETBOOT.EXE REBOOT.EXE; do
+            test -s "agent/build/$helper" || {
+              printf 'missing DOS RUN test helper: %s\n' "$helper" >&2
+              exit 1
+            }
+          done
       - name: Upload the DOS agent binaries
         uses: actions/upload-artifact@v4
         with:
@@ -90,6 +98,8 @@ jobs:
           path: |
             agent/build/DOSKER.EXE
             agent/build/EXITCODE.EXE
+            agent/build/SETBOOT.EXE
+            agent/build/REBOOT.EXE
           if-no-files-found: error
 
   agent-qemu:
@@ -157,6 +167,22 @@ jobs:
           DOSKER_QEMU: qemu-system-i386
           DOSKER_FREEDOS_BASE_IMAGE: agent/fixtures/freedos-base.img
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_freedos -- --nocapture
+      - name: Verify the downloaded RUN test helpers
+        run: |
+          set -euo pipefail
+          for helper in SETBOOT.EXE REBOOT.EXE; do
+            test -s "agent/build/$helper" || {
+              printf 'missing downloaded DOS RUN test helper: %s\n' "$helper" >&2
+              exit 1
+            }
+          done
+      - name: Rust RUN integration suite
+        timeout-minutes: 30
+        env:
+          DOSKER_INTEGRATION: "1"
+          DOSKER_QEMU_IMAGE: agent/fixtures/dosker-agent.img
+          DOSKER_QEMU: qemu-system-i386
+        run: cargo test -p dosker-cli --features qemu-engine --test qemu_run -- --nocapture
 
   freedos-base-determinism:
     name: freedos-base-determinism (${{ matrix.os }})

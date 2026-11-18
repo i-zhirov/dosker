@@ -126,6 +126,65 @@ pub fn agent_executable() -> Result<PathBuf, String> {
     Ok(path)
 }
 
+/// Resolves the workspace boot-sector helper at `agent/build/SETBOOT.EXE`.
+pub fn setboot_executable() -> Result<PathBuf, String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("agent/build/SETBOOT.EXE");
+    if !path.is_file() {
+        return Err(format!(
+            "the setboot helper is missing: {}; build it into agent/build/SETBOOT.EXE",
+            path.display()
+        ));
+    }
+    Ok(path)
+}
+
+/// Resolves the workspace reboot helper at `agent/build/REBOOT.EXE`.
+pub fn reboot_executable() -> Result<PathBuf, String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("agent/build/REBOOT.EXE");
+    if !path.is_file() {
+        return Err(format!(
+            "the reboot helper is missing: {}; build it into agent/build/REBOOT.EXE",
+            path.display()
+        ));
+    }
+    Ok(path)
+}
+
+/// Resolves the FreeDOS source image named by [`FREEDOS_SOURCE_ENV`].
+///
+/// A relative value is resolved against the workspace root, which is two
+/// levels above this crate's manifest directory.
+pub fn freedos_source() -> Result<PathBuf, String> {
+    let value = std::env::var_os(FREEDOS_SOURCE_ENV).filter(|value| !value.is_empty());
+    let Some(value) = value else {
+        return Err(format!(
+            "{FREEDOS_SOURCE_ENV} is not set; set it to a FreeDOS source boot image"
+        ));
+    };
+
+    let path = PathBuf::from(value);
+    let path = if path.is_absolute() {
+        path
+    } else {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    };
+
+    if !path.is_file() {
+        return Err(format!(
+            "{FREEDOS_SOURCE_ENV} does not name a FreeDOS source image: {}",
+            path.display()
+        ));
+    }
+
+    Ok(path)
+}
+
 /// Returns the QEMU program named by [`QEMU_ENV`] or the default program.
 pub fn qemu_binary() -> String {
     std::env::var(QEMU_ENV)

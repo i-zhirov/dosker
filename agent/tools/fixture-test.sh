@@ -41,12 +41,16 @@ BLANK="$TMP/blank.img"
 FIXTURE="$TMP/fixture.img"
 AGENT="$TMP/DOSKER.EXE"
 EXITCODE="$TMP/EXITCODE.EXE"
+SETBOOT="$TMP/SETBOOT.EXE"
+REBOOT="$TMP/REBOOT.EXE"
 
 dd if=/dev/zero of="$BLANK" bs=1048576 count=8 2>/dev/null
 MTOOLS_SKIP_CHECK=1 MTOOLS_NO_VFAT=1 mformat -i "$BLANK" ::
 
 printf 'dummy agent\n' > "$AGENT"
 printf 'dummy exit-code helper\n' > "$EXITCODE"
+printf 'dummy setboot helper\n' > "$SETBOOT"
+printf 'dummy reboot helper\n' > "$REBOOT"
 
 mtools_mdir() {
   MTOOLS_SKIP_CHECK=1 MTOOLS_NO_VFAT=1 mdir "$@"
@@ -91,6 +95,8 @@ run_expect_failure() {
 DOSKER_BASE_IMAGE="$BLANK" \
 DOSKER_AGENT_EXE="$AGENT" \
 DOSKER_EXITCODE_EXE="$EXITCODE" \
+DOSKER_SETBOOT_EXE="$SETBOOT" \
+DOSKER_REBOOT_EXE="$REBOOT" \
 DOSKER_IMAGE_OFFSET=0 \
 DOSKER_FIXTURE_TEST=0 \
   "$BUILDER" "$FIXTURE" >"$TMP/build.log"
@@ -100,7 +106,7 @@ DOSKER_FIXTURE_TEST=0 \
 mtools_mdir -i "$FIXTURE" ::/APP >/dev/null 2>&1 || \
   die "fixture lacks ::/APP"
 
-for name in DOSKER.EXE EXITCODE.EXE BIG.TXT TWO.TXT CONFIG.INI; do
+for name in DOSKER.EXE EXITCODE.EXE SETBOOT.EXE REBOOT.EXE BIG.TXT TWO.TXT CONFIG.INI; do
   mtools_mdir -i "$FIXTURE" "::/DOSKER/$name" >/dev/null || \
     die "fixture listing lacks $name"
 done
@@ -137,6 +143,8 @@ TEST_FIXTURE="$TMP/fixture-test.img"
 DOSKER_BASE_IMAGE="$BLANK" \
 DOSKER_AGENT_EXE="$AGENT" \
 DOSKER_EXITCODE_EXE="$EXITCODE" \
+DOSKER_SETBOOT_EXE="$SETBOOT" \
+DOSKER_REBOOT_EXE="$REBOOT" \
 DOSKER_IMAGE_OFFSET=0 \
 DOSKER_FIXTURE_TEST=1 \
   "$BUILDER" "$TEST_FIXTURE" >"$TMP/build-test.log"
@@ -157,6 +165,8 @@ mtools_mcopy -i "$CONFIG_BLANK" "$TMP/CONFIG.SYS.source" ::/CONFIG.SYS
 DOSKER_BASE_IMAGE="$CONFIG_BLANK" \
 DOSKER_AGENT_EXE="$AGENT" \
 DOSKER_EXITCODE_EXE="$EXITCODE" \
+DOSKER_SETBOOT_EXE="$SETBOOT" \
+DOSKER_REBOOT_EXE="$REBOOT" \
 DOSKER_IMAGE_OFFSET=0 \
 DOSKER_FIXTURE_TEST=0 \
   "$BUILDER" "$CONFIG_FIXTURE" >"$TMP/build-config.log"
@@ -180,6 +190,8 @@ BASE_STATUS="$(run_expect_failure "$BASE_LOG" \
   DOSKER_BASE_IMAGE="$BASE_MISSING" \
   DOSKER_AGENT_EXE="$AGENT" \
   DOSKER_EXITCODE_EXE="$EXITCODE" \
+  DOSKER_SETBOOT_EXE="$SETBOOT" \
+  DOSKER_REBOOT_EXE="$REBOOT" \
   DOSKER_IMAGE_OFFSET=0 \
   "$BUILDER" "$TMP/missing-base.img")"
 [ "$BASE_STATUS" -eq 1 ] || \
@@ -196,6 +208,8 @@ AGENT_STATUS="$(run_expect_failure "$AGENT_LOG" \
   DOSKER_BASE_IMAGE="$BLANK" \
   DOSKER_AGENT_EXE="$AGENT_MISSING" \
   DOSKER_EXITCODE_EXE="$EXITCODE" \
+  DOSKER_SETBOOT_EXE="$SETBOOT" \
+  DOSKER_REBOOT_EXE="$REBOOT" \
   DOSKER_IMAGE_OFFSET=0 \
   "$BUILDER" "$TMP/missing-agent.img")"
 [ "$AGENT_STATUS" -eq 1 ] || \
@@ -210,6 +224,8 @@ EXITCODE_STATUS="$(run_expect_failure "$EXITCODE_LOG" \
   DOSKER_BASE_IMAGE="$BLANK" \
   DOSKER_AGENT_EXE="$AGENT" \
   DOSKER_EXITCODE_EXE="$EXITCODE_MISSING" \
+  DOSKER_SETBOOT_EXE="$SETBOOT" \
+  DOSKER_REBOOT_EXE="$REBOOT" \
   DOSKER_IMAGE_OFFSET=0 \
   "$BUILDER" "$TMP/missing-exitcode.img")"
 [ "$EXITCODE_STATUS" -eq 1 ] || \
