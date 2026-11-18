@@ -21,6 +21,10 @@ const START_MARGIN: Duration = Duration::from_secs(5);
 const KILL_WAIT: Duration = Duration::from_secs(5);
 const ENDPOINT_WAIT: Duration = Duration::from_secs(5);
 const POLL_STEP: Duration = Duration::from_millis(100);
+/// The supervisor writes its final status just before exiting. Give the
+/// store a brief window to observe that write before recovering a still-active
+/// record as stale.
+const EXIT_SETTLE_GRACE: Duration = Duration::from_secs(1);
 
 /// The result of waiting for a container start.
 pub struct StartOutcome {
@@ -158,6 +162,7 @@ pub fn wait_for_start(
     mut supervisor: Option<&mut Child>,
 ) -> Result<StartOutcome, CliError> {
     let mut saw_starting = false;
+    let mut child_exit = None;
     loop {
         let record = store.load(id)?;
         match record.status {
@@ -193,13 +198,22 @@ pub fn wait_for_start(
         }
 
         // A supervisor that exits before it writes `starting` can make no
-        // further progress, so the current record is final even when it is
-        // still in its pre-spawn state.
+        // further progress. Its final status is written just before exit, so
+        // give the store a short settle window before recovering the record as
+        // stale; otherwise a failed boot can be reported as `Exited`.
         if let Some(child) = supervisor.as_deref_mut()
             && child.try_wait()?.is_some()
         {
             let record = store.load(id)?;
-            if record.status.is_active() {
+            if !record.status.is_active() {
+                return Ok(StartOutcome {
+                    record,
+                    timed_out: false,
+                });
+            }
+
+            let exited_at = child_exit.get_or_insert_with(Instant::now);
+            if exited_at.elapsed() >= EXIT_SETTLE_GRACE {
                 recover_stale(store, probe, Utc::now())?;
                 let record = store.load(id)?;
                 return Ok(StartOutcome {
@@ -207,10 +221,6 @@ pub fn wait_for_start(
                     timed_out: false,
                 });
             }
-            return Ok(StartOutcome {
-                record,
-                timed_out: false,
-            });
         }
 
         if Instant::now() >= deadline {
