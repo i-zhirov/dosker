@@ -230,7 +230,7 @@ fn run_host_provides_root_workdir_and_env() {
     let workdir = dos(r"C:\PROJECT");
     let env = BTreeMap::from([("GREETING".to_owned(), "hello world".to_owned())]);
     let command = if cfg!(windows) {
-        "pushd \"%DOSKER_ROOT%\" && type HELLO.TXT > ROOT.TXT & popd & echo %DOSKER_WORKDIR%> WORKDIR.TXT & echo %DOSKER_ENV_GREETING%> ENV.TXT"
+        "if not defined DOSKER_ROOT exit /B 1 & type HELLO.TXT > ROOT.TXT & echo %DOSKER_WORKDIR%> WORKDIR.TXT & echo %DOSKER_ENV_GREETING%> ENV.TXT"
     } else {
         "cat \"$DOSKER_ROOT/HELLO.TXT\" > ROOT.TXT; printf '%s' \"$DOSKER_WORKDIR\" > WORKDIR.TXT; printf '%s' \"$DOSKER_ENV_GREETING\" > ENV.TXT"
     };
