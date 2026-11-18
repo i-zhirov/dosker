@@ -3,6 +3,8 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 
 use dosker_core::{ContainerId, ContainerName, CoreError};
 use dosker_platform::PlatformError;
@@ -13,6 +15,26 @@ use crate::paths::RuntimePaths;
 use crate::record::{ContainerRecord, RECORD_SCHEMA_VERSION};
 
 const DIR_MODE: u32 = 0o700;
+
+/// Windows can briefly report a sharing violation while another process
+/// replaces the state file. Retry only that transient case.
+fn read_state(path: &Path) -> io::Result<Vec<u8>> {
+    let mut attempts = 0;
+    loop {
+        match fs::read(path) {
+            Ok(bytes) => return Ok(bytes),
+            Err(source)
+                if cfg!(windows)
+                    && matches!(source.raw_os_error(), Some(32 | 33))
+                    && attempts < 20 =>
+            {
+                attempts += 1;
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(source) => return Err(source),
+        }
+    }
+}
 
 /// A failure in the state store.
 #[derive(Debug, thiserror::Error)]
@@ -88,7 +110,7 @@ impl StateStore {
     /// Loads a container record.
     pub fn load(&self, id: &ContainerId) -> Result<ContainerRecord, StoreError> {
         let path = self.paths.state_file(id);
-        let bytes = match fs::read(&path) {
+        let bytes = match read_state(&path) {
             Ok(bytes) => bytes,
             Err(source) if source.kind() == io::ErrorKind::NotFound => {
                 return Err(StoreError::NotFound(id.clone()));
