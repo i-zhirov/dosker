@@ -1319,6 +1319,7 @@ fn commit_image_rejects_a_booter_with_tree_layers() {
     ));
 }
 
+#[allow(clippy::permissions_set_readonly_false)]
 fn make_writable(path: &Path) {
     let mut permissions = fs::metadata(path).unwrap().permissions();
     #[cfg(unix)]
