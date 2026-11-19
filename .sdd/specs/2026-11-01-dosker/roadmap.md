@@ -292,11 +292,11 @@ In scope: live visibility of a host edit in the guest, refusal of an invalid
 warning that keeps this mode out of CI. Out of scope: a shared L2 network and
 any engine other than QEMU.
 
-- **Status:** Unplanned
+- **Status:** Planned
 - **Depends on:** Slices 3 and 9.
 - **Requirements:** FR-015 (the capability gate), FR-017
 - **Manual prerequisites:** QEMU. A host filesystem for the `vvfat` test.
-- **Plan:** —
+- **Plan:** [`.sdd/specs/2026-11-01-dosker/plan-development-mode.md`](plan-development-mode.md)
 - **Done when:** a host edit is visible in the guest without a rebuild. A file
   name that is not valid 8.3 is refused before boot and the invalid path is
   named. A read-only bind rejects a guest write. The sync fallback shows the
