@@ -10,6 +10,7 @@ use crate::cli::{DoctorArgs, EXIT_ERROR, EXIT_OK};
 use crate::context::Context;
 use crate::error::CliError;
 
+const DEVELOPMENT_MODE_WARNING: &str = "development mode: --bind uses QEMU vvfat (beta) and can corrupt host files. Use it for development only, never in CI.";
 const SECURITY_STATEMENT: &str =
     "security: DOSker does not sandbox untrusted images; use an outer VM for untrusted input.";
 
@@ -52,6 +53,7 @@ pub fn execute(_args: DoctorArgs, context: &mut Context) -> Result<u8, CliError>
     context
         .console
         .line(&format!("capabilities: {capability_names}"))?;
+    context.console.line(DEVELOPMENT_MODE_WARNING)?;
     context.console.line(SECURITY_STATEMENT)?;
 
     if writable && found {

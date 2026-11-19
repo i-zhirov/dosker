@@ -178,6 +178,27 @@ fn doctor_prints_the_security_statement() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn doctor_prints_the_development_mode_warning() {
+    let root = CliRoot::new();
+    let dir = tempfile::tempdir().expect("create a script directory");
+    let qemu = write_qemu(dir.path());
+
+    let output = run_with_qemu(&root, &qemu, &["doctor"]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    let text = stdout_text(&output);
+    assert!(text.contains("--bind"), "stdout: {text}");
+    assert!(text.contains("vvfat"), "stdout: {text}");
+    assert!(text.contains("development only"), "stdout: {text}");
+}
+
 #[test]
 fn doctor_exits_one_when_qemu_is_missing() {
     let root = CliRoot::new();
