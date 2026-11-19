@@ -266,12 +266,12 @@ In scope: the volume `meta.json` and lock, the `superfloppy` layout for floppy
 sizes, the port conflict error, `dosker port`, and the NE2000 guest NIC. Out of
 scope: NAT on any engine other than QEMU, and the shared L2 network.
 
-- **Status:** Unplanned
+- **Status:** Planned
 - **Depends on:** Slices 3 and 5.
 - **Requirements:** FR-014, FR-015
 - **Manual prerequisites:** QEMU. A DOS packet driver and a TCP/IP stack for
   the integration test.
-- **Plan:** —
+- **Plan:** [`.sdd/specs/2026-11-01-dosker/plan-volumes-and-nat.md`](plan-volumes-and-nat.md)
 - **Done when:** a partitioned FAT16 volume attaches to one running container
   and survives `rm`. A second attach fails and names the holder. A read-only
   volume rejects guest writes. A guest TCP service reaches the host at
