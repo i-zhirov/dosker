@@ -4,7 +4,7 @@ use std::net::TcpListener;
 
 use dosker_engine::{
     DisplayMode, EngineCommand, EngineEndpointKind, EngineError, EnginePort, EngineSpec,
-    EngineVolume,
+    EngineVolume, EngineVolumeKind,
 };
 
 use crate::discovery::QemuBinary;
@@ -131,17 +131,48 @@ fn volume_drives(volumes: &[EngineVolume]) -> Result<Vec<String>, EngineError> {
             }
         };
 
-        let mut drive = format!("file={},format=raw,{placement}", volume.path.display());
-        if volume.read_only {
-            // QEMU rejects a read-only block node on an IDE hard disk, so a
-            // read-only hard-disk volume gets a temporary overlay whose writes
-            // are discarded. A floppy can be attached read-only directly.
-            if matches!(volume.drive.as_str(), "A:" | "B:") {
-                drive.push_str(",readonly=on");
-            } else {
-                drive.push_str(",snapshot=on");
+        let drive = match volume.kind {
+            EngineVolumeKind::HostDir => {
+                if matches!(volume.drive.as_str(), "A:" | "B:") {
+                    return Err(EngineError::Setup(format!(
+                        "a host directory cannot be attached at the floppy drive {}",
+                        volume.drive
+                    )));
+                }
+                if volume.read_only {
+                    // QEMU rejects a read-only vvfat node on an IDE disk, so a
+                    // read-only host directory must use a projected image.
+                    return Err(EngineError::Setup(format!(
+                        "a read-only host directory cannot be attached at {}",
+                        volume.drive
+                    )));
+                }
+                if volume.path.to_string_lossy().contains(',') {
+                    return Err(EngineError::Setup(format!(
+                        "a host directory path cannot contain a comma: {}",
+                        volume.path.display()
+                    )));
+                }
+                format!(
+                    "file=fat:rw:{},format=raw,{placement}",
+                    volume.path.display()
+                )
             }
-        }
+            EngineVolumeKind::Image => {
+                let mut drive = format!("file={},format=raw,{placement}", volume.path.display());
+                if volume.read_only {
+                    // QEMU rejects a read-only block node on an IDE hard disk, so a
+                    // read-only hard-disk volume gets a temporary overlay whose writes
+                    // are discarded. A floppy can be attached read-only directly.
+                    if matches!(volume.drive.as_str(), "A:" | "B:") {
+                        drive.push_str(",readonly=on");
+                    } else {
+                        drive.push_str(",snapshot=on");
+                    }
+                }
+                drive
+            }
+        };
         drives.push(drive);
     }
 

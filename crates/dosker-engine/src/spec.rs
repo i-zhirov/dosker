@@ -57,12 +57,22 @@ pub struct EnginePort {
     pub guest_port: u16,
 }
 
+/// Whether an engine volume is a disk image or a live host directory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EngineVolumeKind {
+    /// A disk image attached as a block device.
+    Image,
+    /// A host directory attached live as a FAT drive.
+    HostDir,
+}
+
 /// A volume disk attached at a guest drive.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EngineVolume {
     pub drive: String,
     pub path: PathBuf,
     pub read_only: bool,
+    pub kind: EngineVolumeKind,
 }
 
 /// The pinned inputs an adapter needs to launch an engine for one container.

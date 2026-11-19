@@ -14,7 +14,8 @@ const RUN_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(unix)]
 const VERSION_LINE: &str = "QEMU emulator version 11.1.3";
 #[cfg(unix)]
-const CAPABILITIES: &str = "boot,serial,stop,headless,debug_native,gdbstub,screenshot,vnc,nat";
+const CAPABILITIES: &str =
+    "boot,serial,stop,headless,host_dir_live,debug_native,gdbstub,screenshot,vnc,nat";
 #[cfg(unix)]
 const SECURITY: &str =
     "security: DOSker does not sandbox untrusted images; use an outer VM for untrusted input.";
@@ -98,7 +99,7 @@ fn engines_lists_the_proven_capabilities() {
     let fields: Vec<&str> = line.split_whitespace().collect();
     assert_eq!(fields.get(3), Some(&CAPABILITIES), "stdout: {text}");
     let capabilities: Vec<&str> = fields[3].split(',').collect();
-    assert!(!capabilities.contains(&"host_dir_live"), "stdout: {text}");
+    assert!(capabilities.contains(&"host_dir_live"), "stdout: {text}");
     assert!(capabilities.contains(&"nat"), "stdout: {text}");
     assert!(!capabilities.contains(&"audio"), "stdout: {text}");
 }

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use dosker_core::ContainerId;
 use dosker_engine::{
     Capability, CapabilitySet, DisplayMode, EngineAdapter, EngineCommand, EngineEndpointKind,
-    EngineError, EnginePort, EngineSpec, EngineVolume,
+    EngineError, EnginePort, EngineSpec, EngineVolume, EngineVolumeKind,
 };
 #[cfg(unix)]
 use dosker_engine_qemu::QemuEndpoints;
@@ -501,6 +501,16 @@ fn volume(drive: &str, name: &str, read_only: bool) -> EngineVolume {
         drive: drive.to_owned(),
         path: PathBuf::from(format!("/tmp/dosker-volumes/{name}.img")),
         read_only,
+        kind: EngineVolumeKind::Image,
+    }
+}
+
+fn host_dir(drive: &str, path: &str, read_only: bool) -> EngineVolume {
+    EngineVolume {
+        drive: drive.to_owned(),
+        path: PathBuf::from(path),
+        read_only,
+        kind: EngineVolumeKind::HostDir,
     }
 }
 
@@ -567,6 +577,70 @@ fn command_marks_a_read_only_floppy_volume_read_only() {
 }
 
 #[test]
+fn command_attaches_a_host_directory_as_vvfat() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![host_dir("D:", "/tmp/dosker-binds/host", false)];
+    let args = build(&spec);
+
+    let drive = String::from("file=fat:rw:/tmp/dosker-binds/host,format=raw,if=ide,index=1");
+    assert!(has_pair(&args, "-drive", &drive));
+    assert!(!drive.contains("readonly=on"));
+    assert!(!drive.contains("snapshot=on"));
+}
+
+#[test]
+fn command_rejects_a_read_only_host_directory() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![host_dir("D:", "/tmp/dosker-binds/host", true)];
+
+    match command::build(&spec, &sample_binary()) {
+        Err(EngineError::Setup(_)) => {}
+        other => panic!("expected a setup error for a read-only host directory, got {other:?}"),
+    }
+}
+
+#[test]
+fn command_rejects_a_host_directory_with_a_comma() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![host_dir("D:", "/tmp/dosker-binds/a,b", false)];
+
+    match command::build(&spec, &sample_binary()) {
+        Err(EngineError::Setup(_)) => {}
+        other => panic!("expected a setup error for a comma in the host path, got {other:?}"),
+    }
+}
+
+#[test]
+fn command_attaches_a_host_directory_on_e_and_f() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![
+        host_dir("E:", "/tmp/dosker-binds/extra", false),
+        host_dir("F:", "/tmp/dosker-binds/more", false),
+    ];
+    let args = build(&spec);
+
+    let extra = String::from("file=fat:rw:/tmp/dosker-binds/extra,format=raw,if=ide,index=2");
+    let more = String::from("file=fat:rw:/tmp/dosker-binds/more,format=raw,if=ide,index=3");
+    assert!(has_pair(&args, "-drive", &extra));
+    assert!(has_pair(&args, "-drive", &more));
+}
+
+#[test]
+fn command_rejects_a_host_directory_on_a_floppy_drive() {
+    for drive in ["A:", "B:"] {
+        let mut spec = sample_spec();
+        spec.volumes = vec![host_dir(drive, "/tmp/dosker-binds/host", false)];
+
+        match command::build(&spec, &sample_binary()) {
+            Err(EngineError::Setup(_)) => {}
+            other => {
+                panic!("expected a setup error for a host directory on {drive}, got {other:?}")
+            }
+        }
+    }
+}
+
+#[test]
 fn command_rejects_a_volume_drive_outside_the_supported_set() {
     let mut spec = sample_spec();
     spec.volumes = vec![volume("G:", "unsupported", false)];
@@ -586,6 +660,7 @@ fn capabilities_are_the_proven_set() {
         Capability::Serial,
         Capability::Stop,
         Capability::Headless,
+        Capability::HostDirLive,
         Capability::DebugNative,
         Capability::GdbStub,
         Capability::Screenshot,
@@ -598,6 +673,14 @@ fn capabilities_are_the_proven_set() {
     assert_eq!(adapter.name(), "qemu");
     assert_eq!(adapter.version(), "8.2.0");
     assert_eq!(adapter.capabilities(), expected);
+}
+
+#[test]
+fn capabilities_include_host_dir_live() {
+    let processes: Arc<dyn ProcessSupervisor> = Arc::new(system());
+    let adapter = QemuAdapter::new(sample_binary(), processes);
+
+    assert!(adapter.capabilities().contains(Capability::HostDirLive));
 }
 
 #[test]

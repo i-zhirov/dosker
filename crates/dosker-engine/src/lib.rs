@@ -12,5 +12,5 @@ pub use error::EngineError;
 pub use source::EngineSource;
 pub use spec::{
     DebugKind, DisplayMode, EngineCommand, EngineEndpoint, EngineEndpointKind, EnginePort,
-    EngineSpec, EngineVolume, ExecRequest, ExecResult,
+    EngineSpec, EngineVolume, EngineVolumeKind, ExecRequest, ExecResult,
 };

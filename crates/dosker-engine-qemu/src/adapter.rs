@@ -46,6 +46,7 @@ pub fn capabilities() -> CapabilitySet {
         Capability::Serial,
         Capability::Stop,
         Capability::Headless,
+        Capability::HostDirLive,
         Capability::DebugNative,
         Capability::GdbStub,
         Capability::Screenshot,
