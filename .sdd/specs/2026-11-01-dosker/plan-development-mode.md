@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-19
-- **Status**: Approved
+- **Status**: Implemented
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: development-mode
 - **Depends on**: Slices 3 and 9.
@@ -105,7 +105,7 @@ fn validate_binds(
 
 ## Tasks
 
-- [ ] **Task 1: Host directory 8.3 validation**
+- [x] **Task 1: Host directory 8.3 validation**
     - **Implements:** FR-017; design §Error Handling ("Invalid 8.3 path", "Symlink or traversal"), data-model §Validation Rules ("A bind mount source must exist and pass 8.3 validation").
     - **Create `crates/dosker-image/tests/host.rs` first**
         - `a_valid_host_directory_becomes_a_tree` — `read_host_tree` on a directory with `APP/MAIN.EXE` and `README.TXT` produces the paths `APP`, `APP/MAIN.EXE`, and `README.TXT`, with the fixed timestamp and the exact file bytes.
@@ -131,7 +131,7 @@ fn validate_binds(
         - `pub mod host;` and re-export `validate_host_tree` and `read_host_tree`.
     - **Verify:** `cargo test -p dosker-image --test host`
 
-- [ ] **Task 2: Host tree write-back**
+- [x] **Task 2: Host tree write-back**
     - **Implements:** design §Risks ("Sync fallback"), §Runtime (the fallback writes guest changes back on a clean stop).
     - **Modify `crates/dosker-image/tests/host.rs` first**
         - `write_host_tree_mirrors_the_tree` — a destination containing `STALE.TXT` and `STALEDIR/OLD.TXT` gains the tree's files and directories, and the stale entries are gone.
@@ -144,7 +144,7 @@ fn validate_binds(
         - Re-export `write_host_tree`.
     - **Verify:** `cargo test -p dosker-image --test host`
 
-- [ ] **Task 3: Bind value parser**
+- [x] **Task 3: Bind value parser**
     - **Implements:** FR-017; design §CLI (`dosker run ... [--bind drive:path[:ro]]`).
     - **Modify `crates/dosker-cli/src/spec.rs` with tests first**
         - `bind_spec_accepts_the_canonical_form` — `D:/host/path` → drive `D:`, path `/host/path`, `read_only` false.
@@ -163,7 +163,7 @@ fn validate_binds(
         - Drive messages: `the boot drive C: cannot hold a bind mount; supported drives are D:, E:, and F:`, `the floppy drive {drive} cannot hold a bind mount; supported drives are D:, E:, and F:`, and `unsupported bind drive {drive}; supported drives are D:, E:, and F:`.
     - **Verify:** `cargo test -p dosker-cli --lib spec`
 
-- [ ] **Task 4: QEMU declares the capability and attaches vvfat directories**
+- [x] **Task 4: QEMU declares the capability and attaches vvfat directories**
     - **Implements:** FR-015 (the capability gate); design §Engine Capability Matrix (`host_dir_live`: QEMU, `vvfat`), §Runtime.
     - **Modify `crates/dosker-engine-qemu/tests/command.rs` first**
         - `capabilities_are_the_proven_set` — the expected set gains `Capability::HostDirLive` after `Headless`.
@@ -189,7 +189,7 @@ fn validate_binds(
         - Add `kind: EngineVolumeKind::Image` to the existing `EngineVolume` literals.
     - **Verify:** `cargo test -p dosker-engine-qemu --test command && cargo test -p dosker-cli --features qemu-engine --test cli_engines`
 
-- [ ] **Task 5: `create` records bind mounts and gates the capability**
+- [x] **Task 5: `create` records bind mounts and gates the capability**
     - **Implements:** FR-015 (the capability gate), FR-017; design §CLI, §Runtime, data-model §VolumeMount; the binding decisions on the supported drives and the QEMU-only gate.
     - **Create `crates/dosker-cli/tests/cli_binds.rs` first**
         - Every test imports `freedos:latest` through `CliRoot::import_image_as` before `create`; the image-declaration test uses a local `build_image` helper mirroring `cli_volumes.rs`.
@@ -216,7 +216,7 @@ fn validate_binds(
         - Pass `binds: args.bind` in `CreateOptions`.
     - **Verify:** `cargo test -p dosker-cli --features mock-engine --test cli_binds`
 
-- [ ] **Task 6: Runtime bind preparation, fallback projection, sync, and discard**
+- [x] **Task 6: Runtime bind preparation, fallback projection, sync, and discard**
     - **Implements:** FR-015 (the capability gate); design §Risks ("Sync fallback"), §Runtime; the binding decisions on `DOSKER_NO_VVFAT=1` and the two-way fallback.
     - **Create `crates/dosker-runtime/tests/binds.rs` first**
         - The record helper creates a `ContainerRecord` with one `VolumeKind::Bind` mount and creates `containers/<id>` under the test root before `prepare_binds`.
@@ -244,7 +244,7 @@ fn validate_binds(
         - `pub mod binds;` and re-export `BIND_IMAGE_SIZE`, `VVFAT_DISABLED_ENV`, `BindError`, `prepare_binds`, `sync_binds`, `discard_binds`, `use_vvfat`, `vvfat_disabled`.
     - **Verify:** `cargo test -p dosker-runtime --test binds`
 
-- [ ] **Task 7: Supervisor attaches binds and syncs on a clean stop**
+- [x] **Task 7: Supervisor attaches binds and syncs on a clean stop**
     - **Implements:** FR-015 (the capability gate); design §Runtime, §Risks; the binding decisions on the fallback selection and the discard rule.
     - **Modify `crates/dosker-runtime/tests/supervisor.rs` first**
         - Add a `bind_mount(drive, host, read_only)` helper and a `static BIND_ENV_LOCK: Mutex<()>`; all three bind tests hold it so the environment is stable.
@@ -258,7 +258,7 @@ fn validate_binds(
         - `run_stop` on a clean engine exit calls `sync_binds(&state.record, store.paths())`; on success calls `discard_binds`; on failure logs `warning: cannot write back a bind mount: {error}` and keeps the image.
     - **Verify:** `cargo test -p dosker-runtime --test supervisor`
 
-- [ ] **Task 8: `doctor` warning**
+- [x] **Task 8: `doctor` warning**
     - **Implements:** design §Risks ("Prominent warning"), roadmap "Done when" (the warning appears in `doctor`).
     - **Modify `crates/dosker-cli/tests/cli_engines.rs` first**
         - `doctor_prints_the_development_mode_warning` — with the fake QEMU script from `write_qemu`, `doctor` exits `0` and stdout contains `--bind`, `vvfat`, and `development only`.
@@ -267,7 +267,7 @@ fn validate_binds(
         - Print it after the capability line and before the security statement.
     - **Verify:** `cargo test -p dosker-cli --features qemu-engine --test cli_engines`
 
-- [ ] **Task 9: Development mode documentation**
+- [x] **Task 9: Development mode documentation**
     - **Implements:** design §Runtime ("with the documented beta warning and no CI use"), §Risks.
     - **Modify `docs/volumes-and-network.md`**
         - Add `## Development mode` after the volume-management commands and before `## Publishing ports`.
@@ -279,7 +279,7 @@ fn validate_binds(
         - State that the QEMU integration tests are gated by `DOSKER_INTEGRATION=1` and are not part of CI.
     - **Verify:** `rg -n "DOSKER_NO_VVFAT|vvfat|8\\.3|--bind" docs/volumes-and-network.md`
 
-- [ ] **Task 10: Development mode integration tests on QEMU**
+- [x] **Task 10: Development mode integration tests on QEMU**
     - **Implements:** FR-015 (the capability gate), FR-017; roadmap "Done when" (host edit visible, invalid name refused before boot and named, read-only write rejected, fallback content).
     - **Create `crates/dosker-cli/tests/qemu_binds.rs`**
         - `#![cfg(unix)]`, `mod common;`, a `static INTEGRATION_LOCK: Mutex<()>`, a `prepared_image()` that returns `None` without `DOSKER_INTEGRATION=1` and panics when the prepared image is missing, a `Container` drop guard copied from `qemu_volumes.rs`, and a `run_with_vvfat_disabled` helper that adds `DOSKER_NO_VVFAT=1` to `root.command_with_qemu()` and uses `run_captured`.
@@ -291,3 +291,28 @@ fn validate_binds(
         - Every test takes `INTEGRATION_LOCK` after `prepared_image()` and uses a unique container name.
     - **Do not modify `.github/workflows/ci.yml` or `.github/workflows/qemu-nightly.yml`.**
     - **Verify:** `DOSKER_INTEGRATION=1 DOSKER_QEMU_IMAGE=agent/fixtures/dosker-agent.img DOSKER_QEMU=qemu-system-i386 cargo test -p dosker-cli --features qemu-engine --test qemu_binds -- --nocapture`
+
+## Deviations
+
+- The invalid-character host-name test uses `BAD+NAME.TXT` instead of
+  `BAD?NAME.TXT`: `?` cannot be created on Windows, where the test matrix
+  runs, while `+` is invalid in DOS 8.3 and creatable on every platform.
+- The image-declaration bind test imports `base:latest` and is gated
+  `#[cfg(unix)]` because its `build_image` helper is a unix-only fake
+  QEMU; every other CLI bind test imports `freedos:latest` as specified.
+- The supervisor calls `prepare_binds` and `use_vvfat` only when the
+  record has a bind mount. Records without binds behave identically
+  because `prepare_binds` returned an empty list, and this keeps
+  `DOSKER_NO_VVFAT` out of unrelated supervisor starts.
+- The docs state that the drive separator colon is required, matching
+  `BindSpec::parse` and `bind_spec_rejects_a_missing_drive_separator`,
+  although the Constraints line calls the drive colon optional.
+- The live-edit integration test refreshes the guest directory before
+  each poll. DOS caches directory sectors and QEMU caches the cluster it
+  last served, so a bare repeated `TYPE` never re-reads a changed host
+  file. The assertion is unchanged (the guest prints the new content
+  within ten seconds), and the docs now state the re-read requirement.
+- A stale fallback image that cannot be removed fails `prepare_binds`
+  with `BindError::Image` instead of being ignored. Ignoring it could
+  leave a stale image that a clean stop would write over the host
+  directory.
