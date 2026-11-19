@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufReader, Write};
 use std::net::Ipv4Addr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -17,7 +17,7 @@ use dosker_core::{ContainerId, ContainerName, Status};
 use dosker_engine::{
     Capability, CapabilitySet, DebugKind, EngineAdapter, EngineCommand, EngineEndpoint,
     EngineEndpointKind, EngineError, EnginePort, EngineSession, EngineSpec, EngineVolume,
-    ExecRequest, ExecResult,
+    EngineVolumeKind, ExecRequest, ExecResult,
 };
 use dosker_image::{DEFAULT_VOLUME_SIZE, PortProtocol};
 use dosker_platform::control::{ControlConnection, connect};
@@ -26,14 +26,58 @@ use dosker_platform::{Endpoint, EndpointRecord};
 use dosker_runtime::supervisor::{DEFAULT_READY_TIMEOUT, Supervisor, SupervisorConfig};
 use dosker_runtime::{
     ATTACH_POLL, ContainerRecord, CpDirection, ErrorCode, FrameRead, MAX_CP_BYTES, PortMapping,
-    Reply, Request, Response, StateStore, VolumeError, VolumeHolder, VolumeKind, VolumeMount,
-    VolumeStore, read_frame, write_message,
+    Reply, Request, Response, StateStore, VVFAT_DISABLED_ENV, VolumeError, VolumeHolder,
+    VolumeKind, VolumeMount, VolumeStore, read_frame, write_message,
 };
 use dosker_test_support::fixtures::{kill_process, mock_engine_path, wait_until};
 use dosker_test_support::mock_adapter::MockAdapter;
 use tempfile::TempDir;
 
 type Client = BufReader<Box<dyn ControlConnection>>;
+
+/// Serializes the bind tests, which change a process-wide variable.
+static BIND_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+/// Holds the bind environment lock and restores `DOSKER_NO_VVFAT` on drop.
+struct BindEnvGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    previous: Option<std::ffi::OsString>,
+}
+
+impl BindEnvGuard {
+    /// Takes the lock, recovering it when an earlier test panicked.
+    ///
+    /// A supervisor reads `DOSKER_NO_VVFAT` only for a container that has a
+    /// bind mount, so while this guard is held no unrelated test observes the
+    /// variable being changed.
+    fn lock() -> Self {
+        let lock = BIND_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let previous = std::env::var_os(VVFAT_DISABLED_ENV);
+        Self {
+            _lock: lock,
+            previous,
+        }
+    }
+
+    /// Sets the variable to `value`, or clears it when `value` is `None`.
+    fn set(&self, value: Option<&str>) {
+        match value {
+            Some(value) => unsafe { std::env::set_var(VVFAT_DISABLED_ENV, value) },
+            None => unsafe { std::env::remove_var(VVFAT_DISABLED_ENV) },
+        }
+    }
+}
+
+impl Drop for BindEnvGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(value) => unsafe { std::env::set_var(VVFAT_DISABLED_ENV, value) },
+            None => unsafe { std::env::remove_var(VVFAT_DISABLED_ENV) },
+        }
+    }
+}
 
 struct Harness {
     _dir: TempDir,
@@ -308,8 +352,11 @@ impl Harness {
     }
 
     fn connect(&self) -> Client {
-        let connection =
-            connect(&self.endpoint, Duration::from_secs(2)).expect("connect to the supervisor");
+        self.connect_within(Duration::from_secs(2))
+    }
+
+    fn connect_within(&self, timeout: Duration) -> Client {
+        let connection = connect(&self.endpoint, timeout).expect("connect to the supervisor");
         BufReader::new(connection)
     }
 
@@ -1818,6 +1865,16 @@ fn named_mount(drive: &str, name: &str) -> VolumeMount {
     }
 }
 
+fn bind_mount(drive: &str, host: &Path, read_only: bool) -> VolumeMount {
+    VolumeMount {
+        drive: drive.to_owned(),
+        kind: VolumeKind::Bind,
+        name: None,
+        host_path: Some(host.to_path_buf()),
+        read_only,
+    }
+}
+
 #[test]
 fn supervisor_acquires_the_volume_lock_and_releases_it_on_stop() {
     let mut harness = Harness::start_with_data(Vec::new(), vec![named_mount("D:", "data")]);
@@ -1935,6 +1992,7 @@ fn supervisor_passes_the_network_ports_and_volumes_to_the_engine() {
                 .join("data")
                 .join("volume.img"),
             read_only: false,
+            kind: EngineVolumeKind::Image,
         }]
     );
 
@@ -1987,4 +2045,138 @@ fn supervisor_marks_a_volume_dirty_when_stop_fails() {
         .load("data")
         .expect("load the volume");
     assert!(volume.meta.dirty, "the failed stop marks the volume dirty");
+}
+
+#[test]
+fn supervisor_passes_a_bind_directory_to_the_engine() {
+    let guard = BindEnvGuard::lock();
+    guard.set(None);
+    let host = tempfile::tempdir().expect("create a host directory");
+    fs::write(host.path().join("HOST.TXT"), b"hello").expect("write the host file");
+    let spec = Arc::new(Mutex::new(None));
+    let adapter_spec = Arc::clone(&spec);
+
+    let mut harness = Harness::start_with_data_and_adapter(
+        Vec::new(),
+        vec![bind_mount("D:", host.path(), false)],
+        move |engine| {
+            Box::new(RecordingAdapter {
+                inner: MockAdapter::new(engine, Arc::new(SystemProcesses)),
+                builds: Arc::new(AtomicUsize::new(0)),
+                built_commands: Arc::new(Mutex::new(Vec::new())),
+                built_interfaces: Arc::new(Mutex::new(Vec::new())),
+                session_commands: Arc::new(Mutex::new(Vec::new())),
+                spec: adapter_spec,
+            })
+        },
+    );
+    let mut client = harness.connect();
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+
+    let recorded = spec
+        .lock()
+        .expect("lock the recorded spec")
+        .clone()
+        .expect("the engine spec was recorded");
+    assert_eq!(
+        recorded.volumes,
+        vec![EngineVolume {
+            drive: String::from("D:"),
+            path: host.path().to_path_buf(),
+            read_only: false,
+            kind: EngineVolumeKind::HostDir,
+        }]
+    );
+
+    stop(&mut client);
+    assert_eq!(harness.join(), 0);
+}
+
+#[test]
+fn supervisor_projects_a_bind_directory_when_vvfat_is_disabled() {
+    let guard = BindEnvGuard::lock();
+    guard.set(Some("1"));
+    let host = tempfile::tempdir().expect("create a host directory");
+    fs::write(host.path().join("HOST.TXT"), b"hello").expect("write the host file");
+    let spec = Arc::new(Mutex::new(None));
+    let adapter_spec = Arc::clone(&spec);
+
+    let mut harness = Harness::start_with_data_and_adapter(
+        Vec::new(),
+        vec![bind_mount("D:", host.path(), false)],
+        move |engine| {
+            Box::new(RecordingAdapter {
+                inner: MockAdapter::new(engine, Arc::new(SystemProcesses)),
+                builds: Arc::new(AtomicUsize::new(0)),
+                built_commands: Arc::new(Mutex::new(Vec::new())),
+                built_interfaces: Arc::new(Mutex::new(Vec::new())),
+                session_commands: Arc::new(Mutex::new(Vec::new())),
+                spec: adapter_spec,
+            })
+        },
+    );
+    let mut client = harness.connect_within(Duration::from_secs(10));
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+
+    let image = harness
+        .root()
+        .join("containers")
+        .join(harness.record.id.as_str())
+        .join("bind-d.img");
+    let recorded = spec
+        .lock()
+        .expect("lock the recorded spec")
+        .clone()
+        .expect("the engine spec was recorded");
+    assert_eq!(
+        recorded.volumes,
+        vec![EngineVolume {
+            drive: String::from("D:"),
+            path: image.clone(),
+            read_only: false,
+            kind: EngineVolumeKind::Image,
+        }]
+    );
+    assert!(image.is_file(), "the fallback image is projected");
+
+    stop(&mut client);
+    assert_eq!(harness.join(), 0);
+
+    assert!(!image.exists(), "the fallback image is discarded");
+    assert_eq!(
+        fs::read(host.path().join("HOST.TXT")).expect("read the host file"),
+        b"hello",
+        "a clean stop writes the guest tree back to the host"
+    );
+}
+
+#[test]
+fn supervisor_discards_the_fallback_image_when_the_guest_crashes() {
+    let guard = BindEnvGuard::lock();
+    guard.set(Some("1"));
+    let host = tempfile::tempdir().expect("create a host directory");
+    fs::write(host.path().join("HOST.TXT"), b"hello").expect("write the host file");
+
+    let mut harness =
+        Harness::start_with_data(Vec::new(), vec![bind_mount("D:", host.path(), false)]);
+    let mut client = harness.connect_within(Duration::from_secs(10));
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+
+    let image = harness
+        .root()
+        .join("containers")
+        .join(harness.record.id.as_str())
+        .join("bind-d.img");
+    assert!(image.is_file(), "the fallback image is projected");
+
+    let engine_pid = harness.loaded().engine_pid.expect("the engine has a pid");
+    drop(client);
+    assert!(kill_process(engine_pid), "the engine process is killed");
+
+    assert_eq!(harness.join(), 0);
+
+    assert!(
+        !image.exists(),
+        "the fallback image is discarded after a crash"
+    );
 }

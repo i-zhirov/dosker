@@ -76,6 +76,12 @@ impl RuntimePaths {
         self.container_dir(id).join(CONTAINER_LOG)
     }
 
+    /// Returns the fallback image of a bind mount.
+    pub fn bind_image(&self, id: &ContainerId, drive: &str) -> PathBuf {
+        let letter = drive.trim_end_matches(':').to_ascii_lowercase();
+        self.container_dir(id).join(format!("bind-{letter}.img"))
+    }
+
     /// Returns the directory that holds the volumes.
     pub fn volumes_dir(&self) -> PathBuf {
         self.root.join(VOLUMES_DIR)

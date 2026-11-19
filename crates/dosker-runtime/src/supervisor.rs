@@ -12,12 +12,13 @@ use chrono::Utc;
 use dosker_core::{ContainerId, CoreError, Status};
 use dosker_engine::{
     DebugKind, EngineAdapter, EngineEndpoint, EngineEndpointKind, EngineError, EnginePort,
-    EngineSession, EngineSpec, EngineVolume, ExecRequest,
+    EngineSession, EngineSpec, EngineVolume, EngineVolumeKind, ExecRequest,
 };
 use dosker_image::{DEFAULT_BAUD, DEFAULT_CONTROL_PORT, write_config};
 use dosker_platform::control::{ControlConnection, bind, remove_endpoint};
 use dosker_platform::{Endpoint, EndpointRecord, PlatformError};
 
+use crate::binds::{discard_binds, prepare_binds, sync_binds, use_vvfat};
 use crate::paths::RuntimePaths;
 use crate::protocol::{
     ContainerSummary, CpDirection, DEFAULT_EXEC_TIMEOUT_MS, ErrorCode, FrameError, FrameRead,
@@ -222,10 +223,26 @@ fn supervise(
             drive: mount.drive.clone(),
             path,
             read_only: mount.read_only,
+            kind: EngineVolumeKind::Image,
         });
         volume_locks.push(lock);
     }
     let _volume_locks = volume_locks;
+
+    if record
+        .volumes
+        .iter()
+        .any(|mount| mount.kind == VolumeKind::Bind)
+    {
+        let bind_volumes = match prepare_binds(record, paths, use_vvfat()) {
+            Ok(volumes) => volumes,
+            Err(error) => {
+                let error = EngineError::Setup(error.to_string());
+                return failed_start(store, record, &serial_log, &error, None);
+            }
+        };
+        engine_volumes.extend(bind_volumes);
+    }
 
     if !record.booter
         && let Err(error) = write_config(&disk_path, DEFAULT_CONTROL_PORT, DEFAULT_BAUD)
@@ -402,6 +419,7 @@ fn failed_start(
     if let Some(session) = session {
         let _ = session.kill();
     }
+    discard_binds(record, store.paths());
 
     let container_log = store.paths().container_log(&record.id);
     log_line(&container_log, &format!("start failed: {error}"));
@@ -815,6 +833,13 @@ fn run_stop(
 
     let status = match state.session.stop(Duration::from_millis(grace_ms)) {
         Ok(exit_code) => {
+            match sync_binds(&state.record, store.paths()) {
+                Ok(()) => discard_binds(&state.record, store.paths()),
+                Err(error) => log_line(
+                    &state.container_log,
+                    &format!("warning: cannot write back a bind mount: {error}"),
+                ),
+            }
             state.record.transition(Status::Stopped, Utc::now())?;
             state.record.exit_code = Some(exit_code);
             state.record.dirty = false;
@@ -855,6 +880,7 @@ fn engine_error_code(error: &EngineError) -> ErrorCode {
 }
 
 fn mark_exited(store: &StateStore, record: &mut ContainerRecord) -> Result<(), SupervisorError> {
+    discard_binds(record, store.paths());
     mark_volumes(store, record, true);
     record.transition(Status::Exited, Utc::now())?;
     record.dirty = true;

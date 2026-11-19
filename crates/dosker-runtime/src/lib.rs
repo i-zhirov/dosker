@@ -1,5 +1,6 @@
 //! Container state, control protocol, stale recovery, and the supervisor.
 
+pub mod binds;
 pub mod paths;
 pub mod ports;
 pub mod protocol;
@@ -9,6 +10,10 @@ pub mod store;
 pub mod supervisor;
 pub mod volume;
 
+pub use binds::{
+    BIND_IMAGE_SIZE, BindError, VVFAT_DISABLED_ENV, discard_binds, prepare_binds, sync_binds,
+    use_vvfat, vvfat_disabled,
+};
 pub use paths::RuntimePaths;
 pub use ports::{PortConflict, find_conflict};
 pub use protocol::{
