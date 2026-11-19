@@ -1,6 +1,7 @@
-//! Command-line value parsers for published ports and volume mounts.
+//! Command-line value parsers for published ports, volume mounts, and bind mounts.
 
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 
 use dosker_core::ContainerName;
 
@@ -86,6 +87,66 @@ fn normalize_drive(value: &str, drive: &str) -> Result<String, SpecError> {
     Ok(format!("{}:", char::from(letter)))
 }
 
+/// A parsed `drive:path[:ro]` bind mount.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BindSpec {
+    pub drive: String,
+    pub path: PathBuf,
+    pub read_only: bool,
+}
+
+impl BindSpec {
+    /// Parses `drive:path[:ro]`, normalizing the drive to an uppercase letter.
+    pub fn parse(value: &str) -> Result<Self, SpecError> {
+        let (rest, read_only) = match value.strip_suffix(":ro") {
+            Some(rest) => (rest, true),
+            None => (value, false),
+        };
+        let (drive, path) = rest
+            .split_once(':')
+            .ok_or_else(|| bind(value, "expected drive:path"))?;
+        if path.is_empty() {
+            return Err(bind(value, "expected drive:path"));
+        }
+
+        Ok(Self {
+            drive: normalize_bind_drive(value, drive)?,
+            path: PathBuf::from(path),
+            read_only,
+        })
+    }
+}
+
+const SUPPORTED_BIND_DRIVES: &str = "D:, E:, and F:";
+
+fn normalize_bind_drive(value: &str, drive: &str) -> Result<String, SpecError> {
+    let letter = match drive.as_bytes() {
+        [letter] if letter.is_ascii_alphabetic() => letter.to_ascii_uppercase(),
+        _ => return Err(bind(value, format!("invalid drive: {drive}"))),
+    };
+    let drive = format!("{}:", char::from(letter));
+
+    match letter {
+        b'D' | b'E' | b'F' => Ok(drive),
+        b'C' => Err(bind(
+            value,
+            format!(
+                "the boot drive C: cannot hold a bind mount; supported drives are {SUPPORTED_BIND_DRIVES}"
+            ),
+        )),
+        b'A' | b'B' => Err(bind(
+            value,
+            format!(
+                "the floppy drive {drive} cannot hold a bind mount; supported drives are {SUPPORTED_BIND_DRIVES}"
+            ),
+        )),
+        _ => Err(bind(
+            value,
+            format!("unsupported bind drive {drive}; supported drives are {SUPPORTED_BIND_DRIVES}"),
+        )),
+    }
+}
+
 fn publish(value: &str, reason: impl Into<String>) -> SpecError {
     SpecError::Publish {
         value: value.to_owned(),
@@ -95,6 +156,13 @@ fn publish(value: &str, reason: impl Into<String>) -> SpecError {
 
 fn volume(value: &str, reason: impl Into<String>) -> SpecError {
     SpecError::Volume {
+        value: value.to_owned(),
+        reason: reason.into(),
+    }
+}
+
+fn bind(value: &str, reason: impl Into<String>) -> SpecError {
+    SpecError::Bind {
         value: value.to_owned(),
         reason: reason.into(),
     }
@@ -110,11 +178,16 @@ pub enum SpecError {
     /// A volume mount is malformed.
     #[error("invalid volume mapping {value}: {reason}")]
     Volume { value: String, reason: String },
+
+    /// A bind mount is malformed.
+    #[error("invalid bind mapping {value}: {reason}")]
+    Bind { value: String, reason: String },
 }
 
 #[cfg(test)]
 mod tests {
     use std::net::Ipv4Addr;
+    use std::path::PathBuf;
 
     use super::*;
 
@@ -227,5 +300,75 @@ mod tests {
                 "{value} must be rejected"
             );
         }
+    }
+
+    #[test]
+    fn bind_spec_accepts_the_canonical_form() {
+        let spec = BindSpec::parse("D:/host/path").expect("a valid bind");
+        assert_eq!(spec.drive, "D:");
+        assert_eq!(spec.path, PathBuf::from("/host/path"));
+        assert!(!spec.read_only);
+    }
+
+    #[test]
+    fn bind_spec_normalizes_a_lowercase_drive() {
+        let spec = BindSpec::parse("d:/host/path").expect("a valid bind");
+        assert_eq!(spec.drive, "D:");
+    }
+
+    #[test]
+    fn bind_spec_parses_read_only() {
+        let spec = BindSpec::parse("D:/host/path:ro").expect("a valid bind");
+        assert_eq!(spec.drive, "D:");
+        assert_eq!(spec.path, PathBuf::from("/host/path"));
+        assert!(spec.read_only);
+    }
+
+    #[test]
+    fn bind_spec_accepts_the_other_supported_drives() {
+        for (value, drive) in [("E:/host/path", "E:"), ("F:/host/path", "F:")] {
+            let spec = BindSpec::parse(value).expect("a valid bind");
+            assert_eq!(spec.drive, drive);
+        }
+    }
+
+    #[test]
+    fn bind_spec_rejects_the_boot_drive() {
+        let error = BindSpec::parse("C:/host").expect_err("the boot drive is rejected");
+        assert!(error.to_string().contains("D:, E:, and F:"), "{error}");
+    }
+
+    #[test]
+    fn bind_spec_rejects_a_floppy_drive() {
+        for value in ["A:/host", "B:/host"] {
+            let error = BindSpec::parse(value).expect_err("a floppy drive is rejected");
+            assert!(error.to_string().contains("D:, E:, and F:"), "{error}");
+        }
+    }
+
+    #[test]
+    fn bind_spec_rejects_a_drive_outside_the_supported_set() {
+        let error = BindSpec::parse("G:/host").expect_err("an unsupported drive is rejected");
+        assert!(error.to_string().contains("D:, E:, and F:"), "{error}");
+    }
+
+    #[test]
+    fn bind_spec_rejects_a_missing_path() {
+        assert!(matches!(BindSpec::parse("D:"), Err(SpecError::Bind { .. })));
+    }
+
+    #[test]
+    fn bind_spec_rejects_a_missing_drive_separator() {
+        assert!(matches!(
+            BindSpec::parse("/host/path"),
+            Err(SpecError::Bind { .. })
+        ));
+    }
+
+    #[test]
+    fn bind_spec_keeps_a_windows_style_path() {
+        let spec = BindSpec::parse("D:C:\\host\\path").expect("a valid bind");
+        assert_eq!(spec.drive, "D:");
+        assert_eq!(spec.path, PathBuf::from("C:\\host\\path"));
     }
 }

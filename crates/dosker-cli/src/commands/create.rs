@@ -7,6 +7,7 @@ use dosker_core::{ContainerId, ContainerName};
 use dosker_engine::{Capability, CapabilitySet, DisplayMode};
 use dosker_image::{
     DEFAULT_VOLUME_SIZE, FLOPPY_1440_SIZE, Image, ImageRef, PortProtocol, VolumeLayout,
+    validate_host_tree,
 };
 use dosker_platform::endpoint::control_endpoint;
 use dosker_runtime::{ContainerRecord, PortMapping, VolumeError, VolumeKind, VolumeMount};
@@ -15,7 +16,7 @@ use crate::adapter;
 use crate::cli::{CreateArgs, EXIT_OK};
 use crate::context::Context;
 use crate::error::CliError;
-use crate::spec::{PublishSpec, VolumeSpec};
+use crate::spec::{BindSpec, PublishSpec, VolumeSpec};
 
 const MOUNTABLE_DRIVES: &str = "A:, B:, D:, E:, and F:";
 
@@ -28,6 +29,7 @@ pub struct CreateOptions {
     pub vnc_port: Option<u16>,
     pub publish: Vec<String>,
     pub volumes: Vec<String>,
+    pub binds: Vec<String>,
 }
 
 pub fn execute(
@@ -63,6 +65,7 @@ pub fn execute(
             vnc_port: args.vnc_port,
             publish: args.publish,
             volumes: args.volumes,
+            binds: args.bind,
         },
         now,
     )?;
@@ -91,6 +94,11 @@ pub fn create_container(
         .iter()
         .map(|value| VolumeSpec::parse(value).map_err(|error| CliError::Usage(error.to_string())))
         .collect::<Result<Vec<_>, _>>()?;
+    let binds = options
+        .binds
+        .iter()
+        .map(|value| BindSpec::parse(value).map_err(|error| CliError::Usage(error.to_string())))
+        .collect::<Result<Vec<_>, _>>()?;
 
     let id = ContainerId::generate();
     let name = match options.name {
@@ -101,7 +109,9 @@ pub fn create_container(
     let root = std::path::absolute(context.paths.root())?;
     let endpoint = control_endpoint(&root, &id);
 
-    let (mounts, anonymous) = resolve_volumes(context, &image, &specs, &id, now)?;
+    let bind_mounts = validate_binds(&image, &options.engine, &specs, &binds)?;
+    let (mut mounts, anonymous) = resolve_volumes(context, &image, &specs, &id, now)?;
+    mounts.extend(bind_mounts);
 
     let ports = match resolve_ports(&image, &options.engine, &options.publish) {
         Ok(ports) => ports,
@@ -240,6 +250,59 @@ fn resolve_volumes(
             Err(error)
         }
     }
+}
+
+fn validate_binds(
+    image: &Image,
+    engine: &str,
+    volumes: &[VolumeSpec],
+    binds: &[BindSpec],
+) -> Result<Vec<VolumeMount>, CliError> {
+    if binds.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let capabilities = adapter::declared_capabilities(engine)
+        .ok_or_else(|| CliError::Usage(format!("unknown engine: {engine}")))?;
+    if !capabilities.contains(Capability::HostDirLive) {
+        return Err(CliError::Usage(String::from(
+            "engine does not provide the host_dir_live capability; --bind needs the QEMU engine",
+        )));
+    }
+
+    let mut drives: BTreeSet<String> = volumes.iter().map(|spec| spec.drive.clone()).collect();
+    let mut mounts = Vec::new();
+    for bind in binds {
+        if !drives.insert(bind.drive.clone()) {
+            return Err(CliError::Usage(format!(
+                "drive {} is mounted more than once",
+                bind.drive
+            )));
+        }
+        if image
+            .volumes
+            .iter()
+            .any(|declaration| declaration.drive == bind.drive)
+        {
+            return Err(CliError::Usage(format!(
+                "drive {} is declared by the image and cannot hold a bind mount",
+                bind.drive
+            )));
+        }
+        let host = std::path::absolute(&bind.path).map_err(|error| {
+            CliError::Usage(format!("bind source {}: {error}", bind.path.display()))
+        })?;
+        validate_host_tree(&host).map_err(|error| CliError::Usage(error.to_string()))?;
+        mounts.push(VolumeMount {
+            drive: bind.drive.clone(),
+            kind: VolumeKind::Bind,
+            name: None,
+            host_path: Some(host),
+            read_only: bind.read_only,
+        });
+    }
+
+    Ok(mounts)
 }
 
 fn resolve_ports(

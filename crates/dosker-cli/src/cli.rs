@@ -100,6 +100,9 @@ pub struct RunArgs {
     #[arg(short = 'v', long = "volume", value_name = "name:drive[:ro]")]
     pub volumes: Vec<String>,
 
+    #[arg(long = "bind", value_name = "drive:path[:ro]")]
+    pub bind: Vec<String>,
+
     #[arg(long = "boot-timeout", default_value_t = 60)]
     pub boot_timeout: u64,
 
@@ -126,6 +129,9 @@ pub struct CreateArgs {
 
     #[arg(short = 'v', long = "volume", value_name = "name:drive[:ro]")]
     pub volumes: Vec<String>,
+
+    #[arg(long = "bind", value_name = "drive:path[:ro]")]
+    pub bind: Vec<String>,
 
     pub image: String,
 }

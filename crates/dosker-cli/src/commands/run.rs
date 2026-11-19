@@ -48,6 +48,7 @@ pub fn execute(args: RunArgs, context: &mut Context, now: DateTime<Utc>) -> Resu
             vnc_port: args.vnc_port,
             publish: args.publish,
             volumes: args.volumes,
+            binds: args.bind,
         },
         now,
     )?;
