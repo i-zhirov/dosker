@@ -15,7 +15,8 @@ jobs:
         env:
           DOSKER_FREEDOS_SOURCE: ${{ vars.DOSKER_FREEDOS_SOURCE }}
           DOSKER_QEMU_IMAGE_URL: ${{ vars.DOSKER_QEMU_IMAGE_URL }}
-        run: bash .github/scripts/check-qemu-variables.sh DOSKER_QEMU_IMAGE_URL DOSKER_FREEDOS_SOURCE
+          DOSKER_QEMU_NET_IMAGE_URL: ${{ vars.DOSKER_QEMU_NET_IMAGE_URL }}
+        run: bash .github/scripts/check-qemu-variables.sh DOSKER_QEMU_IMAGE_URL DOSKER_QEMU_NET_IMAGE_URL DOSKER_FREEDOS_SOURCE
 
   agent-build:
     name: agent-build
@@ -120,6 +121,26 @@ jobs:
           fi
 
           printf 'DOSKER_QEMU_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
+      - name: Download the network image
+        env:
+          DOSKER_QEMU_NET_IMAGE_URL: ${{ vars.DOSKER_QEMU_NET_IMAGE_URL }}
+        run: |
+          set -euo pipefail
+          url="${DOSKER_QEMU_NET_IMAGE_URL:-}"
+          if [ -z "$url" ]; then
+            printf '::error::DOSKER_QEMU_NET_IMAGE_URL is not set. Set the repository variable to a raw image URL.\n' >&2
+            exit 1
+          fi
+          mkdir -p agent/fixtures
+          if ! curl -fsSL --retry 3 --retry-delay 2 -o agent/fixtures/dosker-net.img "$url"; then
+            printf '::error::DOSKER_QEMU_NET_IMAGE_URL download failed: %s\n' "$url" >&2
+            exit 1
+          fi
+          if [ ! -s agent/fixtures/dosker-net.img ]; then
+            printf '::error::DOSKER_QEMU_NET_IMAGE_URL did not produce an image: %s\n' "$url" >&2
+            exit 1
+          fi
+          printf 'DOSKER_QEMU_NET_IMAGE=agent/fixtures/dosker-net.img\n' >> "$GITHUB_ENV"
       - name: Download the DOS agent binaries
         uses: actions/download-artifact@v4
         with:
@@ -137,6 +158,11 @@ jobs:
           DOSKER_INTEGRATION: "1"
           DOSKER_QEMU: qemu-system-i386
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_runtime -- --nocapture
+      - name: Rust volume attach suite
+        env:
+          DOSKER_INTEGRATION: "1"
+          DOSKER_QEMU: qemu-system-i386
+        run: cargo test -p dosker-cli --features qemu-engine --test qemu_volumes -- --nocapture
       - name: Verify the downloaded RUN test helpers
         run: |
           set -euo pipefail
@@ -151,3 +177,8 @@ jobs:
           DOSKER_INTEGRATION: "1"
           DOSKER_QEMU: qemu-system-i386
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_run -- --nocapture
+      - name: Rust published port suite
+        env:
+          DOSKER_INTEGRATION: "1"
+          DOSKER_QEMU: qemu-system-i386
+        run: cargo test -p dosker-cli --features qemu-engine --test qemu_ports -- --nocapture

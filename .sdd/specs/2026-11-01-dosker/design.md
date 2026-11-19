@@ -452,12 +452,12 @@ An image is a config plus ordered layers. A normal layer is a tar blob with a JS
 - Without `-d`, `run` starts the container and attaches the line shell. The shell can detach without stopping the container.
 - `stop` sends `SHUTDOWN` and waits for `READY_TO_STOP`. It stops the engine after a grace period. A kill sets `dirty=true`.
 - A booter image has no agent. `start` marks it running when the engine process is alive. `stop` uses the engine control channel and then kills after the grace period.
-- `--display none|window|vnc` selects the display. The default is `none`. A booter image needs a display to be useful. `--vnc-port` defaults to a free local port. `dosker port` reports the effective port.
+- `--display none|window|vnc` selects the display. The default is `none`. A booter image needs a display to be useful. `--vnc-port` defaults to a free local port. `dosker port` reports the published port mappings, and `inspect` reports the effective VNC port.
 - The agent is the long-lived guest process. When `CMD` exits, the container stays running and the agent waits for the next command. `stop` or `rm` ends it.
 - `exec` sends a command through the agent. It returns text output and the DOS status. A timeout kills the engine.
 - `attach` is a line shell. It handles `cd` locally and sends the effective workdir with each command. Full-screen programs need the optional video capability.
 - `cp` on a running container uses the agent and is limited to small files. Larger files use a volume or a stopped container.
-- A named volume is a partitioned FAT16 disk image that attaches to at most one running container. Small volumes may use a superfloppy. It survives `rm`. `-v name:D:` mounts read-write. `:ro` mounts read-only.
+- A named volume is a partitioned FAT16 disk image that attaches to at most one running container. Small volumes may use a superfloppy. It survives `rm`. `-v name:D:` mounts read-write. `:ro` mounts read-only: a read-only hard-disk volume uses a temporary QEMU overlay, so guest writes are discarded and the image is never modified.
 - `-p host:guest` publishes a guest TCP port. The default host address is `127.0.0.1`. NAT is a QEMU capability in the MVP.
 - `--bind D:/host/path` uses a live host directory where the engine supports it. Add `:ro` for read-only. On QEMU this uses `vvfat`, with the documented beta warning and no CI use.
 - A dead supervisor leaves stale state. The next CLI call marks the container exited and keeps the disk.

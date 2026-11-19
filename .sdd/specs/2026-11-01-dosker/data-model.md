@@ -159,6 +159,7 @@ The tree always represents `C:\`. Drive letters for volumes are runtime attachme
 | `created_at` | RFC 3339 | |
 | `started_at` | RFC 3339 or null | |
 | `finished_at` | RFC 3339 or null | |
+| `net` | string | Guest network device, default `ne2000` |
 | `ports` | list of `PortMapping` | |
 | `volumes` | list of `VolumeMount` | |
 | `sockets` | map | `control`, `serial_agent`, `serial_guest`, `qmp`, `monitor`, `gdb`. On Windows, `control` is a named pipe name and engine entries are `127.0.0.1:<port>`. |
@@ -192,7 +193,7 @@ The tree always represents `C:\`. Drive letters for volumes are runtime attachme
 | `path` | string | `volume.img` |
 | `size` | integer | Bytes. Default 64 MiB. |
 | `layout` | enum | `mbr_partitioned` by default, or `superfloppy` |
-| `fat_type` | enum | `fat16` in the MVP |
+| `fat_type` | enum | `fat16` for `mbr_partitioned`, `fat12` for the 1.44 MB superfloppy |
 | `created_at` | RFC 3339 | |
 | `attached_container` | string or null | Exclusive holder |
 | `dirty` | boolean | |
@@ -291,7 +292,7 @@ A cache entry is valid only when its layer blob exists and matches the digest.
 - The machine `disk` interface must match the image layout. A partitioned hard disk uses `ide`. A superfloppy image uses `floppy`.
 - A port mapping must have a unique `(host_address, host_port, protocol)` across running containers.
 - A volume attaches to at most one running container.
-- A volume uses `mbr_partitioned` for hard-disk sizes and `superfloppy` for floppy sizes.
+- A volume uses `mbr_partitioned` for hard-disk sizes and `superfloppy` for floppy sizes. A superfloppy volume of 1.44 MB is fat12; mbr_partitioned and 2.88 MB volumes are fat16.
 - A bind mount source must exist and pass 8.3 validation.
 - `REQUIRES` names must come from the capability set.
 

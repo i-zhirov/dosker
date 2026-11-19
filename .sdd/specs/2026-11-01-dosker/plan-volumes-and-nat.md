@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-18
-- **Status**: Approved
+- **Status**: Implemented
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: volumes-and-nat
 - **Depends on**: Slices 3 and 5.
@@ -41,7 +41,7 @@
 - The canonical volume form is `-v name:D:`; `-v name:D` and a literal `:ro` suffix are also accepted.
 - `(host_address, host_port)` must be unique across starting and running containers. The CLI check is best-effort across processes; the engine's NAT bind is the final guard.
 - QEMU networking is `-nic user,model=ne2k_isa` plus `,hostfwd=tcp:<addr>:<host>-:<guest>` per mapping in ascending host-port order. `MACHINE net=none` gives `-nic none`.
-- A read-only volume passes `readonly=on` to the QEMU `-drive` option.
+- A read-only floppy volume passes `readonly=on` to the QEMU `-drive` option. A read-only hard-disk volume passes `snapshot=on`: QEMU rejects a read-only block node on an IDE hard disk, so guest writes go to a temporary overlay and are discarded, and `volume.img` is never modified. See Deviations.
 - NAT is declared only by the QEMU adapter; publishing ports on an engine without it is a usage error, and an empty port list never checks NAT.
 - `dosker port` prints `{addr}:{host}->{guest}/tcp` per mapping and nothing when the container publishes none.
 - `dosker volume ls` prints the header `NAME SIZE LAYOUT ATTACHED`; the size is in bytes; an unattached volume shows `-`.
@@ -159,7 +159,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
 
 ## Tasks
 
-- [ ] **Task 1: Volume disk images**
+- [x] **Task 1: Volume disk images**
     - **Implements:** FR-014; design §Runtime (`A named volume is a partitioned FAT16 disk image…`), data-model §Volume, validation rule "A volume uses `mbr_partitioned` for hard-disk sizes and `superfloppy` for floppy sizes".
     - **Create `crates/dosker-image/tests/volume.rs` first**
         - `the_default_size_creates_a_partitioned_fat16_volume` — `create_volume` at `DEFAULT_VOLUME_SIZE` reports `MbrPartitioned`, `Fat16`, partition start `2048`, a disk size equal to the file size, and `volume_id` equal to the first four bytes of the name digest.
@@ -196,7 +196,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - `pub mod volume;` and re-export `create_volume`, `VolumeImage`, `VolumeLayout`, and the five size constants.
     - **Verify:** `cargo test -p dosker-image --test volume`
 
-- [ ] **Task 2: Volume store, metadata, and exclusive lock**
+- [x] **Task 2: Volume store, metadata, and exclusive lock**
     - **Implements:** FR-014; design §State Directory, data-model §Volume ("The lock is `volumes/<name>/.lock` and contains the container ID and supervisor PID"), error handling "Volume already attached".
     - **Create `crates/dosker-runtime/tests/volume.rs` first**
         - `create_writes_an_image_and_a_meta_file` — starting from a fresh root, both files exist, the image size is the requested size, and `load` reports the same metadata; the `volumes/` directory mode `0o700` assertion is gated `#[cfg(unix)]` because `ensure_dir_mode` applies modes only on Unix.
@@ -230,7 +230,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - `pub mod volume;` and re-export `VolumeStore`, `VolumeError`, `VolumeLock`, `VolumeMeta`, `VolumeHolder`, `Volume`.
     - **Verify:** `cargo test -p dosker-runtime --test volume`
 
-- [ ] **Task 3: Container records and image records carry network and volume data**
+- [x] **Task 3: Container records and image records carry network and volume data**
     - **Implements:** FR-014, FR-015; design §Data Model, data-model §Container, §PortMapping, §VolumeMount.
     - **Modify `crates/dosker-image/tests/oci.rs` first**
         - `image_reports_the_network_device_and_volume_declarations` — commit `support::sample_config` with `machine.net = "ne2000"` and one `VolumeDeclaration { drive: "D:" }`, passing the existing tree layer `Descriptor` (the `MEDIA_TYPE_LAYER` blob the other commit tests use), then `load` and assert both fields.
@@ -250,7 +250,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - Re-export `PortMapping`, `VolumeMount`, `VolumeKind`.
     - **Verify:** `cargo test -p dosker-image --test oci && cargo test -p dosker-runtime --test record`
 
-- [ ] **Task 4: Declare NAT on the QEMU adapter**
+- [x] **Task 4: Declare NAT on the QEMU adapter**
     - **Implements:** FR-015; design §Engine Capability Matrix (`nat`: QEMU yes).
     - **Modify `crates/dosker-engine-qemu/tests/command.rs` first**
         - `capabilities_are_the_proven_set` — add `Capability::Nat` to the expected set.
@@ -262,7 +262,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
     - **Note:** `command_disables_networking` in `crates/dosker-engine-qemu/tests/command.rs` still holds here because the command line is unchanged until Task 7; Task 7 replaces it with the NIC assertions.
     - **Verify:** `cargo test -p dosker-engine-qemu --test command && cargo test -p dosker-cli --features qemu-engine --test cli_engines`
 
-- [ ] **Task 5: Parse `-p` and `-v` values**
+- [x] **Task 5: Parse `-p` and `-v` values**
     - **Implements:** FR-014, FR-015; design §CLI (`run … [-p [addr:]host:guest] [-v name:drive[:ro]]`), data-model §PortMapping, §VolumeMount.
     - **Create `crates/dosker-cli/src/spec.rs` with tests first**
         - `publish_defaults_to_loopback` — `8080:80` → `127.0.0.1`, `8080`, `80`.
@@ -286,7 +286,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - `pub mod spec;`.
     - **Verify:** `cargo test -p dosker-cli --lib spec`
 
-- [ ] **Task 6: `create` mounts volumes and records published ports**
+- [x] **Task 6: `create` mounts volumes and records published ports**
     - **Implements:** FR-014, FR-015; design §Runtime (`-v name:D:` mounts read-write, `:ro` read-only; `-p host:guest`; `VOLUME` creates the anonymous volume at create time), contract §VOLUME.
     - **Create `crates/dosker-cli/tests/cli_volumes.rs` first** (each test imports the base image through `CliRoot::import_image_as("freedos:latest")` before `create`/`run`)
         - `create_mounts_a_named_volume_at_the_requested_drive` — seed `data` with `VolumeStore::create` on the test root (the `volume` commands arrive in Task 10); `create -v data:D: freedos:latest`; `inspect` shows one named mount at `D:` with `read_only` false.
@@ -332,7 +332,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - `capabilities_are_boot_serial_and_stop` at line 194 becomes `capabilities_are_boot_serial_stop_and_nat`: the expected set gains `Capability::Nat`, and the negative assertion changes to `!contains(Capability::Headless)`.
     - **Verify:** `cargo test -p dosker-cli --lib commands::create && cargo test -p dosker-cli --features mock-engine --test cli_volumes && cargo test -p dosker-test-support --test mock_adapter`
 
-- [ ] **Task 7: QEMU NE2000 NIC, user-mode NAT, and volume disks**
+- [x] **Task 7: QEMU NE2000 NIC, user-mode NAT, and volume disks**
     - **Implements:** FR-014, FR-015; design §Runtime, engine research ("`-nic user` … `hostfwd=tcp:127.0.0.1:6001-:6000`", "The ISA NE2000 model is `ne2k_isa`").
     - **Modify `crates/dosker-engine-qemu/tests/command.rs` first**
         - `command_uses_the_conformance_machine` — expect `-nic` `user,model=ne2k_isa`; keep the machine, CPU, and memory assertions.
@@ -343,7 +343,8 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - `command_rejects_an_unknown_network_device`.
         - `command_attaches_a_partitioned_volume_as_an_ide_disk` — `D:` → `index=1`, `E:` → `index=2`.
         - `command_attaches_a_superfloppy_volume_as_a_floppy` — `A:` → `if=floppy,index=0`, `B:` → `index=1`.
-        - `command_marks_a_read_only_volume_read_only`.
+        - `command_marks_a_read_only_volume_read_only` — an IDE volume gets `snapshot=on`.
+        - `command_marks_a_read_only_floppy_volume_read_only` — a floppy volume gets `readonly=on`.
         - `command_rejects_a_volume_drive_outside_the_supported_set` — `G:`.
     - **Modify `crates/dosker-engine/src/spec.rs`**
         - `EnginePort`, `EngineVolume`, and `EngineSpec` fields `net: String`, `ports: Vec<EnginePort>`, `volumes: Vec<EngineVolume>`.
@@ -354,10 +355,10 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - `run_in_dos/engine.rs` keeps `net: "none"`: the design's "a `RUN` VM has the same network capability as the image" is not wired in this slice, and build `RUN` networking is listed as out of scope in Constraints.
     - **Modify `crates/dosker-engine-qemu/src/command.rs`**
         - Replace the fixed `-nic none` with `nic_option(spec)?`: `none` for `net == "none"`; `user,model=ne2k_isa` for `net == "ne2000"`; any other value is `EngineError::Setup`; append `,hostfwd=tcp:{host_address}:{host_port}-:{guest_port}` per mapping sorted by `(host_port, guest_port)`.
-        - Append one `-drive` per volume after the boot disk, sorted by drive: `file={path},format=raw,if=ide,index={letter - 'C'}` for `D:`..`F:`, `file={path},format=raw,if=floppy,index=0|1` for `A:`/`B:`, plus `,readonly=on` when read-only; any other drive is `EngineError::Setup`.
+        - Append one `-drive` per volume after the boot disk, sorted by drive: `file={path},format=raw,if=ide,index={letter - 'C'}` for `D:`..`F:`, `file={path},format=raw,if=floppy,index=0|1` for `A:`/`B:`, plus `,readonly=on` when a floppy is read-only and `,snapshot=on` when an IDE volume is read-only; any other drive is `EngineError::Setup`.
     - **Verify:** `cargo test -p dosker-engine-qemu --test command && cargo test -p dosker-engine -p dosker-engine-qemu`
 
-- [ ] **Task 8: The supervisor attaches volumes and passes the network spec**
+- [x] **Task 8: The supervisor attaches volumes and passes the network spec**
     - **Implements:** FR-014, FR-015; design §Process Model, §Runtime, error handling "Volume already attached: fail the second start with the name of the holder".
     - **Modify `crates/dosker-runtime/tests/supervisor.rs` first**
         - Add `Harness::start_with_data(ports, volumes)` that creates each named volume through `VolumeStore::create`, records `with_network("ne2000", ports)` and `with_volumes(volumes)`, and extends `StubSession` with `stop_error: Option<EngineError>`.
@@ -376,7 +377,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - Volumes are marked through `VolumeStore::set_dirty(name, dirty)`; a failure only logs a warning and never changes the container outcome.
     - **Verify:** `cargo test -p dosker-runtime --test supervisor`
 
-- [ ] **Task 9: Reject a port conflict before the supervisor starts**
+- [x] **Task 9: Reject a port conflict before the supervisor starts**
     - **Implements:** FR-015; design §Requirements "Run several containers at once", error handling "Port conflict: fail the start and leave other containers untouched".
     - **Create `crates/dosker-runtime/tests/ports.rs` first**
         - `a_free_host_port_has_no_conflict`.
@@ -401,7 +402,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - A failed start leaves any volume created at `create` time in place, including anonymous volumes, because the container record still references them (see Constraints).
     - **Verify:** `cargo test -p dosker-runtime --test ports && cargo test -p dosker-cli --features mock-engine --test cli_run && cargo test -p dosker-cli --features mock-engine --test cli_volumes`
 
-- [ ] **Task 10: `dosker volume create`, `ls`, and `rm`**
+- [x] **Task 10: `dosker volume create`, `ls`, and `rm`**
     - **Implements:** FR-014; design §CLI, data-model §Volume.
     - **Modify `crates/dosker-cli/tests/cli_volumes.rs` first** (every test that starts a container imports the base image through `CliRoot::import_image_as("freedos:latest")` first)
         - `volume_create_list_and_remove_round_trip` — create `data`; `ls` shows `NAME SIZE LAYOUT ATTACHED` and `data 67108864 mbr_partitioned -`; `rm` removes it.
@@ -432,7 +433,7 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - `NotFound` → `volume not found: {name}` (exit `1`); `AlreadyExists` → `volume already exists: {name}` (exit `1`); `InvalidName` and a nested `InvalidVolumeSize` → exit `2`; `InUse` keeps its message (exit `1`).
     - **Verify:** `cargo test -p dosker-cli --lib commands::volume && cargo test -p dosker-cli --features mock-engine --test cli_volumes`
 
-- [ ] **Task 11: `dosker port`**
+- [x] **Task 11: `dosker port`**
     - **Implements:** FR-015; design §CLI, §Runtime ("`dosker port` reports the effective port").
     - **Create `crates/dosker-cli/tests/cli_port.rs` first** (create the image with `CliRoot::import_image_as` before the containers)
         - `port_prints_the_effective_mappings` — create with `-p <free>:80 -p 127.0.0.1:<free2>:81` using `free_tcp_port()`; exactly two lines in that order.
@@ -446,17 +447,17 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - `execute(args, context, probe, now)` — resolve, recover stale state, reload, print `mapping.endpoint()` in recorded order; no mappings prints nothing and exits `0`.
     - **Verify:** `cargo test -p dosker-cli --features mock-engine --test cli_port`
 
-- [ ] **Task 12: Volume attach test on QEMU**
-    - **Implements:** FR-014; roadmap "Done when" (a partitioned FAT16 volume attaches to one running container and survives `rm`; a second attach fails and names the holder; a read-only volume rejects guest writes).
+- [x] **Task 12: Volume attach test on QEMU**
+    - **Implements:** FR-014; roadmap "Done when" (a partitioned FAT16 volume attaches to one running container and survives `rm`; a second attach fails and names the holder; a read-only volume discards guest writes and leaves the image unchanged).
     - **Create `crates/dosker-cli/tests/qemu_volumes.rs` first**
         - Gate every test on `integration_enabled()` and `qemu_image()`, as `qemu_run.rs` does; keep a `static INTEGRATION_LOCK: Mutex<()>` **inside this test binary** to serialize its own tests. The suite is a separate test binary from `qemu_runtime.rs`, so no cross-binary lock exists or is needed; each test uses unique container names.
         - `partitioned_volume_persists_across_rm_and_rejects_a_second_attach` — import the image, `volume create data`, `run -d --name vol -v data:D: freedos:latest`, `exec vol COPY C:\DOSKER\TWO.TXT D:\PERSIST.TXT`, then `run -d --name other -v data:D: freedos:latest`: the second start exits `1` and its output names `vol`; `rm other`. Stop `vol`, `rm vol`, start `vol2` with the same volume, and `exec vol2 TYPE D:\PERSIST.TXT` prints `ONE` and `TWO`.
-        - `a_read_only_volume_rejects_a_guest_write` — `volume create rovol`, start with `-v rovol:D:ro`, `exec rovol COPY C:\DOSKER\TWO.TXT D:\BLOCKED.TXT`, then stop. `read_tree` on `<root>/volumes/rovol/volume.img` contains no `BLOCKED.TXT` and the volume still lists as `mbr_partitioned`.
+        - `a_read_only_volume_discards_a_guest_write` — `volume create rovol`, start with `-v rovol:D:ro`, `exec rovol COPY C:\DOSKER\TWO.TXT D:\BLOCKED.TXT` succeeds, then stop. `read_tree` on `<root>/volumes/rovol/volume.img` contains no `BLOCKED.TXT` and the volume still lists as `mbr_partitioned`.
     - **Modify `.github/workflows/ci.yml` and `.github/workflows/qemu-nightly.yml`**
         - Add `cargo test -p dosker-cli --features qemu-engine --test qemu_volumes -- --nocapture` beside the existing `qemu_runtime` and `qemu_run` steps with the same `DOSKER_INTEGRATION`, `DOSKER_QEMU_IMAGE`, and `DOSKER_QEMU` environment.
     - **Verify:** `DOSKER_INTEGRATION=1 DOSKER_QEMU_IMAGE=agent/fixtures/dosker-agent.img DOSKER_QEMU=qemu-system-i386 cargo test -p dosker-cli --features qemu-engine --test qemu_volumes -- --nocapture`
 
-- [ ] **Task 13: Published-port test on QEMU**
+- [x] **Task 13: Published-port test on QEMU**
     - **Implements:** FR-015; roadmap "Done when" (a guest TCP service reaches the host at `127.0.0.1:<published>` through the packet driver and the TCP/IP stack).
     - **Modify `crates/dosker-test-support/src/fixtures.rs`**
         - Add `pub const QEMU_NET_IMAGE_ENV: &str = "DOSKER_QEMU_NET_IMAGE";` and `pub fn net_image() -> Result<PathBuf, String>` copying `qemu_image()`: an empty or unset variable returns an error naming `DOSKER_QEMU_NET_IMAGE`; a relative value resolves against the workspace root (`env!("CARGO_MANIFEST_DIR")` plus `../..`); a non-file returns an error with the resolved path.
@@ -474,13 +475,13 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
         - Add `DOSKER_QEMU_NET_IMAGE_URL` to the nightly `preflight` selection, then add the same download and test step to the `runtime-macos` job.
     - **Verify:** `DOSKER_INTEGRATION=1 DOSKER_QEMU_NET_IMAGE=agent/fixtures/dosker-net.img DOSKER_QEMU=qemu-system-i386 cargo test -p dosker-cli --features qemu-engine --test qemu_ports -- --nocapture`
 
-- [ ] **Task 14: Document volumes and networking, and resolve the FAT12 note**
+- [x] **Task 14: Document volumes and networking, and resolve the FAT12 note**
     - **Implements:** FR-014, FR-015; design §Goals, §Security ("Published ports bind to `127.0.0.1` by default"), NFR `Usability`.
     - **Modify `.sdd/specs/2026-11-01-dosker/data-model.md` first**
         - §Volume `fat_type` row: `fat16` for `mbr_partitioned`, `fat12` for the 1.44 MB superfloppy.
         - The validation rule "A volume uses `mbr_partitioned` for hard-disk sizes and `superfloppy` for floppy sizes" gains the sentence `A superfloppy volume of 1.44 MB is fat12; mbr_partitioned and 2.88 MB volumes are fat16.`
     - **Create `docs/volumes-and-network.md`**
-        - `## Volumes` — layout and size rules (`64M` default, the two floppy sizes, the 16 MiB..1 GiB range), `volumes/<name>/volume.img`, `meta.json`, the exclusive `.lock`, `-v name:D[:ro]`, the mountable drive set and layout rule, anonymous volumes from `VOLUME`, survival across `rm`, and `dosker volume create|ls|rm`.
+        - `## Volumes` — layout and size rules (`64M` default, the two floppy sizes, the 16 MiB..1 GiB range), `volumes/<name>/volume.img`, `meta.json`, the exclusive `.lock`, `-v name:D[:ro]`, the mountable drive set and layout rule, anonymous volumes from `VOLUME`, survival across `rm`, and `dosker volume create|ls|rm`. State that a read-only floppy rejects guest writes and a read-only hard-disk volume discards them through a temporary QEMU overlay.
         - `## Publishing ports` — `-p [addr:]host:guest`, the `127.0.0.1` default, the one-port-per-address rule, the conflict error, and `dosker port` output.
         - `## Guest networking` — QEMU user-mode NAT through `ne2k_isa`, the guest packet-driver requirement, and the `CONFIG.SYS` `LASTDRIVE` requirement.
         - `## Integration test fixture` — the booter image required by `DOSKER_QEMU_NET_IMAGE`, its `C:\NET` contents, and that the suite fails loudly when integration is enabled without it.
@@ -490,3 +491,8 @@ pub enum CliError { /* existing variants */, Volume(VolumeError) }   // From<Vol
     - **Modify `docs/windows.md`**
         - Replace the exact line `NAT is not yet supported.` under `## Engine networking` with a paragraph stating that QEMU user-mode NAT and `-p` work on Windows, that published ports bind to `127.0.0.1` by default, and that volumes live under `%LOCALAPPDATA%\dosker\volumes`.
     - **Verify:** `cargo test --workspace --features dosker-cli/mock-engine && test -f docs/volumes-and-network.md && rg -q 'docs/volumes-and-network.md' README.md && ! rg -q 'NAT is not yet supported' docs/windows.md && rg -q 'superfloppy.*fat12' .sdd/specs/2026-11-01-dosker/data-model.md`
+
+## Deviations
+
+- **Read-only IDE volumes use `snapshot=on`.** QEMU rejects a read-only block node on an IDE hard disk (`Block node is read-only`) for `-drive ...,if=ide,readonly=on`, `-device ide-hd`, and `-blockdev`. Read-only `D:`..`F:` volumes therefore attach with `snapshot=on`: the guest can write to a temporary overlay, those writes are discarded, and `volume.img` is never modified. Read-only `A:`/`B:` floppies keep `readonly=on`. Approved by the user during execution. The read-only attach test was renamed to `a_read_only_volume_discards_a_guest_write` and asserts the guest write succeeds and the volume image has no `BLOCKED.TXT`.
+- **Build-based tests import the base as `base:latest`.** `FROM freedos:<version>` resolves the built-in FreeDOS base and rejects `freedos:latest`, so the two anonymous-volume tests build `FROM base:latest`. The tests that create containers directly still import and use `freedos:latest`.

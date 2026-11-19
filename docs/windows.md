@@ -22,7 +22,9 @@ port at or above `5900`.
 `--display window` is not supported on Windows. Use `--display none` or
 `--display vnc`.
 
-NAT is not yet supported.
+QEMU user-mode NAT and `-p` work on Windows. Published ports bind to
+`127.0.0.1` by default. Named volumes live under
+`%LOCALAPPDATA%\dosker\volumes`.
 
 ## QEMU discovery
 

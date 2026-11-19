@@ -72,6 +72,15 @@ DOSker stores images in the local OCI layout and provides `image import`,
 `images`, `tag`, and `rmi`. See [Images](docs/images.md) for the store layout,
 the media types, and the untag-only `rmi` behavior.
 
+### Volumes and networking
+
+Named volumes attach a FAT disk image to a running container, and published
+ports forward a guest TCP port to the host. Use `-v` to mount a volume, `-p` to
+publish a port, `dosker volume` to manage volumes, and `dosker port` to show
+the effective mappings. See
+[Volumes and network](docs/volumes-and-network.md) for the layout, drive, and
+NAT rules.
+
 ### Windows runtime
 
 Windows x86_64 uses a named-pipe control channel, loopback TCP engine
@@ -105,6 +114,20 @@ gh variable set DOSKER_QEMU_IMAGE_URL \
 The value can be a ZIP archive that contains a `.img` file or a raw image URL.
 The workflow downloads and extracts a ZIP archive. It downloads a raw image
 directly.
+
+### QEMU net image URL variable
+
+Set the repository variable `DOSKER_QEMU_NET_IMAGE_URL` to a raw `.img` URL.
+The image is a booter image that starts an NE2000 packet driver and a TCP
+server on port 80. The `agent-qemu` and nightly macOS jobs download it to
+`agent/fixtures/dosker-net.img` and set `DOSKER_QEMU_NET_IMAGE`.
+
+Set it with `gh`:
+
+```sh
+gh variable set DOSKER_QEMU_NET_IMAGE_URL \
+  --body 'https://example.com/dosker-net.img'
+```
 
 ### Pinned Floppy Edition ZIP
 
@@ -149,4 +172,5 @@ then runs the Rust QEMU runtime suite.
 - [DOS agent plan](.sdd/specs/2026-11-01-dosker/plan-dos-agent-serial.md)
 - [Builds](docs/builds.md)
 - [FreeDOS base images](docs/base-images.md)
+- [Volumes and network](docs/volumes-and-network.md)
 - [Windows runtime](docs/windows.md)
