@@ -6,6 +6,7 @@ pub mod record;
 pub mod stale;
 pub mod store;
 pub mod supervisor;
+pub mod volume;
 
 pub use paths::RuntimePaths;
 pub use protocol::{
@@ -20,3 +21,4 @@ pub use supervisor::{
     ACCEPT_POLL, ATTACH_POLL, DEFAULT_READY_TIMEOUT, SERVER_READ_TIMEOUT, Supervisor,
     SupervisorConfig, SupervisorError,
 };
+pub use volume::{Volume, VolumeError, VolumeHolder, VolumeLock, VolumeMeta, VolumeStore};

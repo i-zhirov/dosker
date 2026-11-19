@@ -389,6 +389,7 @@ dependencies = [
  "dosker-platform",
  "dosker-test-support",
  "fatfs",
+ "fs2",
  "serde",
  "serde_json",
  "tempfile",

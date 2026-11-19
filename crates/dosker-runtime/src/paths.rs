@@ -9,6 +9,10 @@ const DISK_FILE: &str = "disk.img";
 const ENGINE_LOG: &str = "engine.log";
 const SERIAL_LOG: &str = "serial.log";
 const CONTAINER_LOG: &str = "container.log";
+const VOLUMES_DIR: &str = "volumes";
+const VOLUME_IMAGE: &str = "volume.img";
+const VOLUME_META: &str = "meta.json";
+const VOLUME_LOCK: &str = ".lock";
 
 /// The paths of the runtime data root and its container entries.
 #[derive(Clone, Debug)]
@@ -70,5 +74,30 @@ impl RuntimePaths {
     /// Returns the container log of a container.
     pub fn container_log(&self, id: &ContainerId) -> PathBuf {
         self.container_dir(id).join(CONTAINER_LOG)
+    }
+
+    /// Returns the directory that holds the volumes.
+    pub fn volumes_dir(&self) -> PathBuf {
+        self.root.join(VOLUMES_DIR)
+    }
+
+    /// Returns the directory of a volume.
+    pub fn volume_dir(&self, name: &str) -> PathBuf {
+        self.volumes_dir().join(name)
+    }
+
+    /// Returns the disk image of a volume.
+    pub fn volume_image(&self, name: &str) -> PathBuf {
+        self.volume_dir(name).join(VOLUME_IMAGE)
+    }
+
+    /// Returns the metadata file of a volume.
+    pub fn volume_meta(&self, name: &str) -> PathBuf {
+        self.volume_dir(name).join(VOLUME_META)
+    }
+
+    /// Returns the lock file of a volume.
+    pub fn volume_lock(&self, name: &str) -> PathBuf {
+        self.volume_dir(name).join(VOLUME_LOCK)
     }
 }
