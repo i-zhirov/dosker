@@ -1,8 +1,8 @@
 # Volumes and network
 
-This page describes named volumes and published ports. It also describes
-the guest network and the integration fixture for the published-port
-suite.
+This page describes named volumes, development-mode bind mounts, and
+published ports. It also describes the guest network and the integration
+fixture for the published-port suite.
 
 ## Volumes
 
@@ -79,6 +79,80 @@ dosker volume rm data
 `dosker volume ls` prints the header `NAME SIZE LAYOUT ATTACHED`. The size
 is in bytes. An unattached volume shows `-` in the `ATTACHED` column.
 `dosker volume rm` refuses an attached volume and names the holder.
+
+## Development mode
+
+`--bind` mounts a live host directory in the guest. `run` and `create`
+accept the form `--bind drive:path[:ro]`:
+
+```sh
+dosker run -d --bind D:/host/path freedos:latest
+dosker run -d --bind D:/host/path:ro freedos:latest
+```
+
+The canonical value is `--bind D:/host/path`. A literal `:ro` suffix
+mounts the directory read-only. The drive is one letter followed by a
+colon and may be lowercase; DOSker uppercases it and keeps the path as
+written.
+
+The drives that can hold a bind mount are `D:`, `E:`, and `F:`. `C:` is
+the boot disk, and `A:` and `B:` are floppy drives; none of them can hold
+a bind mount. Any other drive is a usage error that names the supported
+set.
+
+The source must exist, be a directory, and contain only names that are
+valid 8.3 after uppercase normalization. A symlink, a non-regular entry,
+or a name that collides after normalization is refused before boot, and
+the error names the offending host path. A bind drive must not collide
+with a `-v` drive, another bind, or an image `VOLUME` declaration.
+
+`--bind` is QEMU-only. An engine without the `host_dir_live` capability
+rejects a non-empty `--bind` list with a usage error.
+
+### Live host directory
+
+For a read-write bind, QEMU attaches the host directory with `vvfat`:
+
+```text
+file=fat:rw:<dir>,format=raw,if=ide,index=1
+```
+
+`D:`, `E:`, and `F:` map to IDE index `1`, `2`, and `3`. QEMU documents
+`vvfat` as beta, and it can corrupt host files. Development mode is for
+development only and never for CI. `dosker doctor` prints:
+
+```text
+development mode: --bind uses QEMU vvfat (beta) and can corrupt host files. Use it for development only, never in CI.
+```
+
+A host path that contains a comma is rejected, because the comma
+separates QEMU drive options.
+
+A host edit becomes visible when the guest re-reads the directory. DOS
+caches directory sectors and QEMU caches the cluster it last served, so
+after saving a file on the host, run `DIR` on the drive in the guest
+before reading the file again.
+
+### Sync fallback
+
+Set `DOSKER_NO_VVFAT=1` to select the sync fallback. Only the exact value
+`1` disables `vvfat`. At start, the fallback creates a 64 MiB FAT image
+at `containers/<id>/bind-<lowercase drive letter>.img` and copies the
+host tree into it.
+
+On a clean stop, the guest tree is copied back to the host and the image
+is removed. The written names are uppercase 8.3. A failed or killed stop
+removes the image without writing back. A failed write-back logs a
+warning and keeps the image. The host files must fit in 64 MiB; a larger
+source fails to start with an error that names the host directory.
+
+A read-only bind always uses the fallback image, even without
+`DOSKER_NO_VVFAT`. The image is attached through the read-only IDE
+overlay, so guest writes are discarded and the host directory is never
+modified.
+
+The QEMU integration tests for development mode are gated by
+`DOSKER_INTEGRATION=1` and are not part of CI.
 
 ## Publishing ports
 
