@@ -34,6 +34,10 @@ pub enum ImageError {
     #[error("invalid DOS path: {path}: {reason}")]
     InvalidDosPath { path: String, reason: String },
 
+    /// A host path cannot be used as a DOS tree.
+    #[error("invalid host path {}: {reason}", path.display())]
+    InvalidHostPath { path: PathBuf, reason: String },
+
     /// A value cannot be serialized as canonical JSON.
     #[error("cannot serialize canonical JSON: {0}")]
     CanonicalJson(String),

@@ -7,6 +7,7 @@ pub mod config;
 pub mod error;
 pub mod fat;
 pub mod freedos;
+pub mod host;
 pub mod image;
 pub mod inject;
 pub mod layer;
@@ -37,6 +38,7 @@ pub use freedos::{
     SECTORS_PER_TRACK, VOLUME_ID, VOLUME_LABEL, build_base_image, default_agent_executable,
     ensure_freedos_base, load_agent_executable, load_freedos_binaries,
 };
+pub use host::{read_host_tree, validate_host_tree, write_host_tree};
 pub use image::ImageMedia;
 pub use inject::{
     AGENT_PATH, AUTOEXEC_OLD_PATH, AgentInjection, apply_agent_injection, plan_agent_injection,
