@@ -98,6 +98,10 @@ pub enum ImageError {
     #[error("cannot project the tree onto the disk: {reason}")]
     Projection { reason: String },
 
+    /// A volume size cannot be represented by a FAT disk image.
+    #[error("invalid volume size {size}: {reason}")]
+    InvalidVolumeSize { size: u64, reason: String },
+
     /// The image content is malformed.
     #[error("corrupt image at {}: {message}", path.display())]
     Corrupt { path: PathBuf, message: String },

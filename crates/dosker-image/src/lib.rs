@@ -16,6 +16,7 @@ pub mod path;
 pub mod project;
 pub mod reference;
 pub mod tree;
+pub mod volume;
 
 pub use boot::{BlobRef, BootLayout, BootMetadata, FatType, Geometry};
 pub use cache::{CacheKeyInput, CacheRecord, CacheStore, cache_key};
@@ -55,3 +56,7 @@ pub use path::{DosName, DosPath, normalize_tree_member};
 pub use project::{apply_boot_metadata, project_tree};
 pub use reference::{ImageDigest, ImageName, ImageRef, ImageReference, ImageTag};
 pub use tree::{Attributes, LayerDelta, Tree, TreeDir, TreeFile, TreeKind, TreeNode};
+pub use volume::{
+    DEFAULT_VOLUME_SIZE, FLOPPY_1440_SIZE, FLOPPY_2880_SIZE, MAX_PARTITIONED_VOLUME_SIZE,
+    MIN_PARTITIONED_VOLUME_SIZE, VolumeImage, VolumeLayout, create_volume,
+};
