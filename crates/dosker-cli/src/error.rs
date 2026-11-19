@@ -6,7 +6,7 @@ use dosker_build::BuildError;
 use dosker_core::CoreError;
 use dosker_image::ImageError;
 use dosker_platform::PlatformError;
-use dosker_runtime::StoreError;
+use dosker_runtime::{StoreError, VolumeError};
 
 use crate::cli::{EXIT_ERROR, EXIT_USAGE};
 
@@ -37,6 +37,10 @@ pub enum CliError {
     #[error(transparent)]
     Image(#[from] ImageError),
 
+    /// A volume operation failed.
+    #[error(transparent)]
+    Volume(#[from] VolumeError),
+
     /// A build operation failed.
     #[error(transparent)]
     Build(#[from] BuildError),
@@ -55,6 +59,8 @@ impl CliError {
                 EXIT_USAGE
             }
             Self::Image(ImageError::InvalidReference(_)) => EXIT_USAGE,
+            Self::Volume(VolumeError::InvalidName(_)) => EXIT_USAGE,
+            Self::Volume(VolumeError::Image(ImageError::InvalidVolumeSize { .. })) => EXIT_USAGE,
             _ => EXIT_ERROR,
         }
     }

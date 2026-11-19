@@ -10,7 +10,7 @@ use dosker_engine::DisplayMode;
 use crate::adapter;
 use crate::cli::{EXIT_ERROR, EXIT_NOT_RUNNING, EXIT_OK, RunArgs};
 use crate::commands::attach;
-use crate::commands::create::create_container;
+use crate::commands::create::{CreateOptions, create_container};
 use crate::commands::start::{print_container_log, start_container};
 use crate::context::Context;
 use crate::error::CliError;
@@ -40,11 +40,15 @@ pub fn execute(args: RunArgs, context: &mut Context, now: DateTime<Utc>) -> Resu
 
     let record = create_container(
         context,
-        &args.image,
-        args.name,
-        engine,
-        display,
-        args.vnc_port,
+        CreateOptions {
+            image: args.image,
+            name: args.name,
+            engine,
+            display,
+            vnc_port: args.vnc_port,
+            publish: args.publish,
+            volumes: args.volumes,
+        },
         now,
     )?;
     let outcome = start_container(context, &record, Duration::from_secs(args.boot_timeout))?;

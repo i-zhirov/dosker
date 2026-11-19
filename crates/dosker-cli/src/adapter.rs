@@ -1,6 +1,6 @@
 //! Selecting and building engine adapters.
 
-use dosker_engine::EngineAdapter;
+use dosker_engine::{CapabilitySet, EngineAdapter};
 
 use crate::error::CliError;
 
@@ -34,6 +34,33 @@ pub fn is_known(engine: &str) -> bool {
     }
 
     false
+}
+
+/// Returns the capabilities an engine declares without discovering a binary.
+pub fn declared_capabilities(engine: &str) -> Option<CapabilitySet> {
+    if engine == "qemu" {
+        return Some(dosker_engine_qemu::capabilities());
+    }
+
+    #[cfg(feature = "mock-engine")]
+    {
+        use dosker_engine::Capability;
+
+        if engine == "mock" {
+            return Some(
+                [
+                    Capability::Boot,
+                    Capability::Serial,
+                    Capability::Stop,
+                    Capability::Nat,
+                ]
+                .into_iter()
+                .collect(),
+            );
+        }
+    }
+
+    None
 }
 
 /// Builds the adapter for a known engine.

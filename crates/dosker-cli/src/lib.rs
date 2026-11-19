@@ -7,3 +7,4 @@ pub mod context;
 pub mod control_client;
 pub mod error;
 pub mod resolve;
+pub mod spec;

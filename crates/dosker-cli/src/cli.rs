@@ -33,6 +33,7 @@ pub enum Command {
     Run(RunArgs),
     Ps(PsArgs),
     Inspect(InspectArgs),
+    Port(PortArgs),
     Logs(LogsArgs),
     Status(StatusArgs),
     Exec(ExecArgs),
@@ -46,6 +47,7 @@ pub enum Command {
     Restart(RestartArgs),
     Rm(RmArgs),
     Image(ImageArgs),
+    Volume(VolumeArgs),
     Images(ImagesArgs),
     Rmi(RmiArgs),
     Tag(TagArgs),
@@ -92,6 +94,12 @@ pub struct RunArgs {
     #[arg(long = "vnc-port")]
     pub vnc_port: Option<u16>,
 
+    #[arg(short = 'p', long = "publish", value_name = "[addr:]host:guest")]
+    pub publish: Vec<String>,
+
+    #[arg(short = 'v', long = "volume", value_name = "name:drive[:ro]")]
+    pub volumes: Vec<String>,
+
     #[arg(long = "boot-timeout", default_value_t = 60)]
     pub boot_timeout: u64,
 
@@ -112,6 +120,12 @@ pub struct CreateArgs {
 
     #[arg(long = "vnc-port")]
     pub vnc_port: Option<u16>,
+
+    #[arg(short = 'p', long = "publish", value_name = "[addr:]host:guest")]
+    pub publish: Vec<String>,
+
+    #[arg(short = 'v', long = "volume", value_name = "name:drive[:ro]")]
+    pub volumes: Vec<String>,
 
     pub image: String,
 }
@@ -167,6 +181,40 @@ pub struct ImageImportArgs {
     pub reference: String,
 }
 
+/// Arguments for `volume`.
+#[derive(Debug, Args)]
+pub struct VolumeArgs {
+    #[command(subcommand)]
+    pub command: VolumeCommand,
+}
+
+/// The volume subcommands.
+#[derive(Debug, Subcommand)]
+pub enum VolumeCommand {
+    Create(VolumeCreateArgs),
+    Ls(VolumeLsArgs),
+    Rm(VolumeRmArgs),
+}
+
+/// Arguments for `volume create`.
+#[derive(Debug, Args)]
+pub struct VolumeCreateArgs {
+    #[arg(long = "size", default_value = "64M")]
+    pub size: String,
+
+    pub name: String,
+}
+
+/// Arguments for `volume ls`.
+#[derive(Debug, Args)]
+pub struct VolumeLsArgs {}
+
+/// Arguments for `volume rm`.
+#[derive(Debug, Args)]
+pub struct VolumeRmArgs {
+    pub name: String,
+}
+
 /// Arguments for `images`.
 #[derive(Debug, Args)]
 pub struct ImagesArgs {}
@@ -203,6 +251,12 @@ pub struct PsArgs {
 /// Arguments for `inspect`.
 #[derive(Debug, Args)]
 pub struct InspectArgs {
+    pub container: String,
+}
+
+/// Arguments for `port`.
+#[derive(Debug, Args)]
+pub struct PortArgs {
     pub container: String,
 }
 
@@ -338,6 +392,10 @@ fn dispatch(command: Command) -> Result<u8, CliError> {
             let mut context = Context::load()?;
             commands::inspect::execute(args, &mut context, &SystemProbe::new(), Utc::now())
         }
+        Command::Port(args) => {
+            let mut context = Context::load()?;
+            commands::port::execute(args, &mut context, &SystemProbe::new(), Utc::now())
+        }
         Command::Logs(args) => {
             let mut context = Context::load()?;
             commands::logs::execute(args, &mut context, &SystemProbe::new(), Utc::now())
@@ -394,6 +452,10 @@ fn dispatch(command: Command) -> Result<u8, CliError> {
         Command::Image(args) => {
             let mut context = Context::load()?;
             commands::image::execute(args, &mut context, Utc::now())
+        }
+        Command::Volume(args) => {
+            let mut context = Context::load()?;
+            commands::volume::execute(args, &mut context, Utc::now())
         }
         Command::Images(args) => {
             let mut context = Context::load()?;

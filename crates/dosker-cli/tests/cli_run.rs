@@ -13,10 +13,11 @@ use chrono::Utc;
 use common::{make_disk_image, run_captured, stderr_text};
 use dosker_core::{ContainerId, ContainerName, Status};
 use dosker_engine::DisplayMode;
+use dosker_image::PortProtocol;
 use dosker_platform::EndpointRecord;
 use dosker_platform::endpoint::control_endpoint;
 use dosker_platform::process::{ProcessSupervisor, system};
-use dosker_runtime::{ContainerRecord, StateStore};
+use dosker_runtime::{ContainerRecord, PortMapping, StateStore};
 use dosker_test_support::fixtures::{kill_process, mock_engine_path};
 
 struct RunRoot {
@@ -447,6 +448,102 @@ fn run_without_detach_on_a_booter() {
         !stdout.contains(records[0].id.as_str()),
         "the non-detached run printed the id: {stdout}"
     );
+}
+
+#[test]
+fn a_second_container_cannot_publish_a_taken_host_port() {
+    let root = RunRoot::new();
+    let port = dosker_engine_qemu::command::free_tcp_port().expect("allocate a free port");
+    let mapping = format!("{port}:80");
+    let first = run_ok(&root, &["run", "-d", "-p", &mapping, "freedos:latest"]);
+    let first_id = ContainerId::parse(&first).expect("parse the first id");
+
+    let output = root.run(&["run", "-d", "-p", &mapping, "freedos:latest"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr_text(&output).contains("already published"),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+
+    let inspected = root.run(&["inspect", &first]);
+    assert_eq!(
+        inspected.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&inspected)
+    );
+    let value: serde_json::Value =
+        serde_json::from_str(&stdout_text(&inspected)).expect("parse the inspect output");
+    assert_eq!(value["status"], "running");
+
+    let records = root.store().list().expect("list the containers");
+    let failed = records
+        .iter()
+        .find(|record| record.id != first_id)
+        .expect("the failed container is recorded");
+    assert_eq!(
+        failed.status,
+        Status::Created,
+        "the conflict does not transition the record"
+    );
+    let log = std::fs::read_to_string(
+        root.path()
+            .join("containers")
+            .join(failed.id.as_str())
+            .join("container.log"),
+    )
+    .expect("read the failed container log");
+    assert!(
+        log.contains("already published"),
+        "the conflict is logged: {log:?}"
+    );
+    let rm = root.run(&["rm", failed.id.as_str()]);
+    assert_eq!(rm.status.code(), Some(0), "stderr: {}", stderr_text(&rm));
+}
+
+#[test]
+fn a_stale_container_does_not_hold_a_port() {
+    let root = RunRoot::new();
+    let port = dosker_engine_qemu::command::free_tcp_port().expect("allocate a free port");
+    let id = ContainerId::parse("000000000021").expect("parse the stale id");
+    let name = ContainerName::parse("stale").expect("parse the stale name");
+    let endpoint = control_endpoint(root.path(), &id);
+    let mut record = ContainerRecord::new(
+        id.clone(),
+        name,
+        String::from("freedos:latest"),
+        String::from("mock"),
+        endpoint.record(),
+        Utc::now(),
+    )
+    .with_network(
+        String::from("ne2000"),
+        vec![PortMapping {
+            host_address: std::net::Ipv4Addr::LOCALHOST,
+            host_port: port,
+            guest_port: 80,
+            protocol: PortProtocol::Tcp,
+        }],
+    );
+    record.status = Status::Running;
+    record.pid = Some(u32::MAX);
+    root.store()
+        .create(&record)
+        .expect("create the stale record");
+
+    let mapping = format!("{port}:80");
+    let output = root.run(&["run", "-d", "-p", &mapping, "freedos:latest"]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    let stale = root.store().load(&id).expect("load the stale record");
+    assert_eq!(stale.status, Status::Exited);
 }
 
 #[test]

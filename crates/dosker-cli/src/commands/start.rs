@@ -1,6 +1,7 @@
 //! `dosker start`: start a stopped container and wait for it to be ready.
 
 use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -9,7 +10,7 @@ use chrono::{DateTime, Utc};
 use dosker_core::{ContainerId, Status};
 use dosker_platform::process::{ProcessSupervisor, system};
 use dosker_runtime::stale::{HostProbe, SystemProbe};
-use dosker_runtime::{ContainerRecord, StateStore, recover_stale};
+use dosker_runtime::{ContainerRecord, StateStore, VolumeKind, find_conflict, recover_stale};
 
 use crate::cli::{EXIT_ERROR, EXIT_OK, StartArgs};
 use crate::context::Context;
@@ -105,7 +106,13 @@ pub fn start_container(
     let root = std::path::absolute(context.paths.root())?;
     let probe = SystemProbe::new();
 
-    wait_for_previous_supervisor(&probe, record, ENDPOINT_WAIT);
+    recover_stale(&context.store, &probe, Utc::now())?;
+    let record = context.store.load(&record.id)?;
+
+    wait_for_previous_supervisor(&probe, &record, ENDPOINT_WAIT);
+
+    check_port_conflict(context, &record)?;
+    warn_if_dirty_volumes(context, &record)?;
 
     let ready_timeout_ms = u64::try_from(ready_timeout.as_millis()).unwrap_or(u64::MAX);
     let mut child = spawn_supervisor(context, &root, &record.id, &record.engine, ready_timeout_ms)?;
@@ -120,6 +127,49 @@ pub fn start_container(
         &processes,
         Some(&mut child),
     )
+}
+
+/// Rejects a start when another active container already holds a port.
+///
+/// The check is best-effort across concurrent processes; a lost race surfaces
+/// as an engine NAT bind failure.
+fn check_port_conflict(context: &mut Context, record: &ContainerRecord) -> Result<(), CliError> {
+    if record.ports.is_empty() {
+        return Ok(());
+    }
+    let Some(conflict) = find_conflict(&context.store, &record.id, &record.ports)? else {
+        return Ok(());
+    };
+
+    let message = conflict.to_string();
+    let log_path = context.paths.container_log(&record.id);
+    if let Ok(mut log) = OpenOptions::new().create(true).append(true).open(&log_path) {
+        let _ = writeln!(log, "{message}");
+    }
+    Err(CliError::Message(message))
+}
+
+/// Warns when a named volume attached to the container is marked dirty.
+///
+/// A volume that cannot be loaded is left to the supervisor, which reports the
+/// attachment failure when it starts the container.
+fn warn_if_dirty_volumes(context: &mut Context, record: &ContainerRecord) -> Result<(), CliError> {
+    for mount in &record.volumes {
+        if mount.kind != VolumeKind::Named {
+            continue;
+        }
+        let Some(name) = mount.name.as_deref() else {
+            continue;
+        };
+        if let Ok(volume) = context.volumes.load(name)
+            && volume.meta.dirty
+        {
+            context
+                .console
+                .error_line(&format!("warning: volume {name} was not shut down cleanly"))?;
+        }
+    }
+    Ok(())
 }
 
 /// Waits for the previous supervisor to release the control endpoint.
