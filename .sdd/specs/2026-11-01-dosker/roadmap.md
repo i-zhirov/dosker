@@ -316,13 +316,13 @@ reject message that names the engines that provide a missing capability, and
 the NAT decision. Out of scope: any capability that the spike does not prove.
 An unproven cell stays unproven and is rejected.
 
-- **Status:** Unplanned
+- **Status:** Planned
 - **Depends on:** Slices 3, 9, and 10. The DOSBox-X spike is a manual
   prerequisite.
 - **Requirements:** FR-011, FR-016
 - **Manual prerequisites:** the DOSBox-X `BOOT`, headless, and debugger spike.
   Official DOSBox-X builds. Before declaring NAT on DOSBox-X, the NAT spike.
-- **Plan:** —
+- **Plan:** [`.sdd/specs/2026-11-01-dosker/plan-dosbox-x-adapter.md`](plan-dosbox-x-adapter.md)
 - **Done when:** the same image boots on DOSBox-X and answers `exec` when the
   spike proves serial and headless. Every DOSBox-X cell in the capability table
   is backed by an integration test or marked unproven. A `REQUIRES` of a
