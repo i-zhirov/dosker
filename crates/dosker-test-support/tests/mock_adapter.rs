@@ -39,6 +39,9 @@ fn spec(log_dir: &Path) -> EngineSpec {
         display: dosker_engine::DisplayMode::None,
         vnc_port: None,
         allow_reboot: false,
+        net: "none".to_owned(),
+        ports: Vec::new(),
+        volumes: Vec::new(),
     }
 }
 
@@ -191,16 +194,22 @@ fn try_exit_is_none_while_running() {
 }
 
 #[test]
-fn capabilities_are_boot_serial_and_stop() {
-    let expected: CapabilitySet = [Capability::Boot, Capability::Serial, Capability::Stop]
-        .into_iter()
-        .collect();
+fn capabilities_are_boot_serial_stop_and_nat() {
+    let expected: CapabilitySet = [
+        Capability::Boot,
+        Capability::Serial,
+        Capability::Stop,
+        Capability::Nat,
+    ]
+    .into_iter()
+    .collect();
     let adapter = adapter(Vec::new());
 
     assert_eq!(adapter.capabilities(), expected);
     assert!(adapter.capabilities().contains(Capability::Boot));
     assert!(adapter.capabilities().contains(Capability::Serial));
     assert!(adapter.capabilities().contains(Capability::Stop));
+    assert!(adapter.capabilities().contains(Capability::Nat));
     assert!(!adapter.capabilities().contains(Capability::Headless));
 }
 

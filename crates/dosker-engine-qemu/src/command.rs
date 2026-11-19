@@ -2,7 +2,10 @@
 
 use std::net::TcpListener;
 
-use dosker_engine::{DisplayMode, EngineCommand, EngineEndpointKind, EngineError, EngineSpec};
+use dosker_engine::{
+    DisplayMode, EngineCommand, EngineEndpointKind, EngineError, EnginePort, EngineSpec,
+    EngineVolume,
+};
 
 use crate::discovery::QemuBinary;
 use crate::endpoints::QemuEndpoints;
@@ -50,6 +53,10 @@ pub fn build(spec: &EngineSpec, binary: &QemuBinary) -> Result<EngineCommand, En
         "file={},format=raw,if={interface},index=0",
         spec.disk_path.display()
     ));
+    for drive in volume_drives(&spec.volumes)? {
+        args.push("-drive".to_owned());
+        args.push(drive);
+    }
 
     for port in 1..=spec.serial_ports {
         args.push("-serial".to_owned());
@@ -72,7 +79,7 @@ pub fn build(spec: &EngineSpec, binary: &QemuBinary) -> Result<EngineCommand, En
     args.push("-gdb".to_owned());
     args.push("chardev:gdb0".to_owned());
     args.push("-nic".to_owned());
-    args.push("none".to_owned());
+    args.push(nic_option(spec)?);
 
     Ok(EngineCommand {
         program: binary.path.clone(),
@@ -80,6 +87,65 @@ pub fn build(spec: &EngineSpec, binary: &QemuBinary) -> Result<EngineCommand, En
         env: Vec::new(),
         endpoints: endpoints.engine_endpoints(),
     })
+}
+
+fn nic_option(spec: &EngineSpec) -> Result<String, EngineError> {
+    let mut option = match spec.net.as_str() {
+        "none" => return Ok("none".to_owned()),
+        "ne2000" => String::from("user,model=ne2k_isa"),
+        other => {
+            return Err(EngineError::Setup(format!(
+                "unknown network device {other}"
+            )));
+        }
+    };
+
+    let mut ports: Vec<EnginePort> = spec.ports.clone();
+    ports.sort_by_key(|port| (port.host_port, port.guest_port));
+    for port in ports {
+        option.push_str(&format!(
+            ",hostfwd=tcp:{}:{}-:{}",
+            port.host_address, port.host_port, port.guest_port
+        ));
+    }
+
+    Ok(option)
+}
+
+fn volume_drives(volumes: &[EngineVolume]) -> Result<Vec<String>, EngineError> {
+    let mut sorted: Vec<&EngineVolume> = volumes.iter().collect();
+    sorted.sort_by(|left, right| left.drive.cmp(&right.drive));
+
+    let mut drives = Vec::with_capacity(sorted.len());
+    for volume in sorted {
+        let placement = match volume.drive.as_str() {
+            "A:" => "if=floppy,index=0",
+            "B:" => "if=floppy,index=1",
+            "D:" => "if=ide,index=1",
+            "E:" => "if=ide,index=2",
+            "F:" => "if=ide,index=3",
+            other => {
+                return Err(EngineError::Setup(format!(
+                    "unsupported volume drive {other}"
+                )));
+            }
+        };
+
+        let mut drive = format!("file={},format=raw,{placement}", volume.path.display());
+        if volume.read_only {
+            // QEMU rejects a read-only block node on an IDE hard disk, so a
+            // read-only hard-disk volume gets a temporary overlay whose writes
+            // are discarded. A floppy can be attached read-only directly.
+            if matches!(volume.drive.as_str(), "A:" | "B:") {
+                drive.push_str(",readonly=on");
+            } else {
+                drive.push_str(",snapshot=on");
+            }
+        }
+        drives.push(drive);
+    }
+
+    Ok(drives)
 }
 
 fn socket_option(kind: &EngineEndpointKind) -> String {

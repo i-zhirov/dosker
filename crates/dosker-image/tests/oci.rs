@@ -10,8 +10,8 @@ use dosker_image::inject::NEW_AUTOEXEC_BYTES;
 use dosker_image::{
     ANNOTATION_RAW_DISK_DIGEST, Attributes, BootMetadata, Descriptor, DosPath, ImageConfig,
     ImageDigest, ImageError, ImageMedia, ImageRef, ImageReference, Layer, LayerDelta,
-    MEDIA_TYPE_BOOTER, MEDIA_TYPE_LAYER, Manifest, OciStore, TreeDir, TreeFile, canonical_json,
-    fixed_timestamp, read_tree,
+    MEDIA_TYPE_BOOTER, MEDIA_TYPE_LAYER, Manifest, OciStore, TreeDir, TreeFile, VolumeDeclaration,
+    canonical_json, fixed_timestamp, read_tree,
 };
 use support::{make_fat16_image, sample_boot, sample_config, write_fat_file};
 
@@ -1008,6 +1008,38 @@ fn load_config_returns_the_stored_config() {
         .load_config(&ImageRef::Tag(reference("demo:latest")))
         .unwrap();
     assert_eq!(loaded, config);
+}
+
+#[test]
+fn image_reports_the_network_device_and_volume_declarations() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"a")], Vec::new(), None))
+        .unwrap();
+    let mut config = sample_config(sample_boot());
+    config.machine.net = "ne2000".to_owned();
+    config.volumes = vec![VolumeDeclaration {
+        drive: "D:".to_owned(),
+    }];
+    store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &config,
+            vec![descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    let image = store
+        .load(&ImageRef::Tag(reference("demo:latest")))
+        .unwrap();
+    assert_eq!(image.net, "ne2000");
+    assert_eq!(
+        image.volumes,
+        vec![VolumeDeclaration {
+            drive: "D:".to_owned()
+        }]
+    );
 }
 
 #[test]

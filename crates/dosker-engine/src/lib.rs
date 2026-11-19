@@ -11,6 +11,6 @@ pub use capability::{Capability, CapabilitySet};
 pub use error::EngineError;
 pub use source::EngineSource;
 pub use spec::{
-    DebugKind, DisplayMode, EngineCommand, EngineEndpoint, EngineEndpointKind, EngineSpec,
-    ExecRequest, ExecResult,
+    DebugKind, DisplayMode, EngineCommand, EngineEndpoint, EngineEndpointKind, EnginePort,
+    EngineSpec, EngineVolume, ExecRequest, ExecResult,
 };

@@ -50,6 +50,7 @@ pub fn capabilities() -> CapabilitySet {
         Capability::GdbStub,
         Capability::Screenshot,
         Capability::Vnc,
+        Capability::Nat,
     ]
     .into_iter()
     .collect()

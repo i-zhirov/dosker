@@ -65,9 +65,14 @@ impl EngineAdapter for MockAdapter {
     }
 
     fn capabilities(&self) -> CapabilitySet {
-        [Capability::Boot, Capability::Serial, Capability::Stop]
-            .into_iter()
-            .collect()
+        [
+            Capability::Boot,
+            Capability::Serial,
+            Capability::Stop,
+            Capability::Nat,
+        ]
+        .into_iter()
+        .collect()
     }
 
     fn probe(&mut self) -> Result<(), EngineError> {

@@ -56,6 +56,9 @@ fn setup(image: &Path, booter: bool) -> (tempfile::TempDir, EngineSpec) {
         display: Default::default(),
         vnc_port: None,
         allow_reboot: false,
+        net: "none".to_owned(),
+        ports: Vec::new(),
+        volumes: Vec::new(),
     };
 
     (dir, spec)

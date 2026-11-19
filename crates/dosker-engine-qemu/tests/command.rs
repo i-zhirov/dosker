@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use dosker_core::ContainerId;
 use dosker_engine::{
     Capability, CapabilitySet, DisplayMode, EngineAdapter, EngineCommand, EngineEndpointKind,
-    EngineError, EngineSpec,
+    EngineError, EnginePort, EngineSpec, EngineVolume,
 };
 #[cfg(unix)]
 use dosker_engine_qemu::QemuEndpoints;
@@ -32,6 +33,9 @@ fn sample_spec() -> EngineSpec {
         display: DisplayMode::None,
         vnc_port: None,
         allow_reboot: false,
+        net: "ne2000".to_owned(),
+        ports: Vec::new(),
+        volumes: Vec::new(),
     }
 }
 
@@ -152,7 +156,7 @@ fn command_uses_the_conformance_machine() {
     assert!(has_pair(&args, "-m", "16"));
     assert!(!joined.contains("-soundhw"));
     assert!(!joined.contains("sb16"));
-    assert!(has_pair(&args, "-nic", "none"));
+    assert!(has_pair(&args, "-nic", "user,model=ne2k_isa"));
 }
 
 #[test]
@@ -406,11 +410,171 @@ fn windows_rejects_the_window_display() {
     }
 }
 
+fn nic_value(args: &[String]) -> &str {
+    value_after(args, "-nic").expect("a nic option")
+}
+
 #[test]
-fn command_disables_networking() {
-    let args = build(&sample_spec());
+fn command_uses_no_nic_when_the_machine_disables_the_network() {
+    let mut spec = sample_spec();
+    spec.net = "none".to_owned();
+    let args = build(&spec);
 
     assert!(has_pair(&args, "-nic", "none"));
+}
+
+#[test]
+fn command_publishes_a_host_port_to_a_guest_port() {
+    let mut spec = sample_spec();
+    spec.ports = vec![EnginePort {
+        host_address: Ipv4Addr::LOCALHOST,
+        host_port: 8080,
+        guest_port: 80,
+    }];
+    let args = build(&spec);
+
+    assert!(nic_value(&args).contains("hostfwd=tcp:127.0.0.1:8080-:80"));
+}
+
+#[test]
+fn command_publishes_ports_in_host_port_order() {
+    let mut spec = sample_spec();
+    spec.ports = vec![
+        EnginePort {
+            host_address: Ipv4Addr::LOCALHOST,
+            host_port: 9000,
+            guest_port: 90,
+        },
+        EnginePort {
+            host_address: Ipv4Addr::LOCALHOST,
+            host_port: 8000,
+            guest_port: 80,
+        },
+        EnginePort {
+            host_address: Ipv4Addr::LOCALHOST,
+            host_port: 8080,
+            guest_port: 8080,
+        },
+    ];
+    let args = build(&spec);
+    let forwards: Vec<&str> = nic_value(&args)
+        .split(',')
+        .filter(|part| part.starts_with("hostfwd="))
+        .collect();
+
+    assert_eq!(
+        forwards,
+        [
+            "hostfwd=tcp:127.0.0.1:8000-:80",
+            "hostfwd=tcp:127.0.0.1:8080-:8080",
+            "hostfwd=tcp:127.0.0.1:9000-:90",
+        ]
+    );
+}
+
+#[test]
+fn command_publishes_to_an_explicit_address() {
+    let mut spec = sample_spec();
+    spec.ports = vec![EnginePort {
+        host_address: Ipv4Addr::new(0, 0, 0, 0),
+        host_port: 8080,
+        guest_port: 80,
+    }];
+    let args = build(&spec);
+
+    assert!(nic_value(&args).contains("hostfwd=tcp:0.0.0.0:8080-:80"));
+}
+
+#[test]
+fn command_rejects_an_unknown_network_device() {
+    let mut spec = sample_spec();
+    spec.net = "ne2k_pci".to_owned();
+
+    match command::build(&spec, &sample_binary()) {
+        Err(EngineError::Setup(_)) => {}
+        other => panic!("expected a setup error for an unknown network device, got {other:?}"),
+    }
+}
+
+fn volume(drive: &str, name: &str, read_only: bool) -> EngineVolume {
+    EngineVolume {
+        drive: drive.to_owned(),
+        path: PathBuf::from(format!("/tmp/dosker-volumes/{name}.img")),
+        read_only,
+    }
+}
+
+#[test]
+fn command_attaches_a_partitioned_volume_as_an_ide_disk() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![volume("D:", "data", false), volume("E:", "extra", false)];
+    let args = build(&spec);
+
+    let data = format!(
+        "file={},format=raw,if=ide,index=1",
+        spec.volumes[0].path.display()
+    );
+    let extra = format!(
+        "file={},format=raw,if=ide,index=2",
+        spec.volumes[1].path.display()
+    );
+    assert!(has_pair(&args, "-drive", &data));
+    assert!(has_pair(&args, "-drive", &extra));
+}
+
+#[test]
+fn command_attaches_a_superfloppy_volume_as_a_floppy() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![volume("A:", "first", false), volume("B:", "second", false)];
+    let args = build(&spec);
+
+    let first = format!(
+        "file={},format=raw,if=floppy,index=0",
+        spec.volumes[0].path.display()
+    );
+    let second = format!(
+        "file={},format=raw,if=floppy,index=1",
+        spec.volumes[1].path.display()
+    );
+    assert!(has_pair(&args, "-drive", &first));
+    assert!(has_pair(&args, "-drive", &second));
+}
+
+#[test]
+fn command_marks_a_read_only_volume_read_only() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![volume("D:", "readonly", true)];
+    let args = build(&spec);
+
+    let drive = format!(
+        "file={},format=raw,if=ide,index=1,snapshot=on",
+        spec.volumes[0].path.display()
+    );
+    assert!(has_pair(&args, "-drive", &drive));
+}
+
+#[test]
+fn command_marks_a_read_only_floppy_volume_read_only() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![volume("A:", "readonly", true)];
+    let args = build(&spec);
+
+    let drive = format!(
+        "file={},format=raw,if=floppy,index=0,readonly=on",
+        spec.volumes[0].path.display()
+    );
+    assert!(has_pair(&args, "-drive", &drive));
+}
+
+#[test]
+fn command_rejects_a_volume_drive_outside_the_supported_set() {
+    let mut spec = sample_spec();
+    spec.volumes = vec![volume("G:", "unsupported", false)];
+
+    match command::build(&spec, &sample_binary()) {
+        Err(EngineError::Setup(_)) => {}
+        other => panic!("expected a setup error for an unsupported drive, got {other:?}"),
+    }
 }
 
 #[test]
@@ -426,6 +590,7 @@ fn capabilities_are_the_proven_set() {
         Capability::GdbStub,
         Capability::Screenshot,
         Capability::Vnc,
+        Capability::Nat,
     ]
     .into_iter()
     .collect();
@@ -436,11 +601,11 @@ fn capabilities_are_the_proven_set() {
 }
 
 #[test]
-fn capabilities_never_include_nat() {
+fn capabilities_include_nat() {
     let processes: Arc<dyn ProcessSupervisor> = Arc::new(system());
     let adapter = QemuAdapter::new(sample_binary(), processes);
 
-    assert!(!adapter.capabilities().contains(Capability::Nat));
+    assert!(adapter.capabilities().contains(Capability::Nat));
 }
 
 fn serial_values(args: &[String]) -> Vec<&str> {

@@ -1,11 +1,13 @@
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 use chrono::{DateTime, TimeZone, Utc};
 use dosker_core::{ContainerId, ContainerName, CoreError, Status};
 use dosker_engine::DisplayMode;
+use dosker_image::PortProtocol;
 use dosker_platform::EndpointRecord;
 use dosker_runtime::record::RECORD_SCHEMA_VERSION;
-use dosker_runtime::{CONTROL_SOCKET, ContainerRecord};
+use dosker_runtime::{CONTROL_SOCKET, ContainerRecord, PortMapping, VolumeKind, VolumeMount};
 
 fn sample_id() -> ContainerId {
     ContainerId::parse("0123456789ab").unwrap()
@@ -70,6 +72,62 @@ fn new_record_starts_with_runtime_defaults() {
     assert_eq!(record.vnc_port, None);
     assert_eq!(record.cmd, None);
     assert_eq!(record.engine_command, None);
+}
+
+#[test]
+fn a_new_record_has_no_ports_or_volumes_and_uses_the_ne2000_network() {
+    let record = sample_record();
+
+    assert!(record.ports.is_empty());
+    assert!(record.volumes.is_empty());
+    assert_eq!(record.net, "ne2000");
+}
+
+#[test]
+fn with_network_records_the_ports_and_the_network_device() {
+    let mapping = PortMapping {
+        host_address: Ipv4Addr::LOCALHOST,
+        host_port: 8080,
+        guest_port: 80,
+        protocol: PortProtocol::Tcp,
+    };
+    let record = sample_record().with_network("none".to_owned(), vec![mapping]);
+
+    assert_eq!(record.net, "none");
+    assert_eq!(record.ports, vec![mapping]);
+}
+
+#[test]
+fn with_volumes_records_the_mounts() {
+    let named = VolumeMount {
+        drive: "D:".to_owned(),
+        kind: VolumeKind::Named,
+        name: Some("data".to_owned()),
+        host_path: None,
+        read_only: false,
+    };
+    let bind = VolumeMount {
+        drive: "E:".to_owned(),
+        kind: VolumeKind::Bind,
+        name: None,
+        host_path: Some(PathBuf::from("/tmp/dosker/host")),
+        read_only: true,
+    };
+    let record = sample_record().with_volumes(vec![named.clone(), bind.clone()]);
+
+    assert_eq!(record.volumes, vec![named, bind]);
+}
+
+#[test]
+fn a_port_mapping_renders_its_endpoint() {
+    let mapping = PortMapping {
+        host_address: Ipv4Addr::LOCALHOST,
+        host_port: 8080,
+        guest_port: 80,
+        protocol: PortProtocol::Tcp,
+    };
+
+    assert_eq!(mapping.endpoint(), "127.0.0.1:8080->80/tcp");
 }
 
 #[test]
@@ -222,11 +280,41 @@ fn serde_round_trip_preserves_every_field() {
     record.vnc_port = Some(5900);
     record.cmd = Some("GAME.EXE".to_owned());
     record.engine_command = Some("qemu -machine pc".to_owned());
+    record.net = "none".to_owned();
+    record.ports = vec![PortMapping {
+        host_address: Ipv4Addr::LOCALHOST,
+        host_port: 8080,
+        guest_port: 80,
+        protocol: PortProtocol::Tcp,
+    }];
+    record.volumes = vec![VolumeMount {
+        drive: "D:".to_owned(),
+        kind: VolumeKind::Named,
+        name: Some("data".to_owned()),
+        host_path: None,
+        read_only: true,
+    }];
 
     let json = serde_json::to_string(&record).unwrap();
     let restored: ContainerRecord = serde_json::from_str(&json).unwrap();
 
     assert_eq!(restored, record);
+}
+
+#[test]
+fn an_existing_state_file_loads_with_empty_ports_and_volumes() {
+    let record = sample_record();
+    let mut value = serde_json::to_value(&record).unwrap();
+    let object = value.as_object_mut().unwrap();
+    object.remove("ports");
+    object.remove("volumes");
+    object.remove("net");
+
+    let restored: ContainerRecord = serde_json::from_value(value).unwrap();
+
+    assert!(restored.ports.is_empty());
+    assert!(restored.volumes.is_empty());
+    assert_eq!(restored.net, "ne2000");
 }
 
 #[test]

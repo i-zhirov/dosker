@@ -49,6 +49,22 @@ pub enum DebugKind {
     Gdb,
 }
 
+/// One guest port published on the host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EnginePort {
+    pub host_address: Ipv4Addr,
+    pub host_port: u16,
+    pub guest_port: u16,
+}
+
+/// A volume disk attached at a guest drive.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EngineVolume {
+    pub drive: String,
+    pub path: PathBuf,
+    pub read_only: bool,
+}
+
 /// The pinned inputs an adapter needs to launch an engine for one container.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EngineSpec {
@@ -67,6 +83,9 @@ pub struct EngineSpec {
     pub display: DisplayMode,
     pub vnc_port: Option<u16>,
     pub allow_reboot: bool,
+    pub net: String,
+    pub ports: Vec<EnginePort>,
+    pub volumes: Vec<EngineVolume>,
 }
 
 /// A resolved engine command line.

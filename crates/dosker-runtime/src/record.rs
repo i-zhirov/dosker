@@ -1,11 +1,13 @@
 //! The persisted state of a container.
 
 use std::collections::BTreeMap;
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use dosker_core::{ContainerId, ContainerName, CoreError, Status};
 use dosker_engine::DisplayMode;
+use dosker_image::PortProtocol;
 use dosker_platform::EndpointRecord;
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +16,43 @@ pub const CONTROL_SOCKET: &str = "control";
 
 /// The version of the state file format.
 pub const RECORD_SCHEMA_VERSION: u32 = 1;
+
+/// How a mounted volume is backed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VolumeKind {
+    Named,
+    Bind,
+}
+
+/// One volume attached at a guest drive letter.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VolumeMount {
+    pub drive: String,
+    pub kind: VolumeKind,
+    pub name: Option<String>,
+    pub host_path: Option<PathBuf>,
+    pub read_only: bool,
+}
+
+/// One guest port published on the host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortMapping {
+    pub host_address: Ipv4Addr,
+    pub host_port: u16,
+    pub guest_port: u16,
+    pub protocol: PortProtocol,
+}
+
+impl PortMapping {
+    /// Renders the mapping as `{addr}:{host}->{guest}/tcp`.
+    pub fn endpoint(&self) -> String {
+        format!(
+            "{}:{}->{}/tcp",
+            self.host_address, self.host_port, self.guest_port
+        )
+    }
+}
 
 /// Everything the runtime persists about one container.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,6 +72,10 @@ pub struct ContainerRecord {
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub finished_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub ports: Vec<PortMapping>,
+    #[serde(default)]
+    pub volumes: Vec<VolumeMount>,
     pub sockets: BTreeMap<String, EndpointRecord>,
     pub disk_path: Option<PathBuf>,
     pub dirty: bool,
@@ -42,6 +85,8 @@ pub struct ContainerRecord {
     pub booter: bool,
     #[serde(default = "default_disk_interface")]
     pub disk_interface: String,
+    #[serde(default = "default_net")]
+    pub net: String,
     #[serde(default)]
     pub display: DisplayMode,
     #[serde(default)]
@@ -80,12 +125,15 @@ impl ContainerRecord {
             created_at: now,
             started_at: None,
             finished_at: None,
+            ports: Vec::new(),
+            volumes: Vec::new(),
             sockets,
             disk_path: None,
             dirty: false,
             image_digest: String::new(),
             booter: false,
             disk_interface: default_disk_interface(),
+            net: default_net(),
             display: DisplayMode::None,
             vnc_port: None,
             cmd: None,
@@ -118,6 +166,19 @@ impl ContainerRecord {
     /// Records the private container disk path.
     pub fn with_disk(mut self, path: PathBuf) -> Self {
         self.disk_path = Some(path);
+        self
+    }
+
+    /// Records the network device and the published ports.
+    pub fn with_network(mut self, net: String, ports: Vec<PortMapping>) -> Self {
+        self.net = net;
+        self.ports = ports;
+        self
+    }
+
+    /// Records the attached volumes.
+    pub fn with_volumes(mut self, volumes: Vec<VolumeMount>) -> Self {
+        self.volumes = volumes;
         self
     }
 
@@ -156,4 +217,8 @@ impl ContainerRecord {
 
 fn default_disk_interface() -> String {
     "ide".to_owned()
+}
+
+fn default_net() -> String {
+    "ne2000".to_owned()
 }

@@ -27,6 +27,9 @@ fn spec(root: &Path, booter: bool) -> EngineSpec {
         display: Default::default(),
         vnc_port: None,
         allow_reboot: false,
+        net: "none".to_owned(),
+        ports: Vec::new(),
+        volumes: Vec::new(),
     }
 }
 

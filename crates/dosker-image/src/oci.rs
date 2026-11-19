@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 use crate::boot::{BootLayout, BootMetadata};
 use crate::canonical::{canonical_json, hex, sha256_digest};
-use crate::config::{DosFlavour, HistoryEntry, ImageConfig, MachineProfile};
+use crate::config::{DosFlavour, HistoryEntry, ImageConfig, MachineProfile, VolumeDeclaration};
 use crate::error::ImageError;
 use crate::fat::{read_boot_metadata, read_tree};
 use crate::image::ImageMedia;
@@ -55,6 +55,8 @@ pub struct Image {
     pub size: u64,
     pub source: String,
     pub disk_interface: String,
+    pub net: String,
+    pub volumes: Vec<VolumeDeclaration>,
     pub agent_version: Option<String>,
     pub cmd: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -623,6 +625,8 @@ impl OciStore {
             } else {
                 config.machine.disk_interface
             },
+            net: config.machine.net,
+            volumes: config.volumes,
             agent_version: config.agent_version,
             cmd: config.cmd,
             created_at,

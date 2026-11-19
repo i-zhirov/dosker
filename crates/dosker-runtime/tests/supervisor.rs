@@ -16,15 +16,18 @@ use chrono::Utc;
 use dosker_core::{ContainerId, ContainerName, Status};
 use dosker_engine::{
     Capability, CapabilitySet, DebugKind, EngineAdapter, EngineCommand, EngineEndpoint,
-    EngineEndpointKind, EngineError, EngineSession, EngineSpec, ExecRequest, ExecResult,
+    EngineEndpointKind, EngineError, EnginePort, EngineSession, EngineSpec, EngineVolume,
+    ExecRequest, ExecResult,
 };
+use dosker_image::{DEFAULT_VOLUME_SIZE, PortProtocol};
 use dosker_platform::control::{ControlConnection, connect};
 use dosker_platform::process::SystemProcesses;
 use dosker_platform::{Endpoint, EndpointRecord};
 use dosker_runtime::supervisor::{DEFAULT_READY_TIMEOUT, Supervisor, SupervisorConfig};
 use dosker_runtime::{
-    ATTACH_POLL, ContainerRecord, CpDirection, ErrorCode, FrameRead, MAX_CP_BYTES, Reply, Request,
-    Response, StateStore, read_frame, write_message,
+    ATTACH_POLL, ContainerRecord, CpDirection, ErrorCode, FrameRead, MAX_CP_BYTES, PortMapping,
+    Reply, Request, Response, StateStore, VolumeError, VolumeHolder, VolumeKind, VolumeMount,
+    VolumeStore, read_frame, write_message,
 };
 use dosker_test_support::fixtures::{kill_process, mock_engine_path, wait_until};
 use dosker_test_support::mock_adapter::MockAdapter;
@@ -137,6 +140,54 @@ impl Harness {
         })
     }
 
+    fn start_with_data(ports: Vec<PortMapping>, volumes: Vec<VolumeMount>) -> Self {
+        Self::start_with_data_and_adapter(ports, volumes, |engine| {
+            Box::new(MockAdapter::new(engine, Arc::new(SystemProcesses)))
+        })
+    }
+
+    fn start_with_data_and_adapter(
+        ports: Vec<PortMapping>,
+        volumes: Vec<VolumeMount>,
+        make_adapter: impl FnOnce(PathBuf) -> Box<dyn EngineAdapter>,
+    ) -> Self {
+        let dir = tempfile::tempdir().expect("create a temp directory");
+        Self::start_data_in(dir, ports, volumes, make_adapter)
+    }
+
+    fn start_data_in(
+        dir: TempDir,
+        ports: Vec<PortMapping>,
+        volumes: Vec<VolumeMount>,
+        make_adapter: impl FnOnce(PathBuf) -> Box<dyn EngineAdapter>,
+    ) -> Self {
+        let volume_store = VolumeStore::new(dir.path().to_path_buf());
+        for mount in &volumes {
+            if mount.kind != VolumeKind::Named {
+                continue;
+            }
+            let name = mount.name.as_deref().expect("a named mount has a name");
+            match volume_store.create(name, DEFAULT_VOLUME_SIZE, Utc::now()) {
+                Ok(_) => {}
+                Err(VolumeError::AlreadyExists(_)) => {
+                    volume_store.load(name).expect("load the existing volume");
+                }
+                Err(error) => panic!("cannot create the volume {name}: {error}"),
+            }
+        }
+        Self::start_full_in_data(
+            dir,
+            DEFAULT_READY_TIMEOUT,
+            false,
+            None,
+            true,
+            None,
+            ports,
+            volumes,
+            make_adapter,
+        )
+    }
+
     fn start_with(
         ready_timeout: Duration,
         booter: bool,
@@ -174,6 +225,31 @@ impl Harness {
         serial: Option<&[u8]>,
         make_adapter: impl FnOnce(PathBuf) -> Box<dyn EngineAdapter>,
     ) -> Self {
+        Self::start_full_in_data(
+            dir,
+            ready_timeout,
+            booter,
+            cmd,
+            create_disk,
+            serial,
+            Vec::new(),
+            Vec::new(),
+            make_adapter,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_full_in_data(
+        dir: TempDir,
+        ready_timeout: Duration,
+        booter: bool,
+        cmd: Option<String>,
+        create_disk: bool,
+        serial: Option<&[u8]>,
+        ports: Vec<PortMapping>,
+        volumes: Vec<VolumeMount>,
+        make_adapter: impl FnOnce(PathBuf) -> Box<dyn EngineAdapter>,
+    ) -> Self {
         let id = ContainerId::generate();
         let name = ContainerName::parse("test-container").expect("valid name");
         let endpoint = dosker_platform::endpoint::control_endpoint(dir.path(), &id);
@@ -185,7 +261,9 @@ impl Harness {
             endpoint.record(),
             Utc::now(),
         )
-        .with_image(String::new(), booter, cmd);
+        .with_image(String::new(), booter, cmd)
+        .with_network("ne2000".to_owned(), ports)
+        .with_volumes(volumes);
         if create_disk {
             record = record.with_disk(support::make_test_disk(dir.path(), &id));
         }
@@ -345,6 +423,7 @@ enum StubMode {
 struct StubSession {
     mode: StubMode,
     stop_delay: Duration,
+    stop_error: Option<EngineError>,
     exec_error: Option<EngineError>,
     put_file_error: Option<EngineError>,
     killed: Arc<AtomicBool>,
@@ -359,6 +438,7 @@ impl StubSession {
         Self {
             mode,
             stop_delay: Duration::ZERO,
+            stop_error: None,
             exec_error: None,
             put_file_error: None,
             killed: Arc::new(AtomicBool::new(false)),
@@ -464,6 +544,9 @@ impl EngineSession for StubSession {
     }
 
     fn stop(&mut self, _grace: Duration) -> Result<i32, EngineError> {
+        if let Some(error) = self.stop_error.take() {
+            return Err(error);
+        }
         if self.mode == StubMode::StopTimeout {
             return Err(EngineError::StopTimeout(Duration::from_millis(1)));
         }
@@ -494,6 +577,7 @@ struct RecordingAdapter {
     built_commands: Arc<Mutex<Vec<EngineCommand>>>,
     built_interfaces: Arc<Mutex<Vec<String>>>,
     session_commands: Arc<Mutex<Vec<String>>>,
+    spec: Arc<Mutex<Option<EngineSpec>>>,
 }
 
 impl EngineAdapter for RecordingAdapter {
@@ -520,6 +604,7 @@ impl EngineAdapter for RecordingAdapter {
             )));
         }
         let command = self.inner.build_command(spec)?;
+        *self.spec.lock().expect("lock the recorded spec") = Some(spec.clone());
         self.built_interfaces
             .lock()
             .expect("lock the built interfaces")
@@ -1420,6 +1505,7 @@ fn supervisor_executes_the_recorded_command() {
                 built_commands: adapter_built,
                 built_interfaces: adapter_interfaces,
                 session_commands: adapter_sessions,
+                spec: Arc::new(Mutex::new(None)),
             })
         },
     );
@@ -1705,6 +1791,7 @@ fn supervisor_passes_the_disk_interface_to_the_spec() {
                 built_commands: adapter_built,
                 built_interfaces: adapter_interfaces,
                 session_commands: adapter_sessions,
+                spec: Arc::new(Mutex::new(None)),
             })
         },
     );
@@ -1719,4 +1806,185 @@ fn supervisor_passes_the_disk_interface_to_the_spec() {
     );
     stop(&mut client);
     assert_eq!(harness.join(), 0);
+}
+
+fn named_mount(drive: &str, name: &str) -> VolumeMount {
+    VolumeMount {
+        drive: drive.to_owned(),
+        kind: VolumeKind::Named,
+        name: Some(name.to_owned()),
+        host_path: None,
+        read_only: false,
+    }
+}
+
+#[test]
+fn supervisor_acquires_the_volume_lock_and_releases_it_on_stop() {
+    let mut harness = Harness::start_with_data(Vec::new(), vec![named_mount("D:", "data")]);
+    let mut client = harness.connect();
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+
+    let volumes = VolumeStore::new(harness.root().to_path_buf());
+    let volume = volumes.load("data").expect("load the volume");
+    assert_eq!(
+        volume.attached,
+        Some(VolumeHolder {
+            container_id: harness.record.id.clone(),
+            container_name: String::from("test-container"),
+            supervisor_pid: std::process::id(),
+        })
+    );
+
+    stop(&mut client);
+    assert_eq!(harness.join(), 0);
+
+    assert!(
+        volumes
+            .load("data")
+            .expect("load the volume")
+            .attached
+            .is_none(),
+        "the volume lock is released after stop"
+    );
+}
+
+#[test]
+fn supervisor_fails_when_a_volume_is_already_attached() {
+    let dir = tempfile::tempdir().expect("create a temp directory");
+    let volumes = VolumeStore::new(dir.path().to_path_buf());
+    volumes
+        .create("data", DEFAULT_VOLUME_SIZE, Utc::now())
+        .expect("create the volume");
+    let _lock = volumes
+        .acquire(
+            "data",
+            VolumeHolder {
+                container_id: ContainerId::generate(),
+                container_name: String::from("other"),
+                supervisor_pid: std::process::id(),
+            },
+        )
+        .expect("attach the volume to another container");
+
+    let mut harness =
+        Harness::start_data_in(dir, Vec::new(), vec![named_mount("D:", "data")], |engine| {
+            Box::new(MockAdapter::new(engine, Arc::new(SystemProcesses)))
+        });
+
+    assert_eq!(harness.join(), 1);
+
+    let loaded = harness.loaded();
+    assert_eq!(loaded.status, Status::Failed);
+    let container_log = fs::read_to_string(harness.store.paths().container_log(&harness.record.id))
+        .expect("read the container log");
+    assert!(
+        container_log.contains("other"),
+        "the failure names the holder: {container_log:?}"
+    );
+}
+
+#[test]
+fn supervisor_passes_the_network_ports_and_volumes_to_the_engine() {
+    let spec = Arc::new(Mutex::new(None));
+    let adapter_spec = Arc::clone(&spec);
+    let ports = vec![PortMapping {
+        host_address: Ipv4Addr::LOCALHOST,
+        host_port: 8080,
+        guest_port: 80,
+        protocol: PortProtocol::Tcp,
+    }];
+
+    let mut harness = Harness::start_with_data_and_adapter(
+        ports.clone(),
+        vec![named_mount("D:", "data")],
+        move |engine| {
+            Box::new(RecordingAdapter {
+                inner: MockAdapter::new(engine, Arc::new(SystemProcesses)),
+                builds: Arc::new(AtomicUsize::new(0)),
+                built_commands: Arc::new(Mutex::new(Vec::new())),
+                built_interfaces: Arc::new(Mutex::new(Vec::new())),
+                session_commands: Arc::new(Mutex::new(Vec::new())),
+                spec: adapter_spec,
+            })
+        },
+    );
+    let mut client = harness.connect();
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+
+    let recorded = spec
+        .lock()
+        .expect("lock the recorded spec")
+        .clone()
+        .expect("the engine spec was recorded");
+    assert_eq!(recorded.net, "ne2000");
+    assert_eq!(
+        recorded.ports,
+        vec![EnginePort {
+            host_address: Ipv4Addr::LOCALHOST,
+            host_port: 8080,
+            guest_port: 80,
+        }]
+    );
+    assert_eq!(
+        recorded.volumes,
+        vec![EngineVolume {
+            drive: String::from("D:"),
+            path: harness
+                .root()
+                .join("volumes")
+                .join("data")
+                .join("volume.img"),
+            read_only: false,
+        }]
+    );
+
+    stop(&mut client);
+    assert_eq!(harness.join(), 0);
+}
+
+#[test]
+fn supervisor_marks_a_volume_dirty_after_a_crash() {
+    let mut harness = Harness::start_with_data(Vec::new(), vec![named_mount("D:", "data")]);
+    let mut client = harness.connect();
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+
+    let engine_pid = harness.loaded().engine_pid.expect("the engine has a pid");
+    drop(client);
+    assert!(kill_process(engine_pid), "the engine process is killed");
+
+    assert_eq!(harness.join(), 0);
+
+    let loaded = harness.loaded();
+    assert_eq!(loaded.status, Status::Exited);
+    let volume = VolumeStore::new(harness.root().to_path_buf())
+        .load("data")
+        .expect("load the volume");
+    assert!(volume.meta.dirty, "the crash marks the volume dirty");
+}
+
+#[test]
+fn supervisor_marks_a_volume_dirty_when_stop_fails() {
+    let session = StubSession {
+        stop_error: Some(EngineError::StopTimeout(Duration::from_millis(1))),
+        ..StubSession::new()
+    };
+    let mut harness = Harness::start_with_data_and_adapter(
+        Vec::new(),
+        vec![named_mount("D:", "data")],
+        move |_engine| Box::new(StubAdapter::new(session)),
+    );
+    let mut client = harness.connect();
+    assert_eq!(ping(&mut client).result, Some(Reply::Pong));
+
+    send(&mut client, &Request::Stop { grace_ms: 2000 });
+    assert_eq!(stop_response(&mut client), Some(Status::Exited));
+    assert_eq!(harness.join(), 0);
+
+    let loaded = harness.loaded();
+    assert_eq!(loaded.status, Status::Exited);
+    assert!(loaded.dirty);
+    let volume = VolumeStore::new(harness.root().to_path_buf())
+        .load("data")
+        .expect("load the volume");
+    assert!(volume.meta.dirty, "the failed stop marks the volume dirty");
 }

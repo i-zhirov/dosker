@@ -104,6 +104,9 @@ impl InDosRunner for EngineInDosRunner {
             display: DisplayMode::None,
             vnc_port: None,
             allow_reboot: false,
+            net: "none".to_owned(),
+            ports: Vec::new(),
+            volumes: Vec::new(),
         };
 
         let mut session = adapter

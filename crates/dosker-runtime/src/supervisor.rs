@@ -11,8 +11,8 @@ use std::time::Duration;
 use chrono::Utc;
 use dosker_core::{ContainerId, CoreError, Status};
 use dosker_engine::{
-    DebugKind, EngineAdapter, EngineEndpoint, EngineEndpointKind, EngineError, EngineSession,
-    EngineSpec, ExecRequest,
+    DebugKind, EngineAdapter, EngineEndpoint, EngineEndpointKind, EngineError, EnginePort,
+    EngineSession, EngineSpec, EngineVolume, ExecRequest,
 };
 use dosker_image::{DEFAULT_BAUD, DEFAULT_CONTROL_PORT, write_config};
 use dosker_platform::control::{ControlConnection, bind, remove_endpoint};
@@ -24,8 +24,9 @@ use crate::protocol::{
     MAX_CP_BYTES, Reply, Request, RequestParse, Response, parse_request, read_frame_into,
     write_message,
 };
-use crate::record::ContainerRecord;
+use crate::record::{ContainerRecord, PortMapping, VolumeKind};
 use crate::store::{StateStore, StoreError};
+use crate::volume::{VolumeError, VolumeHolder, VolumeStore};
 
 /// The default deadline for an engine to report readiness.
 pub const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -177,6 +178,55 @@ fn supervise(
         }
     };
 
+    let volume_store = VolumeStore::new(store.paths().root().to_path_buf());
+    let mut volume_locks = Vec::new();
+    let mut engine_volumes = Vec::new();
+    for mount in &record.volumes {
+        if mount.kind != VolumeKind::Named {
+            continue;
+        }
+        let Some(name) = mount.name.as_deref() else {
+            let error = EngineError::Setup(String::from("a named volume mount has no name"));
+            return failed_start(store, record, &serial_log, &error, None);
+        };
+        let lock = match volume_store.acquire(
+            name,
+            VolumeHolder {
+                container_id: record.id.clone(),
+                container_name: record.name.to_string(),
+                supervisor_pid: std::process::id(),
+            },
+        ) {
+            Ok(lock) => lock,
+            Err(VolumeError::InUse { name, holder }) => {
+                let error = EngineError::Setup(format!(
+                    "volume {name} is attached to container {}",
+                    holder.container_name
+                ));
+                return failed_start(store, record, &serial_log, &error, None);
+            }
+            Err(error) => {
+                let error = EngineError::Setup(error.to_string());
+                return failed_start(store, record, &serial_log, &error, None);
+            }
+        };
+        let path = paths.volume_image(name);
+        if !path.is_file() {
+            let error = EngineError::Setup(format!(
+                "the volume {name} image is missing: {}",
+                path.display()
+            ));
+            return failed_start(store, record, &serial_log, &error, None);
+        }
+        engine_volumes.push(EngineVolume {
+            drive: mount.drive.clone(),
+            path,
+            read_only: mount.read_only,
+        });
+        volume_locks.push(lock);
+    }
+    let _volume_locks = volume_locks;
+
     if !record.booter
         && let Err(error) = write_config(&disk_path, DEFAULT_CONTROL_PORT, DEFAULT_BAUD)
     {
@@ -213,6 +263,9 @@ fn supervise(
         display: record.display,
         vnc_port: record.vnc_port,
         allow_reboot: false,
+        net: record.net.clone(),
+        ports: engine_ports(&record.ports),
+        volumes: engine_volumes,
     };
 
     let command = match adapter.build_command(&spec) {
@@ -765,12 +818,12 @@ fn run_stop(
             state.record.transition(Status::Stopped, Utc::now())?;
             state.record.exit_code = Some(exit_code);
             state.record.dirty = false;
+            mark_volumes(store, &state.record, false);
             Status::Stopped
         }
         Err(_) => {
             let _ = state.session.kill();
-            state.record.transition(Status::Exited, Utc::now())?;
-            state.record.dirty = true;
+            mark_exited(store, &mut state.record)?;
             Status::Exited
         }
     };
@@ -802,6 +855,7 @@ fn engine_error_code(error: &EngineError) -> ErrorCode {
 }
 
 fn mark_exited(store: &StateStore, record: &mut ContainerRecord) -> Result<(), SupervisorError> {
+    mark_volumes(store, record, true);
     record.transition(Status::Exited, Utc::now())?;
     record.dirty = true;
     record.pid = None;
@@ -809,6 +863,35 @@ fn mark_exited(store: &StateStore, record: &mut ContainerRecord) -> Result<(), S
     record.engine_pgid = None;
     store.save(record)?;
     Ok(())
+}
+
+fn mark_volumes(store: &StateStore, record: &ContainerRecord, dirty: bool) {
+    let volumes = VolumeStore::new(store.paths().root().to_path_buf());
+    for mount in &record.volumes {
+        if mount.kind != VolumeKind::Named {
+            continue;
+        }
+        let Some(name) = mount.name.as_deref() else {
+            continue;
+        };
+        if let Err(error) = volumes.set_dirty(name, dirty) {
+            log_line(
+                &store.paths().container_log(&record.id),
+                &format!("warning: cannot mark volume {name} dirty={dirty}: {error}"),
+            );
+        }
+    }
+}
+
+fn engine_ports(ports: &[PortMapping]) -> Vec<EnginePort> {
+    ports
+        .iter()
+        .map(|mapping| EnginePort {
+            host_address: mapping.host_address,
+            host_port: mapping.host_port,
+            guest_port: mapping.guest_port,
+        })
+        .collect()
 }
 
 fn append_exec_log(path: &Path, exit_code: i32, timed_out: bool, command: &str) -> io::Result<()> {
