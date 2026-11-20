@@ -38,8 +38,25 @@ fn declared_capabilities_match_the_dosbox_x_proven_rows() {
 }
 
 #[test]
+fn declared_capabilities_match_the_bochs_proven_rows() {
+    let expected: [Capability; 5] = [
+        Capability::Boot,
+        Capability::Serial,
+        Capability::Stop,
+        Capability::Headless,
+        Capability::DebugNative,
+    ];
+    let capabilities = declared_capabilities("bochs").expect("bochs is an implemented engine");
+
+    assert_eq!(capabilities.iter().collect::<Vec<_>>(), expected.to_vec());
+}
+
+#[test]
 fn providers_are_in_table_order() {
-    assert_eq!(providers(Capability::Headless), vec!["qemu", "dosbox-x"]);
+    assert_eq!(
+        providers(Capability::Headless),
+        vec!["qemu", "dosbox-x", "bochs"]
+    );
 }
 
 #[test]
@@ -51,10 +68,10 @@ fn capability_message_uses_the_one_provider_form() {
 }
 
 #[test]
-fn capability_message_uses_the_two_provider_form() {
+fn capability_message_uses_the_three_provider_form() {
     assert_eq!(
         capability_message("mock", Capability::Headless),
-        "engine mock does not provide the headless capability; the qemu and dosbox-x engines provide it"
+        "engine mock does not provide the headless capability; the qemu, dosbox-x, and bochs engines provide it"
     );
 }
 
@@ -120,5 +137,5 @@ fn check_requires_honors_the_supplied_capability_set() {
 
 #[test]
 fn supported_engines_message_lists_the_implemented_engines() {
-    assert_eq!(supported_engines_message(), "qemu and dosbox-x");
+    assert_eq!(supported_engines_message(), "qemu, dosbox-x, and bochs");
 }

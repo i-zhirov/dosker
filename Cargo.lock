@@ -299,6 +299,7 @@ dependencies = [
  "dosker-build",
  "dosker-core",
  "dosker-engine",
+ "dosker-engine-bochs",
  "dosker-engine-dosbox-x",
  "dosker-engine-qemu",
  "dosker-image",
@@ -330,6 +331,20 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "dosker-engine-bochs"
+version = "0.1.0"
+dependencies = [
+ "dosker-agent-proto",
+ "dosker-core",
+ "dosker-engine",
+ "dosker-platform",
+ "dosker-test-support",
+ "libc",
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]

@@ -68,7 +68,7 @@ fn engine_socket_names_are_unique() {
         .expect("create short temp directory");
     let id = ContainerId::generate();
     let other = ContainerId::generate();
-    let names = ["agent", "qmp", "monitor", "gdb"];
+    let names = ["agent", "qmp", "monitor", "gdb", "debug"];
 
     let mut paths = HashSet::new();
     for name in names {

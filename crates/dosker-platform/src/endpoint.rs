@@ -77,12 +77,12 @@ pub fn short_socket_path(id: &ContainerId) -> PathBuf {
 ///
 /// The path sits in the container directory when it fits the platform limit
 /// and falls back to the short socket directory otherwise. `name` must be one
-/// of `agent`, `qmp`, `monitor`, or `gdb`.
+/// of `agent`, `qmp`, `monitor`, `gdb`, or `debug`.
 #[cfg(unix)]
 pub fn engine_socket_path(root: &Path, id: &ContainerId, name: &str) -> PathBuf {
     debug_assert!(
-        matches!(name, "agent" | "qmp" | "monitor" | "gdb"),
-        "engine socket name must be one of agent, qmp, monitor, gdb: {name}"
+        matches!(name, "agent" | "qmp" | "monitor" | "gdb" | "debug"),
+        "engine socket name must be one of agent, qmp, monitor, gdb, debug: {name}"
     );
 
     let default = root

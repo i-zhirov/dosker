@@ -39,6 +39,16 @@ pub const IMPLEMENTED_ENGINES: &[EngineProvider] = &[
             Capability::DebugNative,
         ],
     },
+    EngineProvider {
+        name: "bochs",
+        capabilities: &[
+            Capability::Boot,
+            Capability::Serial,
+            Capability::Stop,
+            Capability::Headless,
+            Capability::DebugNative,
+        ],
+    },
 ];
 
 /// Returns the capabilities the named implemented engine declares.
@@ -135,6 +145,14 @@ fn join_engine_names(names: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capability_message_uses_the_two_provider_form() {
+        assert_eq!(
+            format_capability_message("mock", Capability::Headless, &["qemu", "dosbox-x"]),
+            "engine mock does not provide the headless capability; the qemu and dosbox-x engines provide it"
+        );
+    }
 
     #[test]
     fn capability_message_uses_the_three_provider_form() {

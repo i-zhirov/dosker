@@ -11,6 +11,7 @@ members = [
     "crates/dosker-image",
     "crates/dosker-engine-qemu",
     "crates/dosker-engine-dosbox-x",
+    "crates/dosker-engine-bochs",
     "crates/dosker-build",
 ]
 
@@ -46,6 +47,7 @@ dosker-platform = { path = "crates/dosker-platform" }
 dosker-engine = { path = "crates/dosker-engine" }
 dosker-engine-qemu = { path = "crates/dosker-engine-qemu" }
 dosker-engine-dosbox-x = { path = "crates/dosker-engine-dosbox-x" }
+dosker-engine-bochs = { path = "crates/dosker-engine-bochs" }
 dosker-runtime = { path = "crates/dosker-runtime" }
 dosker-test-support = { path = "crates/dosker-test-support" }
 dosker-cli = { path = "crates/dosker-cli" }
