@@ -342,13 +342,13 @@ size equals `C*H*S*512`, the `-dbg` internal debugger pass-through, and the
 capability declaration from the spike evidence. Out of scope: a gdbstub in a
 build that does not have it.
 
-- **Status:** Unplanned
+- **Status:** Planned
 - **Depends on:** Slices 3, 9, and 10. The Bochs spike is a manual
   prerequisite.
 - **Requirements:** FR-011, FR-016
 - **Manual prerequisites:** the Bochs headless, serial, and debugger spike.
   Bochs builds. Before declaring NAT on Bochs, the NAT spike.
-- **Plan:** —
+- **Plan:** [`.sdd/specs/2026-11-01-dosker/plan-bochs-adapter.md`](plan-bochs-adapter.md)
 - **Done when:** the same image boots headless on Bochs. Serial reaches the
   agent. The internal debugger accepts commands. `dosker debug` on Bochs
   returns a working endpoint. Every Bochs cell in the capability table is
