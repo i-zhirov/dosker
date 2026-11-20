@@ -24,7 +24,7 @@ const MOUNTABLE_DRIVES: &str = "A:, B:, D:, E:, and F:";
 pub struct CreateOptions {
     pub image: String,
     pub name: Option<String>,
-    pub engine: String,
+    pub engine: Option<String>,
     pub display: DisplayMode,
     pub vnc_port: Option<u16>,
     pub publish: Vec<String>,
@@ -37,17 +37,6 @@ pub fn execute(
     context: &mut Context,
     now: DateTime<Utc>,
 ) -> Result<u8, CliError> {
-    let engine = match args.engine {
-        Some(engine) => engine,
-        None => match adapter::default_engine() {
-            Some(engine) => engine.to_owned(),
-            None => {
-                return Err(CliError::Usage(String::from(
-                    "no engine selected; pass --engine",
-                )));
-            }
-        },
-    };
     let display = DisplayMode::parse(&args.display).ok_or_else(|| {
         CliError::Usage(format!(
             "invalid display mode: {}; use none, window, or vnc",
@@ -60,7 +49,7 @@ pub fn execute(
         CreateOptions {
             image: args.image,
             name: args.name,
-            engine,
+            engine: args.engine,
             display,
             vnc_port: args.vnc_port,
             publish: args.publish,
@@ -79,15 +68,39 @@ pub fn create_container(
     options: CreateOptions,
     now: DateTime<Utc>,
 ) -> Result<ContainerRecord, CliError> {
-    if !adapter::is_known(&options.engine) {
-        return Err(CliError::Usage(format!(
-            "unknown engine: {}",
-            options.engine
-        )));
-    }
-
     let reference = ImageRef::parse(&options.image)?;
     let image = context.images.load(&reference)?;
+
+    let engine = match options.engine {
+        Some(engine) => engine,
+        None => match image.engine_pin.clone() {
+            Some(engine) => engine,
+            None => match adapter::default_engine() {
+                Some(engine) => engine.to_owned(),
+                None => {
+                    return Err(CliError::Usage(String::from(
+                        "no engine selected; pass --engine",
+                    )));
+                }
+            },
+        },
+    };
+    let engine = match dosker_core::EngineName::parse(&engine) {
+        Some(name) => name.as_str().to_owned(),
+        None => engine,
+    };
+
+    if adapter::declared_capabilities(&engine).is_none() {
+        if adapter::is_engine_name(&engine) {
+            return Err(CliError::Usage(format!(
+                "engine {engine} is not available; supported engines are {}",
+                adapter::supported_engines_message()
+            )));
+        }
+        return Err(CliError::Usage(format!("unknown engine: {engine}")));
+    }
+
+    check_requires(&engine, &image.requires)?;
 
     let specs = options
         .volumes
@@ -100,6 +113,26 @@ pub fn create_container(
         .map(|value| BindSpec::parse(value).map_err(|error| CliError::Usage(error.to_string())))
         .collect::<Result<Vec<_>, _>>()?;
 
+    let capabilities = adapter::declared_capabilities(&engine)
+        .ok_or_else(|| CliError::Usage(format!("unknown engine: {engine}")))?;
+    if image.net == "ne2000" && !capabilities.contains(Capability::Nat) {
+        return Err(CliError::Usage(dosker_engine::capability_message(
+            &engine,
+            Capability::Nat,
+        )));
+    }
+    if options.display == DisplayMode::Vnc && !capabilities.contains(Capability::Vnc) {
+        return Err(CliError::Usage(dosker_engine::capability_message(
+            &engine,
+            Capability::Vnc,
+        )));
+    }
+    if engine == "dosbox-x" && (!specs.is_empty() || !image.volumes.is_empty()) {
+        return Err(CliError::Usage(String::from(
+            "named volumes are not supported by the dosbox-x engine; use qemu",
+        )));
+    }
+
     let id = ContainerId::generate();
     let name = match options.name {
         Some(name) => ContainerName::parse(&name)?,
@@ -109,11 +142,11 @@ pub fn create_container(
     let root = std::path::absolute(context.paths.root())?;
     let endpoint = control_endpoint(&root, &id);
 
-    let bind_mounts = validate_binds(&image, &options.engine, &specs, &binds)?;
+    let bind_mounts = validate_binds(&image, &engine, &specs, &binds)?;
     let (mut mounts, anonymous) = resolve_volumes(context, &image, &specs, &id, now)?;
     mounts.extend(bind_mounts);
 
-    let ports = match resolve_ports(&image, &options.engine, &options.publish) {
+    let ports = match resolve_ports(&image, &engine, &options.publish) {
         Ok(ports) => ports,
         Err(error) => {
             remove_anonymous(context, &anonymous);
@@ -125,7 +158,7 @@ pub fn create_container(
         id.clone(),
         name,
         reference.to_string(),
-        options.engine,
+        engine,
         endpoint.record(),
         now,
     )
@@ -137,6 +170,7 @@ pub fn create_container(
     .with_disk_interface(&image.disk_interface)
     .with_display(options.display, options.vnc_port)
     .with_network(image.net.clone(), ports)
+    .with_engine_config(image.engine_config.clone())
     .with_volumes(mounts);
 
     if let Err(error) = context.store.create(&record) {
@@ -265,8 +299,9 @@ fn validate_binds(
     let capabilities = adapter::declared_capabilities(engine)
         .ok_or_else(|| CliError::Usage(format!("unknown engine: {engine}")))?;
     if !capabilities.contains(Capability::HostDirLive) {
-        return Err(CliError::Usage(String::from(
-            "engine does not provide the host_dir_live capability; --bind needs the QEMU engine",
+        return Err(CliError::Usage(dosker_engine::capability_message(
+            engine,
+            Capability::HostDirLive,
         )));
     }
 
@@ -331,12 +366,13 @@ fn resolve_ports(
 
     let capabilities = adapter::declared_capabilities(engine)
         .ok_or_else(|| CliError::Usage(format!("unknown engine: {engine}")))?;
-    validate_network(capabilities, &image.net, &ports).map_err(CliError::Usage)?;
+    validate_network(engine, capabilities, &image.net, &ports).map_err(CliError::Usage)?;
 
     Ok(ports)
 }
 
 pub fn validate_network(
+    engine: &str,
     capabilities: CapabilitySet,
     net: &str,
     ports: &[PortMapping],
@@ -350,11 +386,15 @@ pub fn validate_network(
         ));
     }
     if !capabilities.contains(Capability::Nat) {
-        return Err(String::from(
-            "engine does not provide the nat capability; published ports need the QEMU engine",
-        ));
+        return Err(dosker_engine::capability_message(engine, Capability::Nat));
     }
     Ok(())
+}
+
+pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError> {
+    let capabilities = adapter::declared_capabilities(engine)
+        .ok_or_else(|| CliError::Usage(format!("unknown engine: {engine}")))?;
+    dosker_engine::check_requires(engine, capabilities, requires).map_err(CliError::Usage)
 }
 
 fn check_drive(drive: &str) -> Result<(), CliError> {
@@ -429,21 +469,22 @@ mod tests {
     #[test]
     fn no_ports_do_not_require_the_nat_capability() {
         assert_eq!(
-            validate_network(CapabilitySet::EMPTY, "ne2000", &[]),
+            validate_network("qemu", CapabilitySet::EMPTY, "ne2000", &[]),
             Ok(())
         );
     }
 
     #[test]
     fn a_published_port_requires_the_nat_capability() {
-        let error = validate_network(CapabilitySet::EMPTY, "ne2000", &[mapping()])
+        let error = validate_network("mock", CapabilitySet::EMPTY, "ne2000", &[mapping()])
             .expect_err("a port needs the nat capability");
         assert!(error.contains("nat"), "{error}");
+        assert!(error.contains("qemu"), "{error}");
     }
 
     #[test]
     fn publish_is_rejected_when_the_image_disables_the_network() {
-        let error = validate_network(CapabilitySet::EMPTY, "none", &[mapping()])
+        let error = validate_network("qemu", CapabilitySet::EMPTY, "none", &[mapping()])
             .expect_err("a port needs the network device");
         assert!(error.contains("net=ne2000"), "{error}");
     }
@@ -452,7 +493,7 @@ mod tests {
     fn publish_is_accepted_for_the_ne2000_network() {
         let capabilities: CapabilitySet = [Capability::Nat].into_iter().collect();
         assert_eq!(
-            validate_network(capabilities, "ne2000", &[mapping()]),
+            validate_network("qemu", capabilities, "ne2000", &[mapping()]),
             Ok(())
         );
     }

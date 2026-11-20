@@ -1,11 +1,11 @@
-//! `dosker doctor`: check the host data root and the QEMU installation.
+//! `dosker doctor`: check the host data root and the installed engines.
 
 use std::fs;
 use std::path::Path;
 
-use dosker_engine::EngineError;
-use dosker_engine_qemu::{QemuBinary, capabilities};
+use dosker_engine::{EngineError, IMPLEMENTED_ENGINES};
 
+use crate::adapter;
 use crate::cli::{DoctorArgs, EXIT_ERROR, EXIT_OK};
 use crate::context::Context;
 use crate::error::CliError;
@@ -17,7 +17,6 @@ const SECURITY_STATEMENT: &str =
 pub fn execute(_args: DoctorArgs, context: &mut Context) -> Result<u8, CliError> {
     let root = context.paths.root().to_path_buf();
     let writable = probe_root(&root);
-    let capability_names = capabilities().names().collect::<Vec<_>>().join(",");
 
     context
         .console
@@ -27,32 +26,33 @@ pub fn execute(_args: DoctorArgs, context: &mut Context) -> Result<u8, CliError>
         if writable { "yes" } else { "no" }
     ))?;
 
-    let found = match QemuBinary::discover() {
-        Ok(binary) => {
-            context.console.line(&format!(
-                "qemu: {} ({})",
-                binary.version_string(),
-                binary.path.display()
-            ))?;
-            true
+    let mut found = false;
+    for provider in IMPLEMENTED_ENGINES {
+        match adapter::discover(provider.name) {
+            Ok(engine) => {
+                found = true;
+                let capability_names = engine.capabilities.names().collect::<Vec<_>>().join(",");
+                context.console.line(&format!(
+                    "{}: {} ({}) [{}]",
+                    engine.name,
+                    engine.version,
+                    engine.path.display(),
+                    capability_names
+                ))?;
+            }
+            Err(error @ EngineError::NotFound(_)) => {
+                context
+                    .console
+                    .line(&format!("{}: not found ({error})", provider.name))?;
+            }
+            Err(error) => {
+                context
+                    .console
+                    .line(&format!("{}: unavailable ({error})", provider.name))?;
+            }
         }
-        Err(error @ EngineError::NotFound(_)) => {
-            context
-                .console
-                .line(&format!("qemu: not found ({error})"))?;
-            false
-        }
-        Err(error) => {
-            context
-                .console
-                .line(&format!("qemu: unavailable ({error})"))?;
-            false
-        }
-    };
+    }
 
-    context
-        .console
-        .line(&format!("capabilities: {capability_names}"))?;
     context.console.line(DEVELOPMENT_MODE_WARNING)?;
     context.console.line(SECURITY_STATEMENT)?;
 

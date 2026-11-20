@@ -2,6 +2,7 @@
 
 #![allow(dead_code)]
 
+use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -10,6 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use dosker_core::ContainerId;
+use dosker_image::{ImageRef, ImageReference, OciStore, VolumeDeclaration};
 use dosker_platform::process::{ProcessSupervisor, system};
 use dosker_runtime::StateStore;
 use dosker_test_support::fixtures::{
@@ -146,7 +148,17 @@ impl CliRoot {
 
     pub fn run(&self, args: &[&str]) -> Output {
         let mut command = self.command();
-        command.args(args);
+        let mut args: Vec<&str> = args.to_vec();
+        // Mock-oriented `create` and `run` commands select the mock engine
+        // explicitly. Tests that exercise engine or display selection pass
+        // those flags themselves.
+        let names_engine = args.contains(&"--engine");
+        let names_display = args.contains(&"--display");
+        if matches!(args.first(), Some(&"create") | Some(&"run")) && !names_engine && !names_display
+        {
+            args.extend(["--engine", "mock"]);
+        }
+        command.args(&args);
         run_captured(&mut command, Duration::from_secs(45))
     }
 
@@ -188,7 +200,7 @@ impl CliRoot {
         self.import_image();
 
         let mut command = self.command();
-        command.args(["run", "-d", "freedos:latest"]);
+        command.args(["run", "-d", "--engine", "mock", "freedos:latest"]);
         let output = run_captured(&mut command, Duration::from_secs(15));
         assert_eq!(
             output.status.code(),
@@ -314,6 +326,163 @@ impl CliRoot {
             .expect("spawn the dosker binary");
         (child, stdout_path, stderr_path, dir)
     }
+}
+
+/// Builds a command that selects the DOSBox-X engine.
+///
+/// `DOSKER_DOSBOX_X` comes from the environment, falling back to the default
+/// program name on `PATH`. `DOSKER_AGENT_EXE` points at the real agent so an
+/// imported image carries a working `C:\DOSKER\DOSKER.EXE`.
+pub fn command_with_dosbox_x(root: &CliRoot) -> Command {
+    let mut command = root.base_command();
+    command.env(
+        "DOSKER_DOSBOX_X",
+        std::env::var("DOSKER_DOSBOX_X").unwrap_or_else(|_| "dosbox-x".to_owned()),
+    );
+    command.env(
+        "DOSKER_AGENT_EXE",
+        agent_executable().expect("locate the agent executable"),
+    );
+    command
+}
+
+/// Runs a command against the DOSBox-X engine named by `DOSKER_DOSBOX_X`.
+pub fn run_with_dosbox_x(root: &CliRoot, args: &[&str]) -> Output {
+    let mut command = command_with_dosbox_x(root);
+    command.args(args);
+    run_captured(&mut command, Duration::from_secs(180))
+}
+
+/// Imports a disk image and rewrites its engine pin, config, and
+/// requirements before committing it again.
+pub fn import_image_with_config(
+    root: &CliRoot,
+    source: &Path,
+    reference: &str,
+    engine_pin: Option<&str>,
+    engine_config: BTreeMap<String, Vec<String>>,
+    requires: Vec<&str>,
+) -> String {
+    let mut command = root.base_command();
+    command.args([
+        "image",
+        "import",
+        source.to_str().expect("source path is utf-8"),
+        reference,
+    ]);
+    let output = run_captured(&mut command, Duration::from_secs(45));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+
+    let store = OciStore::new(root.path().to_path_buf());
+    let parsed = ImageReference::parse(reference).expect("parse the image reference");
+    let image_ref = ImageRef::Tag(parsed.clone());
+    let manifest = store
+        .load_manifest(&image_ref)
+        .expect("load the imported manifest");
+    let mut config = store
+        .load_config(&image_ref)
+        .expect("load the imported config");
+    config.engine_pin = engine_pin.map(str::to_owned);
+    config.engine_config = engine_config;
+    config.requires = requires.into_iter().map(str::to_owned).collect();
+    store
+        .commit_image(
+            Some(&parsed),
+            &config,
+            manifest.layers.clone(),
+            manifest.annotations.clone().unwrap_or_default(),
+        )
+        .expect("commit the rewritten image");
+    reference.to_owned()
+}
+
+/// Rewrites an imported image so its network device is disabled.
+pub fn disable_image_network(root: &CliRoot, reference: &str) {
+    let store = OciStore::new(root.path().to_path_buf());
+    let parsed = ImageReference::parse(reference).expect("parse the image reference");
+    let image_ref = ImageRef::Tag(parsed.clone());
+    let manifest = store
+        .load_manifest(&image_ref)
+        .expect("load the imported manifest");
+    let mut config = store
+        .load_config(&image_ref)
+        .expect("load the imported config");
+    config.machine.net = "none".to_owned();
+    store
+        .commit_image(
+            Some(&parsed),
+            &config,
+            manifest.layers.clone(),
+            manifest.annotations.clone().unwrap_or_default(),
+        )
+        .expect("commit the rewritten image");
+}
+
+/// Declares an image volume on an imported image.
+pub fn declare_image_volume(root: &CliRoot, reference: &str, drive: &str) {
+    let store = OciStore::new(root.path().to_path_buf());
+    let parsed = ImageReference::parse(reference).expect("parse the image reference");
+    let image_ref = ImageRef::Tag(parsed.clone());
+    let manifest = store
+        .load_manifest(&image_ref)
+        .expect("load the imported manifest");
+    let mut config = store
+        .load_config(&image_ref)
+        .expect("load the imported config");
+    config.volumes.push(VolumeDeclaration {
+        drive: drive.to_owned(),
+    });
+    store
+        .commit_image(
+            Some(&parsed),
+            &config,
+            manifest.layers.clone(),
+            manifest.annotations.clone().unwrap_or_default(),
+        )
+        .expect("commit the rewritten image");
+}
+
+/// Imports a disk image with its network device disabled.
+pub fn import_image_for_dosbox_x(root: &CliRoot, source: &Path, reference: &str) -> String {
+    let mut command = command_with_dosbox_x(root);
+    command.args([
+        "image",
+        "import",
+        source.to_str().expect("source path is utf-8"),
+        reference,
+    ]);
+    let output = run_captured(&mut command, Duration::from_secs(45));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+
+    let store = OciStore::new(root.path().to_path_buf());
+    let parsed = ImageReference::parse(reference).expect("parse the image reference");
+    let image_ref = ImageRef::Tag(parsed.clone());
+    let manifest = store
+        .load_manifest(&image_ref)
+        .expect("load the imported manifest");
+    let mut config = store
+        .load_config(&image_ref)
+        .expect("load the imported config");
+    config.machine.net = "none".to_owned();
+    store
+        .commit_image(
+            Some(&parsed),
+            &config,
+            manifest.layers.clone(),
+            manifest.annotations.clone().unwrap_or_default(),
+        )
+        .expect("commit the rewritten image");
+    reference.to_owned()
 }
 
 impl Drop for CliRoot {

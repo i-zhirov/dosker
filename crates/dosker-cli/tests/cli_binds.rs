@@ -191,6 +191,11 @@ fn create_rejects_a_bind_on_the_mock_engine() {
         "stderr: {}",
         stderr_text(&output)
     );
+    assert!(
+        stderr_text(&output).contains("qemu"),
+        "stderr: {}",
+        stderr_text(&output)
+    );
 }
 
 #[test]

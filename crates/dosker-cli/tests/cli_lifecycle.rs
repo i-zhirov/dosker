@@ -25,7 +25,14 @@ fn id_from(output: &Output) -> ContainerId {
 }
 
 fn create(root: &CliRoot, name: &str) -> ContainerId {
-    let output = root.run(&["create", "freedos:latest", "--name", name]);
+    let output = root.run(&[
+        "create",
+        "freedos:latest",
+        "--engine",
+        "mock",
+        "--name",
+        name,
+    ]);
     assert_eq!(
         output.status.code(),
         Some(0),
@@ -232,7 +239,8 @@ fn create_rejects_a_duplicate_name() {
 #[test]
 fn create_rejects_an_unknown_engine() {
     let root = CliRoot::new();
-    let output = root.run(&["create", "freedos-test:latest", "--engine", "nope"]);
+    root.import_image();
+    let output = root.run(&["create", "freedos:latest", "--engine", "nope"]);
 
     assert_eq!(output.status.code(), Some(2));
 }
@@ -672,6 +680,8 @@ fn create_records_the_requested_display_and_vnc_port() {
         "freedos-test:latest",
         "--name",
         "displayed",
+        "--engine",
+        "qemu",
         "--display",
         "vnc",
         "--vnc-port",

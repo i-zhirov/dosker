@@ -7,7 +7,6 @@ use chrono::{DateTime, Utc};
 use dosker_core::Status;
 use dosker_engine::DisplayMode;
 
-use crate::adapter;
 use crate::cli::{EXIT_ERROR, EXIT_NOT_RUNNING, EXIT_OK, RunArgs};
 use crate::commands::attach;
 use crate::commands::create::{CreateOptions, create_container};
@@ -16,21 +15,6 @@ use crate::context::Context;
 use crate::error::CliError;
 
 pub fn execute(args: RunArgs, context: &mut Context, now: DateTime<Utc>) -> Result<u8, CliError> {
-    let engine = match args.engine {
-        Some(engine) => engine,
-        None => match adapter::default_engine() {
-            Some(engine) => engine.to_owned(),
-            None => {
-                return Err(CliError::Usage(String::from(
-                    "no engine selected; pass --engine",
-                )));
-            }
-        },
-    };
-    if !adapter::is_known(&engine) {
-        return Err(CliError::Usage(format!("unknown engine: {engine}")));
-    }
-
     let display = DisplayMode::parse(&args.display).ok_or_else(|| {
         CliError::Usage(format!(
             "invalid display mode: {}; use none, window, or vnc",
@@ -43,7 +27,7 @@ pub fn execute(args: RunArgs, context: &mut Context, now: DateTime<Utc>) -> Resu
         CreateOptions {
             image: args.image,
             name: args.name,
-            engine,
+            engine: args.engine,
             display,
             vnc_port: args.vnc_port,
             publish: args.publish,

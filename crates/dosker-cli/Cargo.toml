@@ -19,6 +19,7 @@ dosker-build.workspace = true
 dosker-platform.workspace = true
 dosker-engine.workspace = true
 dosker-engine-qemu.workspace = true
+dosker-engine-dosbox-x.workspace = true
 dosker-runtime.workspace = true
 dosker-image.workspace = true
 serde_json.workspace = true

@@ -4,11 +4,12 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use dosker_core::Status;
-use dosker_engine::DebugKind;
+use dosker_engine::{Capability, DebugKind};
 use dosker_runtime::protocol::{ErrorCode, Reply, Request};
 use dosker_runtime::recover_stale;
 use dosker_runtime::stale::HostProbe;
 
+use crate::adapter;
 use crate::cli::{DebugArgs, EXIT_NOT_RUNNING, EXIT_OK};
 use crate::context::Context;
 use crate::control_client;
@@ -34,9 +35,31 @@ pub fn execute(
         return Ok(EXIT_NOT_RUNNING);
     };
 
-    let request = Request::Debug {
-        kind: DebugKind::Gdb,
+    let kind = if args.gdb {
+        DebugKind::Gdb
+    } else {
+        DebugKind::Native
     };
+    let capability = match kind {
+        DebugKind::Gdb => Capability::GdbStub,
+        DebugKind::Native => Capability::DebugNative,
+    };
+
+    let Some(capabilities) = adapter::declared_capabilities(&record.engine) else {
+        return Err(CliError::Usage(format!(
+            "engine {} is not available; supported engines are {}",
+            record.engine,
+            adapter::supported_engines_message()
+        )));
+    };
+    if !capabilities.contains(capability) {
+        return Err(CliError::Message(dosker_engine::capability_message(
+            &record.engine,
+            capability,
+        )));
+    }
+
+    let request = Request::Debug { kind };
     let response = match control_client::request(endpoint, &request, DEBUG_TIMEOUT) {
         Ok(response) => response,
         Err(CliError::Platform(_)) => return Ok(EXIT_NOT_RUNNING),
@@ -46,15 +69,11 @@ pub fn execute(
     if !response.ok {
         return match response.error {
             Some(error) => match error.code {
-                ErrorCode::Unsupported => {
-                    let mut message =
-                        format!("debug is not supported by the {} engine", record.engine);
-                    if !record.engine.eq_ignore_ascii_case("qemu") {
-                        message.push_str("; the QEMU engine provides this capability");
-                    }
-                    Err(CliError::Message(message))
-                }
                 ErrorCode::NotRunning => Ok(EXIT_NOT_RUNNING),
+                // The pre-check above already proved the engine declares the
+                // capability, so an unsupported reply here means the endpoint
+                // is unavailable at run time, not that the capability is
+                // missing. Report the supervisor's message.
                 _ => Err(CliError::Message(error.message)),
             },
             None => Err(CliError::Message(String::from(
@@ -63,12 +82,12 @@ pub fn execute(
         };
     }
 
-    match response.result {
-        Some(Reply::Debug { endpoint, .. }) if args.gdb => {
+    match (response.result, kind) {
+        (Some(Reply::Debug { endpoint, .. }), DebugKind::Gdb) => {
             context.console.line(&format!("target remote {endpoint}"))?;
             Ok(EXIT_OK)
         }
-        Some(Reply::Debug { endpoint, .. }) => {
+        (Some(Reply::Debug { endpoint, .. }), DebugKind::Native) => {
             context
                 .console
                 .line(&format!("native debugger {endpoint}"))?;
