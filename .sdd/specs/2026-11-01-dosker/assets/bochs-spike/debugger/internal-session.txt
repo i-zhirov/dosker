@@ -1,0 +1,71 @@
+00000000000i[      ] LTDL_LIBRARY_PATH not set. using compile time default '/opt/homebrew/Cellar/bochs/3.1/lib/bochs/plugins'
+00000000000i[      ] lt_dlhandle is 0x130707550
+00000000000i[PLUGIN] loaded plugin libbx_vga.so
+00000000000i[      ] BXSHARE not set. using compile time default '/opt/homebrew/Cellar/bochs/3.1/share/bochs'
+00000000000i[      ] lt_dlhandle is 0x13071e180
+00000000000i[PLUGIN] loaded plugin libbx_serial.so
+00000000000i[      ] lt_dlhandle is 0x130721240
+00000000000i[PLUGIN] loaded plugin libbx_speaker.so
+00000000000i[      ] lt_dlhandle is 0x130721930
+00000000000i[PLUGIN] loaded plugin libbx_unmapped.so
+00000000000i[      ] lt_dlhandle is 0x130721bb0
+00000000000i[PLUGIN] loaded plugin libbx_parallel.so
+00000000000i[      ] lt_dlhandle is 0x130723030
+00000000000i[PLUGIN] loaded plugin libbx_biosdev.so
+00000000000i[      ] lt_dlhandle is 0x130723330
+00000000000i[PLUGIN] loaded plugin libbx_iodebug.so
+00000000000i[      ] reading configuration from /Users/iliazhirov/bochs-spike/debug2.bochsrc
+00000000000i[      ] lt_dlhandle is 0x130723740
+00000000000i[PLUGIN] loaded plugin libbx_textconfig.so
+00000000000i[      ] lt_dlhandle is 0x1307237a0
+00000000000i[PLUGIN] loaded plugin libbx_nogui_gui.so
+00000000000i[      ] installing nogui module as the Bochs GUI
+00000000000i[      ] using log file /Users/iliazhirov/bochs-spike/bochs.log
+========================================================================
+                        Bochs x86 Emulator 3.1
+             Built from GitHub snapshot on August 23, 2026
+                Timestamp: Sun Aug 23 07:15:00 CEST 2026
+========================================================================
+Bochs internal debugger, type 'help' for help or 'c' to continue
+Switching to CPU0
+Next at t=0
+(0) [0x0000fffffff0] f000:fff0 (unk. ctxt): jmpf 0xf000:e05b          ; ea5be000f0
+rax: 00000000_00000000
+rbx: 00000000_00000000
+rcx: 00000000_00000000
+rdx: 00000000_00000000
+rsp: 00000000_00000000
+rbp: 00000000_00000000
+rsi: 00000000_00000000
+rdi: 00000000_00000000
+r8 : 00000000_00000000
+r9 : 00000000_00000000
+r10: 00000000_00000000
+r11: 00000000_00000000
+r12: 00000000_00000000
+r13: 00000000_00000000
+r14: 00000000_00000000
+r15: 00000000_00000000
+rip: 00000000_0000fff0
+eflags: 0x00000002: id vip vif ac vm rf nt IOPL=0 of df if tf sf zf af pf cf
+Next at t=1
+(0) [0x0000000fe05b] f000:e05b (unk. ctxt): xor ax, ax                ; 31c0
+rax: 00000000_00000000
+rbx: 00000000_00000000
+rcx: 00000000_00000000
+rdx: 00000000_00000000
+rsp: 00000000_00000000
+rbp: 00000000_00000000
+rsi: 00000000_00000000
+rdi: 00000000_00000000
+r8 : 00000000_00000000
+r9 : 00000000_00000000
+r10: 00000000_00000000
+r11: 00000000_00000000
+r12: 00000000_00000000
+r13: 00000000_00000000
+r14: 00000000_00000000
+r15: 00000000_00000000
+rip: 00000000_0000e05b
+eflags: 0x00000002: id vip vif ac vm rf nt IOPL=0 of df if tf sf zf af pf cf
+(0).[1] [0x0000000fe05b] f000:e05b (unk. ctxt): xor ax, ax                ; 31c0

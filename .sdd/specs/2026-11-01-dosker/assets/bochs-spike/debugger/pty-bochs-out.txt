@@ -1,0 +1,59 @@
+00000000000i[      ] LTDL_LIBRARY_PATH not set. using compile time default '/opt/homebrew/Cellar/bochs/3.1/lib/bochs/plugins'
+00000000000i[      ] lt_dlhandle is 0x12d9095f0
+00000000000i[PLUGIN] loaded plugin libbx_vga.so
+========================================================================
+                        Bochs x86 Emulator 3.1
+             Built from GitHub snapshot on August 23, 2026
+                Timestamp: Sun Aug 23 07:15:00 CEST 2026
+========================================================================
+00000000000i[      ] BXSHARE not set. using compile time default '/opt/homebrew/Cellar/bochs/3.1/share/bochs'
+00000000000i[      ] lt_dlhandle is 0x11d81aa70
+00000000000i[PLUGIN] loaded plugin libbx_serial.so
+00000000000i[      ] lt_dlhandle is 0x11d81db30
+00000000000i[PLUGIN] loaded plugin libbx_speaker.so
+00000000000i[      ] lt_dlhandle is 0x11d81e220
+00000000000i[PLUGIN] loaded plugin libbx_unmapped.so
+00000000000i[      ] lt_dlhandle is 0x11d81e4a0
+00000000000i[PLUGIN] loaded plugin libbx_parallel.so
+00000000000i[      ] lt_dlhandle is 0x11d81f920
+00000000000i[PLUGIN] loaded plugin libbx_biosdev.so
+00000000000i[      ] lt_dlhandle is 0x11d81fc20
+00000000000i[PLUGIN] loaded plugin libbx_iodebug.so
+00000000000i[      ] reading configuration from /Users/iliazhirov/bochs-spike/pty.bochsrc
+00000000000i[      ] lt_dlhandle is 0x11d820050
+00000000000i[PLUGIN] loaded plugin libbx_textconfig.so
+00000000000i[      ] lt_dlhandle is 0x11d8200b0
+00000000000i[PLUGIN] loaded plugin libbx_nogui_gui.so
+00000000000i[      ] installing nogui module as the Bochs GUI
+00000000000i[      ] using log file /Users/iliazhirov/bochs-spike/bochs.log
+com2: waiting for client to connect (host:localhost, port:5504)
+client connected
+Bochs internal debugger, type 'help' for help or 'c' to continue
+Switching to CPU0
+Next at t=0
+(0) [0x0000fffffff0] f000:fff0 (unk. ctxt): jmpf 0xf000:e05b          ; ea5be000f0
+<bochs:1> c
+r
+Next at t=419460917
+(0) [0x00000002836c] 223b:5fbc (unk. ctxt): retf                      ; cb
+<bochs:2> r
+rax: 00000000_80000000
+rbx: 00000000_0000ee20
+rcx: 00000000_00092beb
+rdx: 00000000_00000016
+rsp: 00000000_0000ee1c
+rbp: 00000000_0000ee24
+rsi: 00000000_000e366a
+rdi: 00000000_00000016
+r8 : 00000000_00000000
+r9 : 00000000_00000000
+r10: 00000000_00000000
+r11: 00000000_00000000
+r12: 00000000_00000000
+r13: 00000000_00000000
+r14: 00000000_00000000
+r15: 00000000_00000000
+rip: 00000000_00005fbc
+eflags: 0x00000246: id vip vif ac vm rf nt IOPL=0 of df IF tf sf ZF af PF cf
+<bochs:3> quit
+(0).[419460917] [0x00000002836c] 223b:5fbc (unk. ctxt): retf                      ; cb

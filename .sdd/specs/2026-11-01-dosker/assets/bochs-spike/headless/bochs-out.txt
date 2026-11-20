@@ -1,0 +1,23 @@
+00000000000i[      ] LTDL_LIBRARY_PATH not set. using compile time default '/opt/homebrew/Cellar/bochs/3.1/lib/bochs/plugins'
+00000000000i[      ] lt_dlhandle is 0x11e910050
+00000000000i[PLUGIN] loaded plugin libbx_vga.so
+00000000000i[      ] BXSHARE not set. using compile time default '/opt/homebrew/Cellar/bochs/3.1/share/bochs'
+00000000000i[      ] lt_dlhandle is 0x11e926b60
+00000000000i[PLUGIN] loaded plugin libbx_serial.so
+00000000000i[      ] lt_dlhandle is 0x11e929c20
+00000000000i[PLUGIN] loaded plugin libbx_speaker.so
+00000000000i[      ] lt_dlhandle is 0x11e92a310
+00000000000i[PLUGIN] loaded plugin libbx_unmapped.so
+00000000000i[      ] lt_dlhandle is 0x11e92a590
+00000000000i[PLUGIN] loaded plugin libbx_parallel.so
+00000000000i[      ] lt_dlhandle is 0x11e92ba10
+00000000000i[PLUGIN] loaded plugin libbx_biosdev.so
+00000000000i[      ] reading configuration from /Users/iliazhirov/bochs-spike/headless.bochsrc
+00000000000i[      ] lt_dlhandle is 0x11e92bf00
+00000000000i[PLUGIN] loaded plugin libbx_textconfig.so
+00000000000i[      ] lt_dlhandle is 0x120804a60
+00000000000i[PLUGIN] loaded plugin libbx_nogui_gui.so
+00000000000i[      ] installing nogui module as the Bochs GUI
+00000000000i[      ] using log file /Users/iliazhirov/bochs-spike/bochs.log
+com2: waiting for client to connect (host:localhost, port:5502)
+client connected

@@ -1,0 +1,5 @@
+00000000000i[      ] BXSHARE not set. using compile time default '/Users/iliazhirov/bochs-gdbstub/share/bochs'
+00000000000i[      ] reading configuration from /Users/iliazhirov/bochs-spike/gdbstub.bochsrc
+00000000000i[      ] Enabled gdbstub
+00000000000i[      ] installing nogui module as the Bochs GUI
+00000000000i[      ] using log file /Users/iliazhirov/bochs-spike/bochs-gdb.log

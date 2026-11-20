@@ -1,0 +1,14 @@
+romimage: file=$BXSHARE/BIOS-bochs-latest
+vgaromimage: file=$BXSHARE/VGABIOS-lgpl-latest.bin
+cpu: model=i486dx4
+megs: 16
+ata0-master: type=disk, path="/Users/iliazhirov/bochs-spike/agent.img", mode=flat, cylinders=128, heads=16, spt=32
+boot: disk
+com1: enabled=1, mode=null
+com2: enabled=1, mode=socket-server, dev=localhost:5500
+display_library: nogui
+log: /Users/iliazhirov/bochs-spike/bochs.log
+panic: action=fatal
+error: action=report
+info: action=report
+debug: action=ignore

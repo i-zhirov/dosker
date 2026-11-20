@@ -1,0 +1,26 @@
+The target architecture is set to "i8086".
+warning: No executable has been specified and target does not support
+determining executable automatically.  Try using the "file" command.
+0x0000fff0 in ?? ()
+eax            0x0                 0
+ecx            0x0                 0
+edx            0x0                 0
+ebx            0x0                 0
+esp            0x0                 0x0
+ebp            0x0                 0x0
+esi            0x0                 0
+edi            0x0                 0
+eip            0xfff0              0xfff0
+eflags         0x2                 [ ]
+cs             0xf000              61440
+ss             0x0                 0
+ds             0x0                 0
+es             0x0                 0
+fs             0x0                 0
+gs             0x0                 0
+   0xffff0:	ljmp   $0xf000,$0xe05b
+   0xffff5:	xor    %bh,(%bx,%si)
+   0xffff7:	das
+   0xffff8:	xor    (%bp,%di),%dh
+   0xffffa:	das
+[Inferior 1 (Remote target) detached]

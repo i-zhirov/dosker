@@ -1,0 +1,33 @@
+bochs pid=58733
+NO DEBUGGER PROMPT; buffer tail: [      ] lt_dlhandle is 0x11d81e4a0
+00000000000i[PLUGIN] loaded plugin libbx_parallel.so
+00000000000i[      ] lt_dlhandle is 0x11d81f920
+00000000000i[PLUGIN] loaded plugin libbx_biosdev.so
+00000000000i[      ] lt_dlhandle is 0x11d81fc20
+00000000000i[PLUGIN] loaded plugin libbx_iodebug.so
+00000000000i[      ] reading configuration from /Users/iliazhirov/bochs-spike/pty.bochsrc
+00000000000i[      ] lt_dlhandle is 0x11d820050
+00000000000i[PLUGIN] loaded plugin libbx_textconfig.so
+00000000000i[      ] lt_dlhandle is 0x11d8200b0
+00000000000i[PLUGIN] loaded plugin libbx_nogui_gui.so
+00000000000i[      ] installing nogui module as the Bochs GUI
+00000000000i[      ] using log file /Users/iliazhirov/bochs-spike/bochs.log
+com2: waiting for client to connect (host:localhost, port:5504)
+
+debugger prompt seen; starting the agent client
+CLIENT OUTPUT: connected after 336.875µs
+
+thread 'main' (11073314) panicked at crates/dosker-agent-proto/examples/spike_client.rs:73:10:
+handshake failed: GuestRebooted
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+alive before break: True
+BOCHS EXIT: 0
+--- debugger transcript (filtered) ---
+Next at t=0
+<bochs:1> c
+Next at t=419460917
+<bochs:2> r
+rax: 00000000_80000000
+rip: 00000000_00005fbc
+<bochs:3> quit
