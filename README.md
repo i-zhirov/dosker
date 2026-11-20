@@ -74,10 +74,10 @@ the media types, and the untag-only `rmi` behavior.
 
 ### Engines
 
-`qemu` and `dosbox-x` have runtime adapters; `bochs` is a known engine name
-without an adapter. See [Engines](docs/engines.md) for engine selection, the
-capability table, and the DOSBox-X runtime behavior. DOSBox-X is a runtime
-engine for the capabilities listed in the capability table.
+`qemu`, `dosbox-x`, and `bochs` have runtime adapters. See
+[Engines](docs/engines.md) for engine selection, the capability table, and
+the runtime behavior. DOSBox-X and Bochs are runtime engines for the
+capabilities listed in the capability table.
 
 ### Volumes and networking
 

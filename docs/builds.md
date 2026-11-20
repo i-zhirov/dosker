@@ -89,10 +89,11 @@ engine used, and a `RUN` uses the engine selected for its own step.
 
 ## Engine support
 
-`qemu` is the only engine for in-DOS `RUN` and the build path. `dosbox-x` is
-available for `run` and `create` with a prepared image. `bochs` is not
-implemented. A build whose final engine is `dosbox-x` fails with `engine
-dosbox-x: unsupported engine` before the step loop. The final engine must
+`qemu` is the only engine for in-DOS `RUN` and the build path. `dosbox-x`
+and bochs are available for `run` and `create` with a prepared image. A
+build whose final engine is `dosbox-x` or `bochs` fails with `engine
+dosbox-x: unsupported engine` or `engine bochs: unsupported engine` after
+the `REQUIRES` check passes, before the step loop. The final engine must
 satisfy every `REQUIRES` in the Doskerfile; the check runs before the step
 loop. The RUN virtual machine has no NIC, so a command must not depend on
 network access.
