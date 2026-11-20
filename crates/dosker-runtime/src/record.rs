@@ -95,6 +95,8 @@ pub struct ContainerRecord {
     pub cmd: Option<String>,
     #[serde(default)]
     pub engine_command: Option<String>,
+    #[serde(default)]
+    pub engine_config: BTreeMap<String, Vec<String>>,
 }
 
 impl ContainerRecord {
@@ -138,6 +140,7 @@ impl ContainerRecord {
             vnc_port: None,
             cmd: None,
             engine_command: None,
+            engine_config: BTreeMap::new(),
         }
     }
 
@@ -179,6 +182,12 @@ impl ContainerRecord {
     /// Records the attached volumes.
     pub fn with_volumes(mut self, volumes: Vec<VolumeMount>) -> Self {
         self.volumes = volumes;
+        self
+    }
+
+    /// Records the raw engine configuration keyed by engine name.
+    pub fn with_engine_config(mut self, engine_config: BTreeMap<String, Vec<String>>) -> Self {
+        self.engine_config = engine_config;
         self
     }
 

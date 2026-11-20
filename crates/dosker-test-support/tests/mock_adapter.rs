@@ -42,6 +42,7 @@ fn spec(log_dir: &Path) -> EngineSpec {
         net: "none".to_owned(),
         ports: Vec::new(),
         volumes: Vec::new(),
+        engine_config: BTreeMap::new(),
     }
 }
 

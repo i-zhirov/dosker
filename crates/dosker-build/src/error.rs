@@ -50,6 +50,10 @@ pub enum BuildError {
     #[error("engine {engine}: {reason}")]
     Engine { engine: String, reason: String },
 
+    /// The final engine does not satisfy a `REQUIRES` list.
+    #[error("{message}")]
+    Capability { message: String },
+
     /// An in-DOS `RUN` could not prepare or read the disk.
     #[error("Doskerfile line {line}: RUN: {reason}")]
     RunInDos { line: usize, reason: String },

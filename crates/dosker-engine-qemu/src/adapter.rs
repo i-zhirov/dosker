@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use dosker_engine::{
-    Capability, CapabilitySet, EngineAdapter, EngineCommand, EngineError, EngineSession, EngineSpec,
+    CapabilitySet, EngineAdapter, EngineCommand, EngineError, EngineSession, EngineSpec,
 };
 use dosker_platform::process::ProcessSupervisor;
 
@@ -41,20 +41,7 @@ impl QemuAdapter {
 
 /// Returns the capabilities the QEMU adapter declares.
 pub fn capabilities() -> CapabilitySet {
-    [
-        Capability::Boot,
-        Capability::Serial,
-        Capability::Stop,
-        Capability::Headless,
-        Capability::HostDirLive,
-        Capability::DebugNative,
-        Capability::GdbStub,
-        Capability::Screenshot,
-        Capability::Vnc,
-        Capability::Nat,
-    ]
-    .into_iter()
-    .collect()
+    dosker_engine::declared_capabilities("qemu").expect("qemu is an implemented engine")
 }
 
 impl EngineAdapter for QemuAdapter {

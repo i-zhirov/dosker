@@ -31,6 +31,7 @@ fn spec_for(root: &Path, id: &ContainerId) -> EngineSpec {
         net: "none".to_owned(),
         ports: Vec::new(),
         volumes: Vec::new(),
+        engine_config: BTreeMap::new(),
     }
 }
 

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
@@ -75,6 +76,13 @@ fn new_record_starts_with_runtime_defaults() {
 }
 
 #[test]
+fn new_record_starts_with_empty_engine_config() {
+    let record = sample_record();
+
+    assert!(record.engine_config.is_empty());
+}
+
+#[test]
 fn a_new_record_has_no_ports_or_volumes_and_uses_the_ne2000_network() {
     let record = sample_record();
 
@@ -95,6 +103,17 @@ fn with_network_records_the_ports_and_the_network_device() {
 
     assert_eq!(record.net, "none");
     assert_eq!(record.ports, vec![mapping]);
+}
+
+#[test]
+fn with_engine_config_records_the_map() {
+    let mut engine_config = BTreeMap::new();
+    engine_config.insert("qemu".to_owned(), vec!["-smp".to_owned(), "2".to_owned()]);
+    engine_config.insert("dosbox-x".to_owned(), vec!["[cpu] cputype=486".to_owned()]);
+    let expected = engine_config.clone();
+    let record = sample_record().with_engine_config(engine_config);
+
+    assert_eq!(record.engine_config, expected);
 }
 
 #[test]
@@ -280,6 +299,12 @@ fn serde_round_trip_preserves_every_field() {
     record.vnc_port = Some(5900);
     record.cmd = Some("GAME.EXE".to_owned());
     record.engine_command = Some("qemu -machine pc".to_owned());
+    record
+        .engine_config
+        .insert("qemu".to_owned(), vec!["-smp".to_owned(), "2".to_owned()]);
+    record
+        .engine_config
+        .insert("dosbox-x".to_owned(), vec!["[cpu] cputype=486".to_owned()]);
     record.net = "none".to_owned();
     record.ports = vec![PortMapping {
         host_address: Ipv4Addr::LOCALHOST,
@@ -315,6 +340,17 @@ fn an_existing_state_file_loads_with_empty_ports_and_volumes() {
     assert!(restored.ports.is_empty());
     assert!(restored.volumes.is_empty());
     assert_eq!(restored.net, "ne2000");
+}
+
+#[test]
+fn an_existing_state_file_loads_with_empty_engine_config() {
+    let record = sample_record();
+    let mut value = serde_json::to_value(&record).unwrap();
+    value.as_object_mut().unwrap().remove("engine_config");
+
+    let restored: ContainerRecord = serde_json::from_value(value).unwrap();
+
+    assert!(restored.engine_config.is_empty());
 }
 
 #[test]

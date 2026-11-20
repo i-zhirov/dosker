@@ -130,6 +130,7 @@ impl Builder {
         let base = self.resolve_base(&context, source)?;
         let initial_engine = initial_engine(&base.config);
         let final_engine = final_engine(&doskerfile.instructions, &base.config);
+        check_capabilities(&doskerfile.instructions, &base.config, final_engine)?;
         let resolved_engine = self.resolver.resolve(final_engine.as_str())?;
         let mut lock = resolve_lock(
             context_dir,
@@ -364,6 +365,7 @@ impl Builder {
                     log_dir,
                     root: tempdir.path(),
                     engine: state.selected_engine,
+                    engine_config: &state.config.engine_config,
                 })?;
 
                 reporter
@@ -757,6 +759,30 @@ fn final_engine(instructions: &[Instruction], config: &ImageConfig) -> EngineNam
             _ => None,
         })
         .unwrap_or_else(|| initial_engine(config))
+}
+
+fn check_capabilities(
+    instructions: &[Instruction],
+    config: &ImageConfig,
+    engine: EngineName,
+) -> Result<(), BuildError> {
+    let mut requires = config.requires.clone();
+    for instruction in instructions {
+        if let InstructionKind::Requires { capabilities } = &instruction.kind {
+            requires.extend(capabilities.iter().cloned());
+        }
+    }
+    requires.sort();
+    requires.dedup();
+
+    let capabilities = dosker_engine::declared_capabilities(engine.as_str()).ok_or_else(|| {
+        BuildError::Engine {
+            engine: engine.as_str().to_owned(),
+            reason: "unsupported engine".to_owned(),
+        }
+    })?;
+    dosker_engine::check_requires(engine.as_str(), capabilities, &requires)
+        .map_err(|message| BuildError::Capability { message })
 }
 
 fn base_identity(value: &str, reference: &ImageRef) -> (String, String) {

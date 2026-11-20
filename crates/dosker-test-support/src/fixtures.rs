@@ -12,6 +12,12 @@ pub const QEMU_IMAGE_ENV: &str = "DOSKER_QEMU_IMAGE";
 /// The environment variable that names the network QEMU image.
 pub const QEMU_NET_IMAGE_ENV: &str = "DOSKER_QEMU_NET_IMAGE";
 
+/// The environment variable that names the prepared DOSBox-X image.
+pub const DOSBOX_X_IMAGE_ENV: &str = "DOSKER_DOSBOX_X_IMAGE";
+
+/// The environment variable that names the network DOSBox-X image.
+pub const DOSBOX_X_NET_IMAGE_ENV: &str = "DOSKER_DOSBOX_X_NET_IMAGE";
+
 /// The environment variable that overrides the QEMU binary.
 pub const QEMU_ENV: &str = "DOSKER_QEMU";
 
@@ -110,6 +116,68 @@ pub fn net_image() -> Result<PathBuf, String> {
     if !path.is_file() {
         return Err(format!(
             "{QEMU_NET_IMAGE_ENV} does not name a network image: {}",
+            path.display()
+        ));
+    }
+
+    Ok(path)
+}
+
+/// Resolves the prepared image named by [`DOSBOX_X_IMAGE_ENV`].
+///
+/// A relative value is resolved against the workspace root, which is two
+/// levels above this crate's manifest directory.
+pub fn dosbox_x_image() -> Result<PathBuf, String> {
+    let value = std::env::var_os(DOSBOX_X_IMAGE_ENV).filter(|value| !value.is_empty());
+    let Some(value) = value else {
+        return Err(format!(
+            "{DOSBOX_X_IMAGE_ENV} is not set; set it to the prepared image path"
+        ));
+    };
+
+    let path = PathBuf::from(value);
+    let path = if path.is_absolute() {
+        path
+    } else {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    };
+
+    if !path.is_file() {
+        return Err(format!(
+            "{DOSBOX_X_IMAGE_ENV} does not name a prepared image: {}",
+            path.display()
+        ));
+    }
+
+    Ok(path)
+}
+
+/// Resolves the network image named by [`DOSBOX_X_NET_IMAGE_ENV`].
+///
+/// A relative value is resolved against the workspace root, which is two
+/// levels above this crate's manifest directory.
+pub fn dosbox_x_net_image() -> Result<PathBuf, String> {
+    let value = std::env::var_os(DOSBOX_X_NET_IMAGE_ENV).filter(|value| !value.is_empty());
+    let Some(value) = value else {
+        return Err(format!(
+            "{DOSBOX_X_NET_IMAGE_ENV} is not set; set it to the network image path"
+        ));
+    };
+
+    let path = PathBuf::from(value);
+    let path = if path.is_absolute() {
+        path
+    } else {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    };
+
+    if !path.is_file() {
+        return Err(format!(
+            "{DOSBOX_X_NET_IMAGE_ENV} does not name a network image: {}",
             path.display()
         ));
     }

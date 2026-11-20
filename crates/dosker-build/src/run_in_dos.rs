@@ -57,6 +57,8 @@ pub struct InDosRunRequest<'a> {
     pub root: &'a Path,
     /// The engine selected for this step.
     pub engine: EngineName,
+    /// The raw engine configuration keyed by engine name.
+    pub engine_config: &'a BTreeMap<String, Vec<String>>,
 }
 
 /// The result of one in-DOS `RUN` command.

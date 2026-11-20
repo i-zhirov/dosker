@@ -1043,6 +1043,59 @@ fn image_reports_the_network_device_and_volume_declarations() {
 }
 
 #[test]
+fn load_returns_the_engine_pin_config_and_requires() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(dir.path());
+    let descriptor = store
+        .put_layer(&layer(vec![file("A.TXT", b"a")], Vec::new(), None))
+        .unwrap();
+    let mut config = sample_config(sample_boot());
+    config.engine_pin = Some("dosbox-x".to_owned());
+    config
+        .engine_config
+        .insert("dosbox-x".to_owned(), vec!["[cpu] cputype=486".to_owned()]);
+    config.requires = vec!["boot".to_owned(), "headless".to_owned()];
+    store
+        .commit_image(
+            Some(&reference("demo:latest")),
+            &config,
+            vec![descriptor],
+            BTreeMap::new(),
+        )
+        .unwrap();
+    let image = store
+        .load(&ImageRef::Tag(reference("demo:latest")))
+        .unwrap();
+    assert_eq!(image.engine_pin.as_deref(), Some("dosbox-x"));
+    assert_eq!(
+        image.engine_config,
+        BTreeMap::from([("dosbox-x".to_owned(), vec!["[cpu] cputype=486".to_owned()])])
+    );
+    assert_eq!(
+        image.requires,
+        vec!["boot".to_owned(), "headless".to_owned()]
+    );
+}
+
+#[test]
+fn an_imported_image_has_no_engine_pin_or_requires() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = disk(dir.path(), "source.img");
+    let image = store(dir.path())
+        .import(
+            &source,
+            &reference("demo:latest"),
+            ImageMedia::Disk,
+            Some(agent().as_slice()),
+            now(1),
+        )
+        .unwrap();
+    assert_eq!(image.engine_pin, None);
+    assert!(image.engine_config.is_empty());
+    assert!(image.requires.is_empty());
+}
+
+#[test]
 fn load_tree_applies_layers_in_order() {
     let dir = tempfile::tempdir().unwrap();
     let store = store(dir.path());

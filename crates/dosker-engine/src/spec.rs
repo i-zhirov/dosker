@@ -47,6 +47,8 @@ impl DisplayMode {
 pub enum DebugKind {
     /// A GDB remote target.
     Gdb,
+    /// The engine's native debugger.
+    Native,
 }
 
 /// One guest port published on the host.
@@ -96,6 +98,7 @@ pub struct EngineSpec {
     pub net: String,
     pub ports: Vec<EnginePort>,
     pub volumes: Vec<EngineVolume>,
+    pub engine_config: BTreeMap<String, Vec<String>>,
 }
 
 /// A resolved engine command line.

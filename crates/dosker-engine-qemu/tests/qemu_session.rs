@@ -59,6 +59,7 @@ fn setup(image: &Path, booter: bool) -> (tempfile::TempDir, EngineSpec) {
         net: "none".to_owned(),
         ports: Vec::new(),
         volumes: Vec::new(),
+        engine_config: BTreeMap::new(),
     };
 
     (dir, spec)

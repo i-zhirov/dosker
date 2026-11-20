@@ -166,6 +166,7 @@ struct Fixture {
     serial_ports: u8,
     control_port: u8,
     timeout: Duration,
+    engine_config: BTreeMap<String, Vec<String>>,
 }
 
 impl Fixture {
@@ -182,6 +183,7 @@ impl Fixture {
             serial_ports: 2,
             control_port: 2,
             timeout: Duration::from_secs(30),
+            engine_config: BTreeMap::new(),
         }
     }
 
@@ -222,6 +224,7 @@ impl Fixture {
             log_dir,
             root,
             engine: EngineName::Qemu,
+            engine_config: &self.engine_config,
         }
     }
 }
@@ -266,6 +269,21 @@ fn runner_passes_the_serial_layout() {
     let spec = recorded_spec(&state);
     assert_eq!(spec.serial_ports, 3);
     assert_eq!(spec.control_port, 3);
+}
+
+#[test]
+fn an_engine_config_line_reaches_the_run_spec() {
+    let mut fixture = Fixture::new();
+    fixture
+        .engine_config
+        .insert("qemu".to_owned(), vec!["-smp 2".to_owned()]);
+    let (mut runner, state) = runner();
+    let request = fixture.request("ECHO HELLO");
+
+    runner.run(&request).expect("run the command");
+
+    let spec = recorded_spec(&state);
+    assert_eq!(spec.engine_config["qemu"], vec!["-smp 2".to_owned()]);
 }
 
 #[test]

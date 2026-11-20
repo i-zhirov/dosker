@@ -283,6 +283,7 @@ fn supervise(
         net: record.net.clone(),
         ports: engine_ports(&record.ports),
         volumes: engine_volumes,
+        engine_config: record.engine_config.clone(),
     };
 
     let command = match adapter.build_command(&spec) {

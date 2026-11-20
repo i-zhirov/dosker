@@ -107,6 +107,7 @@ impl InDosRunner for EngineInDosRunner {
             net: "none".to_owned(),
             ports: Vec::new(),
             volumes: Vec::new(),
+            engine_config: request.engine_config.clone(),
         };
 
         let mut session = adapter

@@ -407,7 +407,7 @@ impl EngineSession for QemuSession {
 
     fn debug_endpoint(&mut self, kind: DebugKind) -> Result<String, EngineError> {
         match kind {
-            DebugKind::Gdb => {
+            DebugKind::Gdb | DebugKind::Native => {
                 if EngineStream::probe(&self.endpoints.gdb, DEBUG_PROBE_TIMEOUT) {
                     Ok(self.endpoints.gdb.display())
                 } else {
@@ -659,6 +659,33 @@ mod tests {
     }
 
     #[test]
+    fn debug_endpoint_native_maps_to_the_gdbstub() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let spec = session_spec(directory.path());
+        let gdb = QemuEndpoints::for_spec(&spec)
+            .expect("resolve the engine endpoints")
+            .gdb
+            .unix_path()
+            .expect("the gdb endpoint is a Unix socket")
+            .to_path_buf();
+        if let Some(parent) = gdb.parent() {
+            fs::create_dir_all(parent).expect("create the socket directory");
+        }
+        fs::write(&gdb, b"").expect("create the gdb endpoint");
+
+        let mut session = session_with(None, spec);
+
+        let gdb_endpoint = session
+            .debug_endpoint(DebugKind::Gdb)
+            .expect("the gdb endpoint is available");
+        let native_endpoint = session
+            .debug_endpoint(DebugKind::Native)
+            .expect("the native endpoint maps to the gdb endpoint");
+
+        assert_eq!(native_endpoint, gdb_endpoint);
+    }
+
+    #[test]
     fn debug_endpoint_reports_unsupported_for_a_missing_gdb_path() {
         let directory = tempfile::tempdir().expect("create temporary directory");
         let spec = session_spec(directory.path());
@@ -698,6 +725,7 @@ mod tests {
             net: "none".to_owned(),
             ports: Vec::new(),
             volumes: Vec::new(),
+            engine_config: BTreeMap::new(),
         }
     }
 

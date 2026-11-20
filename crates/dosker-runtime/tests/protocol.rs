@@ -239,6 +239,16 @@ fn parse_request_accepts_debug_gdb() {
 }
 
 #[test]
+fn parse_request_accepts_debug_native() {
+    assert_eq!(
+        parse_request(r#"{"type":"debug","kind":"native"}"#),
+        RequestParse::Known(Request::Debug {
+            kind: DebugKind::Native,
+        })
+    );
+}
+
+#[test]
 fn parse_request_accepts_screenshot() {
     assert_eq!(
         parse_request(r#"{"type":"screenshot","path":"shot.ppm"}"#),
@@ -298,6 +308,10 @@ fn response_round_trip_for_attach_cp_debug_screenshot() {
         Reply::Debug {
             kind: DebugKind::Gdb,
             endpoint: "unix:/tmp/gdb.sock".to_owned(),
+        },
+        Reply::Debug {
+            kind: DebugKind::Native,
+            endpoint: "127.0.0.1:4000".to_owned(),
         },
         Reply::Screenshot {
             path: PathBuf::from("shot.ppm"),

@@ -7,6 +7,7 @@ use dosker_engine::{
     EngineVolume, EngineVolumeKind,
 };
 
+use crate::config::split_engine_config;
 use crate::discovery::QemuBinary;
 use crate::endpoints::QemuEndpoints;
 
@@ -80,6 +81,12 @@ pub fn build(spec: &EngineSpec, binary: &QemuBinary) -> Result<EngineCommand, En
     args.push("chardev:gdb0".to_owned());
     args.push("-nic".to_owned());
     args.push(nic_option(spec)?);
+
+    if let Some(lines) = spec.engine_config.get("qemu") {
+        for line in lines {
+            args.extend(split_engine_config(line)?);
+        }
+    }
 
     Ok(EngineCommand {
         program: binary.path.clone(),

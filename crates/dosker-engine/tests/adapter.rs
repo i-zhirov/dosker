@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use dosker_core::ContainerId;
@@ -73,6 +74,33 @@ impl EngineAdapter for StubAdapter {
     }
 }
 
+struct RecordingAdapter {
+    captured: Arc<Mutex<Option<EngineSpec>>>,
+}
+
+impl EngineAdapter for RecordingAdapter {
+    fn name(&self) -> &str {
+        "recording"
+    }
+
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+
+    fn capabilities(&self) -> CapabilitySet {
+        CapabilitySet::default()
+    }
+
+    fn probe(&mut self) -> Result<(), EngineError> {
+        Ok(())
+    }
+
+    fn start(&mut self, spec: &EngineSpec) -> Result<Box<dyn EngineSession>, EngineError> {
+        *self.captured.lock().expect("lock the captured spec") = Some(spec.clone());
+        Ok(Box::new(StubSession))
+    }
+}
+
 fn sample_spec() -> EngineSpec {
     EngineSpec {
         root: PathBuf::from("/tmp/dosker"),
@@ -93,7 +121,31 @@ fn sample_spec() -> EngineSpec {
         net: "none".to_owned(),
         ports: Vec::new(),
         volumes: Vec::new(),
+        engine_config: BTreeMap::new(),
     }
+}
+
+#[test]
+fn engine_config_reaches_the_adapter() {
+    let captured = Arc::new(Mutex::new(None));
+    let mut adapter = RecordingAdapter {
+        captured: captured.clone(),
+    };
+    let expected = BTreeMap::from([
+        (
+            "qemu".to_owned(),
+            vec!["-smp 2".to_owned(), "-rtc base=localtime".to_owned()],
+        ),
+        ("dosbox-x".to_owned(), vec!["memsize=16".to_owned()]),
+    ]);
+    let mut spec = sample_spec();
+    spec.engine_config = expected.clone();
+
+    adapter.start(&spec).expect("start the adapter");
+
+    let recorded = captured.lock().expect("lock the captured spec");
+    let recorded = recorded.as_ref().expect("the adapter captured a spec");
+    assert_eq!(recorded.engine_config, expected);
 }
 
 #[test]

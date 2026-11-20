@@ -36,6 +36,7 @@ fn sample_spec() -> EngineSpec {
         net: "ne2000".to_owned(),
         ports: Vec::new(),
         volumes: Vec::new(),
+        engine_config: BTreeMap::new(),
     }
 }
 
@@ -412,6 +413,20 @@ fn windows_rejects_the_window_display() {
 
 fn nic_value(args: &[String]) -> &str {
     value_after(args, "-nic").expect("a nic option")
+}
+
+#[test]
+fn appends_engine_config_arguments_in_order() {
+    let mut spec = sample_spec();
+    spec.engine_config.insert(
+        "qemu".to_owned(),
+        vec!["-smp 2".to_owned(), "-rtc base=localtime".to_owned()],
+    );
+
+    let args = build(&spec);
+    let tail: Vec<&str> = args[args.len() - 4..].iter().map(String::as_str).collect();
+
+    assert_eq!(tail, ["-smp", "2", "-rtc", "base=localtime"]);
 }
 
 #[test]
