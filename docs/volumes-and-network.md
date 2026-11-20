@@ -14,6 +14,9 @@ volumes/<name>/meta.json
 volumes/<name>/.lock
 ```
 
+Named volumes are not available on DOSBox-X in this release; `create`
+rejects them.
+
 `meta.json` records the schema version, name, size, layout, FAT type,
 creation time, and dirty flag. The `.lock` file holds the container ID,
 the container name, and the supervisor PID while a container uses the
@@ -106,8 +109,9 @@ or a name that collides after normalization is refused before boot, and
 the error names the offending host path. A bind drive must not collide
 with a `-v` drive, another bind, or an image `VOLUME` declaration.
 
-`--bind` is QEMU-only. An engine without the `host_dir_live` capability
-rejects a non-empty `--bind` list with a usage error.
+`--bind` needs an engine that declares `host_dir_live`. QEMU declares it.
+DOSBox-X does not declare it in this release; the capability gate rejects
+`--bind` on DOSBox-X.
 
 ### Live host directory
 
@@ -179,8 +183,10 @@ effort across processes. The QEMU NAT bind is the final guard.
 
 A container with no published ports prints nothing.
 
-NAT is a QEMU capability. An engine without NAT rejects `-p`. An image
-with `MACHINE net=none` also rejects `-p`.
+NAT needs an engine that declares `nat`. QEMU declares it. DOSBox-X does not
+declare it in this release; the capability gate rejects `-p` on DOSBox-X. An
+image with `MACHINE net=ne2000` is rejected on DOSBox-X when `nat` is not
+provided. An image with `MACHINE net=none` also rejects `-p`.
 
 ## Guest networking
 

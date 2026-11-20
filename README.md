@@ -72,6 +72,13 @@ DOSker stores images in the local OCI layout and provides `image import`,
 `images`, `tag`, and `rmi`. See [Images](docs/images.md) for the store layout,
 the media types, and the untag-only `rmi` behavior.
 
+### Engines
+
+`qemu` and `dosbox-x` have runtime adapters; `bochs` is a known engine name
+without an adapter. See [Engines](docs/engines.md) for engine selection, the
+capability table, and the DOSBox-X runtime behavior. DOSBox-X is a runtime
+engine for the capabilities listed in the capability table.
+
 ### Volumes and networking
 
 Named volumes attach a FAT disk image to a running container, and published
