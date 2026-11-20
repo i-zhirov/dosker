@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-19
-- **Status**: Approved
+- **Status**: Implemented
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: `dosbox-x-adapter`
 - **Depends on**: `qemu-runtime-slice`, `volumes-and-nat`, `development-mode`
@@ -305,7 +305,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
 
 ## Tasks
 
-- [ ] **Task 1: Provider table, spike gate, and QEMU capability source**
+- [x] **Task 1: Provider table, spike gate, and QEMU capability source**
     - **Implements:** FR-011, FR-016; design §Engine Strategy, §Engine
       Capability Matrix, §Error Handling, §Testing Strategy; DOSBox-X
       spike Ground Rules.
@@ -380,7 +380,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           an implemented engine")`.
     - **Verify:** `cargo test -p dosker-engine -p dosker-engine-qemu`
 
-- [ ] **Task 2: DOSBox-X crate scaffold, discovery, and capability identity**
+- [x] **Task 2: DOSBox-X crate scaffold, discovery, and capability identity**
     - **Implements:** FR-011; design §Engine Strategy, §Testing Strategy;
       the spike Decisions table.
     - **Create `crates/dosker-engine-dosbox-x/tests/discovery.rs`**
@@ -449,7 +449,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           .expect("dosbox-x is an implemented engine")`.
     - **Verify:** `cargo test -p dosker-engine-dosbox-x`
 
-- [ ] **Task 3: Persist the engine configuration on the container record**
+- [x] **Task 3: Persist the engine configuration on the container record**
     - **Implements:** FR-011; design §Build And Runtime Semantics.
     - **Modify `crates/dosker-runtime/tests/record.rs`**
         - `new_record_starts_with_empty_engine_config` — pins the
@@ -468,7 +468,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
         - Keep `RECORD_SCHEMA_VERSION = 1`; the field is additive.
     - **Verify:** `cargo test -p dosker-runtime`
 
-- [ ] **Task 4: Engine spec and QEMU engine configuration**
+- [x] **Task 4: Engine spec and QEMU engine configuration**
     - **Implements:** FR-011; design §Component Interfaces (Engine
       Adapter); doskerfile §ENGINE-CONFIG.
     - **Modify `crates/dosker-engine/tests/adapter.rs`**
@@ -534,7 +534,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           `split_engine_config`.
     - **Verify:** `cargo test --workspace --features dosker-cli/mock-engine`
 
-- [ ] **Task 5: DOSBox-X config generation and endpoints**
+- [x] **Task 5: DOSBox-X config generation and endpoints**
     - **Implements:** FR-011; design §Component Interfaces (Engine
       Adapter), §Build And Runtime Semantics; doskerfile
       §ENGINE-CONFIG; the spike Decisions table.
@@ -631,7 +631,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           and `DosboxXEndpoints`.
     - **Verify:** `cargo test -p dosker-engine-dosbox-x`
 
-- [ ] **Task 6: DOSBox-X adapter and session**
+- [x] **Task 6: DOSBox-X adapter and session**
     - **Implements:** FR-011; design §Component Interfaces (Engine
       Adapter), §Build And Runtime Semantics, §Error Handling; the spike
       Decisions table.
@@ -728,7 +728,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           `DosboxXSession`.
     - **Verify:** `cargo test -p dosker-engine-dosbox-x`
 
-- [ ] **Task 7: Expose the image engine pin, config, and requirements**
+- [x] **Task 7: Expose the image engine pin, config, and requirements**
     - **Implements:** FR-011, FR-016; design §Build And Runtime
       Semantics; doskerfile §ENGINE, §ENGINE-CONFIG, §REQUIRES.
     - **Modify `crates/dosker-image/tests/oci.rs`**
@@ -746,7 +746,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           `config.requires`.
     - **Verify:** `cargo test -p dosker-image`
 
-- [ ] **Task 8: CLI engine registry, discovery, and reporting**
+- [x] **Task 8: CLI engine registry, discovery, and reporting**
     - **Implements:** FR-011; design §Component Interfaces (CLI),
       §Error Handling.
     - **Modify `crates/dosker-cli/tests/cli_engines.rs`**
@@ -825,7 +825,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           engine is found; otherwise `EXIT_ERROR`.
     - **Verify:** `cargo test -p dosker-cli --features qemu-engine,mock-engine --lib && cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_engines`
 
-- [ ] **Task 9: Runtime engine selection and the unavailable-engine message**
+- [x] **Task 9: Runtime engine selection and the unavailable-engine message**
     - **Implements:** FR-011; design §Build And Runtime Semantics;
       doskerfile §ENGINE, §ENGINE-CONFIG.
     - **Modify `crates/dosker-cli/tests/common/mod.rs`**
@@ -886,7 +886,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           `cli_create::create_rejects_an_unknown_engine_string` case.
     - **Verify:** `cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_create && cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_lifecycle`
 
-- [ ] **Task 10: Enforce `REQUIRES` in `create`, `run`, and `dosker build`**
+- [x] **Task 10: Enforce `REQUIRES` in `create`, `run`, and `dosker build`**
     - **Implements:** FR-016; design §Error Handling; doskerfile
       §REQUIRES.
     - **Create `crates/dosker-cli/tests/cli_requires.rs`**
@@ -948,7 +948,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           own step.
     - **Verify:** `cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_requires && cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_binds && cargo test -p dosker-cli --features qemu-engine,mock-engine --lib && cargo test -p dosker-build --test build_requires`
 
-- [ ] **Task 11: Native debugger kind and `dosker debug`**
+- [x] **Task 11: Native debugger kind and `dosker debug`**
     - **Implements:** FR-011; design §Component Interfaces (CLI),
       §Error Handling; doskerfile §REQUIRES.
     - **Modify `crates/dosker-runtime/tests/protocol.rs`**
@@ -1031,7 +1031,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           `dosker_engine::capability_message`.
     - **Verify:** `cargo test -p dosker-runtime --test protocol && cargo test -p dosker-engine-qemu && cargo test -p dosker-engine-dosbox-x && cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_debug`
 
-- [ ] **Task 12: Document the DOSBox-X capability set and engine behavior**
+- [x] **Task 12: Document the DOSBox-X capability set and engine behavior**
     - **Implements:** FR-011, FR-016; design §Engine Capability Matrix,
       §Error Handling, §Testing Strategy.
     - **Create `docs/engines.md`**
@@ -1094,7 +1094,7 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           capabilities listed in the capability table.
     - **Verify:** `test -f docs/engines.md && rg -q "^## Engine selection" docs/engines.md && rg -q "^## Capability table" docs/engines.md && rg -q "^## Machine" docs/engines.md && rg -q "^## Discovery" docs/engines.md && rg -q "^## Reporting" docs/engines.md && rg -q "DOSKER_DOSBOX_X_SHA256" docs/engines.md && rg -q "final selected engine must satisfy every" docs/engines.md && rg -q "docs/engines.md" README.md && ! rg -q "is QEMU-only" docs/volumes-and-network.md && ! rg -q "NAT is a QEMU capability" docs/volumes-and-network.md && rg -q "needs an engine that declares .host_dir_live." docs/volumes-and-network.md && rg -q "needs an engine that declares .nat." docs/volumes-and-network.md && rg -q "development mode: --bind uses QEMU vvfat .beta. and can corrupt host files. Use it for development only, never in CI." docs/volumes-and-network.md && rg -q "build path" docs/builds.md`
 
-- [ ] **Task 13: Real DOSBox-X runtime integration test**
+- [x] **Task 13: Real DOSBox-X runtime integration test**
     - **Implements:** FR-011; design §Testing Strategy, SC-003; roadmap
       `Done when`.
     - **Modify `crates/dosker-test-support/src/fixtures.rs`**
@@ -1144,3 +1144,75 @@ pub fn check_requires(engine: &str, requires: &[String]) -> Result<(), CliError>
           cell `unproven` and the reason is recorded with the
           installed-build result.
     - **Verify:** `DOSKER_INTEGRATION=1 DOSKER_DOSBOX_X=dosbox-x DOSKER_DOSBOX_X_IMAGE=agent/fixtures/dosker-agent.img DOSKER_DOSBOX_X_NET_IMAGE=agent/fixtures/dosker-net.img cargo test -p dosker-cli --features qemu-engine --test dosbox_x_runtime -- --nocapture`
+
+## Deviations
+
+Each ruling below is a plan-local correction made during execution. No
+interface in `Interfaces` changed; the design is unaffected except where
+noted.
+
+- **Engine availability gate uses the declared set.** Task 9 said to accept a
+  known engine and reject only when `is_known` is false. `is_known("bochs")` is
+  true, so the gate now tests `adapter::declared_capabilities(engine).is_some()`
+  and uses `is_engine_name` only to choose between the unavailable message and
+  `unknown engine`. Reason: the plan's own `create_rejects_bochs...` test needs
+  the unavailable message, and the literal text accepted `bochs` and then failed
+  with a generic error.
+- **The boot command quotes the disk path.** The generated `IMGMOUNT` line is
+  `IMGMOUNT C "<disk_path>" -t hdd`. Reason: the macOS data root contains a
+  space (`Application Support`), and DOSBox-X rejects an unquoted path with a
+  space. The spike Decisions table records the quoted form.
+- **Named volumes are rejected on DOSBox-X.** `render_config` returns
+  `EngineError::Unsupported("volume image")` for `EngineVolumeKind::Image`.
+  Reason: the plan does not cover named volumes on DOSBox-X, and silently
+  dropping them would start a container without its volumes. The docs record
+  the limitation.
+- **`create` gates DOSBox-X features it cannot start.** `create` rejects an
+  image with `MACHINE net=ne2000` when the engine lacks `nat`, a
+  `--display vnc` when the engine lacks `vnc`, and named volumes (an explicit
+  `-v` or an image `VOLUME` declaration) on DOSBox-X, with the provider
+  message or a message naming QEMU. Reason: the adapter rejects all three at
+  start, and a create-time gate avoids leaving a failed container behind. The
+  engine name is canonicalized case-insensitively, so `--engine QEMU` records
+  `qemu`.
+- **The mock engine declares `vnc`.** The mock is test support; the CLI
+  display tests record a VNC display without a real VNC engine, so the mock
+  set adds `vnc`. The mock-oriented `create`/`run` helpers select the mock
+  engine explicitly under the combined feature build.
+- **SIGTERM uses a target-specific `libc` dependency.** `stop` sends `SIGTERM`
+  to the process group with `libc::kill(-pid, SIGTERM)`; Windows falls back to
+  `child.kill()`. Reason: the spike recorded SIGTERM as the clean stop
+  mechanism, and the fixed `spawn` signature takes `&dyn ProcessSupervisor`, so
+  the session cannot store the supervisor for a new trait method.
+- **The DOSBox-X debug endpoint is a host-side TCP bridge.** The session binds
+  a loopback listener on the first `debug_endpoint(DebugKind::Native)` call and
+  pumps bytes between DOSBox-X's outbound MCP connection and a debug client.
+  Reason: the spike records DOSBox-X as the MCP TCP client, so the endpoint the
+  CLI prints must be a host listener. The listener is lazy so the port is not
+  open for the container's whole life, and Drop stops and joins it.
+- **Mock-oriented CLI tests select `mock` explicitly.** `CliRoot::start` and
+  the lifecycle `create` helper pass `--engine mock`, and
+  `create_falls_back_to_the_default_engine` is gated on `qemu-engine`. Reason:
+  the Task 9 verify builds both `qemu-engine` and `mock-engine`, so the default
+  engine becomes `qemu`; the lifecycle suite is mock-oriented, and the fallback
+  test only asserts the QEMU default when that feature is enabled.
+- **Import helpers choose their agent.** `import_image_with_config` imports
+  with the fake agent so `create`/`REQUIRES` tests do not need the gitignored
+  `agent/build/DOSKER.EXE`; `import_image_for_dosbox_x` imports with the real
+  agent because the boot and debugger tests need it.
+- **A supervisor `Unsupported` after the capability check reports the
+  supervisor's message.** The CLI pre-check already proved the engine declares
+  the requested capability, so an `Unsupported` reply means the endpoint is
+  unavailable, not that the capability is missing.
+- **Docs state the current DOSBox-X support, not a conditional one.** The
+  `--bind` and NAT sections say DOSBox-X does not declare `host_dir_live` or
+  `nat` in this release, and the build-path sections name the actual
+  `engine dosbox-x: unsupported engine` failure. Reason: the provider table is
+  static, the reference build's host directory is a snapshot, and its slirp
+  forwards bind all host interfaces; the plan's conditional wording implied
+  support the adapter does not provide.
+- **The version probe tolerates the installed build's exit status.** The probe
+  accepts a non-zero exit when the combined output contains the
+  `DOSBox-X version ` marker. Reason: the Homebrew 2026.10.01 build prints the
+  version to stderr and exits 1. The checksum and the exact version pin are
+  still enforced.

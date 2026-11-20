@@ -316,7 +316,7 @@ reject message that names the engines that provide a missing capability, and
 the NAT decision. Out of scope: any capability that the spike does not prove.
 An unproven cell stays unproven and is rejected.
 
-- **Status:** Planned
+- **Status:** Implemented
 - **Depends on:** Slices 3, 9, and 10. The DOSBox-X spike is a manual
   prerequisite.
 - **Requirements:** FR-011, FR-016
