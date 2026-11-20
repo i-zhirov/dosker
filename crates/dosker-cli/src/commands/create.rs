@@ -127,9 +127,11 @@ pub fn create_container(
             Capability::Vnc,
         )));
     }
-    if engine == "dosbox-x" && (!specs.is_empty() || !image.volumes.is_empty()) {
-        return Err(CliError::Usage(String::from(
-            "named volumes are not supported by the dosbox-x engine; use qemu",
+    if matches!(engine.as_str(), "dosbox-x" | "bochs")
+        && (!specs.is_empty() || !image.volumes.is_empty())
+    {
+        return Err(CliError::Usage(format!(
+            "named volumes are not supported by the {engine} engine; use qemu"
         )));
     }
 

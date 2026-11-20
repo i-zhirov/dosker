@@ -74,6 +74,62 @@ fn create_accepts_a_required_capability_the_engine_declares() {
 }
 
 #[test]
+fn create_rejects_a_required_capability_the_bochs_engine_lacks() {
+    let root = CliRoot::new();
+    let source = root.path().join("disk.img");
+    make_disk_image(&source);
+    let reference = import_image_with_config(
+        &root,
+        &source,
+        "req:latest",
+        Some("bochs"),
+        BTreeMap::new(),
+        vec!["gdbstub"],
+    );
+
+    let output = run_command(&root, &["create", &reference]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stderr_text(&output).contains(
+            "engine bochs does not provide the gdbstub capability; the qemu engine provides it"
+        ),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+}
+
+#[test]
+fn create_accepts_a_required_capability_the_bochs_engine_declares() {
+    let root = CliRoot::new();
+    let source = root.path().join("disk.img");
+    make_disk_image(&source);
+    let reference = import_image_with_config(
+        &root,
+        &source,
+        "req:latest",
+        Some("bochs"),
+        BTreeMap::new(),
+        vec!["headless"],
+    );
+    disable_image_network(&root, &reference);
+
+    let output = run_command(&root, &["create", &reference]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+}
+
+#[test]
 fn run_rejects_a_required_capability_before_the_disk_is_created() {
     let root = CliRoot::new();
     let reference = import_requiring(&root, "req:latest", vec!["gdbstub"]);

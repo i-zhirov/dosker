@@ -122,32 +122,24 @@ fn create_copies_the_engine_config() {
 }
 
 #[test]
-fn create_rejects_bochs_with_an_unavailable_message() {
+fn create_records_the_bochs_engine() {
     let root = CliRoot::new();
     let source = root.path().join("disk.img");
     make_disk_image(&source);
     let reference = import_image_with_config(
         &root,
         &source,
-        "unpinned:latest",
-        None,
+        "pinned:latest",
+        Some("bochs"),
         BTreeMap::new(),
         Vec::new(),
     );
+    disable_image_network(&root, &reference);
 
-    let output = run_create(&root, &["create", &reference, "--engine", "bochs"]);
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "stderr: {}",
-        stderr_text(&output)
-    );
-    assert!(
-        stderr_text(&output)
-            .contains("engine bochs is not available; supported engines are qemu and dosbox-x"),
-        "stderr: {}",
-        stderr_text(&output)
-    );
+    let output = run_create(&root, &["create", &reference]);
+    let id = container_id(&output);
+    let record = root.store().load(&id).expect("load the container record");
+    assert_eq!(record.engine, "bochs");
 }
 
 #[test]
@@ -219,6 +211,37 @@ fn create_rejects_ne2000_on_an_engine_without_nat() {
 }
 
 #[test]
+fn create_rejects_a_ne2000_image_on_bochs() {
+    let root = CliRoot::new();
+    let source = root.path().join("disk.img");
+    make_disk_image(&source);
+    let reference = import_image_with_config(
+        &root,
+        &source,
+        "unpinned:latest",
+        None,
+        BTreeMap::new(),
+        Vec::new(),
+    );
+
+    let output = run_create(&root, &["create", &reference, "--engine", "bochs"]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stderr_text(&output).contains(
+            "engine bochs does not provide the nat capability; the qemu engine provides it"
+        ),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+}
+
+#[test]
 fn create_rejects_vnc_on_an_engine_without_vnc() {
     let root = CliRoot::new();
     let source = root.path().join("disk.img");
@@ -244,6 +267,38 @@ fn create_rejects_vnc_on_an_engine_without_vnc() {
     let stderr = stderr_text(&output);
     assert!(stderr.contains("vnc"), "stderr: {stderr}");
     assert!(stderr.contains("qemu"), "stderr: {stderr}");
+}
+
+#[test]
+fn create_rejects_vnc_on_bochs() {
+    let root = CliRoot::new();
+    let source = root.path().join("disk.img");
+    make_disk_image(&source);
+    let reference = import_image_with_config(
+        &root,
+        &source,
+        "pinned:latest",
+        Some("bochs"),
+        BTreeMap::new(),
+        Vec::new(),
+    );
+    disable_image_network(&root, &reference);
+
+    let output = run_create(&root, &["create", &reference, "--display", "vnc"]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stderr_text(&output).contains(
+            "engine bochs does not provide the vnc capability; the qemu engine provides it"
+        ),
+        "stderr: {}",
+        stderr_text(&output)
+    );
 }
 
 #[test]
@@ -306,6 +361,90 @@ fn create_rejects_image_volume_declarations_on_dosbox_x() {
     assert!(stderr.contains("named volumes"), "stderr: {stderr}");
     assert!(stderr.contains("dosbox-x"), "stderr: {stderr}");
     assert!(stderr.contains("qemu"), "stderr: {stderr}");
+}
+
+#[test]
+fn create_rejects_named_volumes_on_bochs() {
+    let root = CliRoot::new();
+    VolumeStore::new(root.path().to_path_buf())
+        .create("data", DEFAULT_VOLUME_SIZE, Utc::now())
+        .expect("create the volume");
+    let source = root.path().join("disk.img");
+    make_disk_image(&source);
+    let reference = import_image_with_config(
+        &root,
+        &source,
+        "pinned:latest",
+        Some("bochs"),
+        BTreeMap::new(),
+        Vec::new(),
+    );
+    disable_image_network(&root, &reference);
+
+    let output = run_create(&root, &["create", "-v", "data:D:", &reference]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stderr_text(&output)
+            .contains("named volumes are not supported by the bochs engine; use qemu"),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+
+    declare_image_volume(&root, &reference, "D:");
+    let output = run_create(&root, &["create", &reference]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stderr_text(&output)
+            .contains("named volumes are not supported by the bochs engine; use qemu"),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+}
+
+#[test]
+fn create_rejects_a_bind_on_bochs() {
+    let root = CliRoot::new();
+    let source = root.path().join("disk.img");
+    make_disk_image(&source);
+    let reference = import_image_with_config(
+        &root,
+        &source,
+        "pinned:latest",
+        Some("bochs"),
+        BTreeMap::new(),
+        Vec::new(),
+    );
+    disable_image_network(&root, &reference);
+    let host = tempfile::tempdir().expect("create a host directory");
+    let value = format!("D:{}", host.path().display());
+
+    let output = run_create(&root, &["create", "--bind", &value, &reference]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stderr_text(&output).contains(
+            "engine bochs does not provide the host_dir_live capability; the qemu engine provides it"
+        ),
+        "stderr: {}",
+        stderr_text(&output)
+    );
 }
 
 #[test]

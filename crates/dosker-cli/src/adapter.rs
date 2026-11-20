@@ -113,6 +113,15 @@ pub fn discover(engine: &str) -> Result<DiscoveredEngine, EngineError> {
                 capabilities,
             })
         }
+        "bochs" => {
+            let binary = dosker_engine_bochs::BochsBinary::discover()?;
+            Ok(DiscoveredEngine {
+                name: "bochs",
+                version: binary.version_string().to_owned(),
+                path: binary.path().to_path_buf(),
+                capabilities,
+            })
+        }
         _ => Err(EngineError::NotFound(PathBuf::from(engine))),
     }
 }
@@ -154,6 +163,18 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError> {
 
         let processes: Arc<dyn ProcessSupervisor> = Arc::new(system());
         let adapter = DosboxXAdapter::discover(processes)
+            .map_err(|error| CliError::Message(error.to_string()))?;
+        return Ok(Box::new(adapter));
+    }
+
+    if engine == "bochs" {
+        use std::sync::Arc;
+
+        use dosker_engine_bochs::BochsAdapter;
+        use dosker_platform::process::{ProcessSupervisor, system};
+
+        let processes: Arc<dyn ProcessSupervisor> = Arc::new(system());
+        let adapter = BochsAdapter::discover(processes)
             .map_err(|error| CliError::Message(error.to_string()))?;
         return Ok(Box::new(adapter));
     }

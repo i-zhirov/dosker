@@ -167,6 +167,7 @@ fn debug_reports_unsupported_for_the_mock_engine() {
     assert!(stderr.contains("debug_native"), "stderr: {stderr}");
     assert!(stderr.contains("qemu"), "stderr: {stderr}");
     assert!(stderr.contains("dosbox-x"), "stderr: {stderr}");
+    assert!(stderr.contains("bochs"), "stderr: {stderr}");
 }
 
 #[cfg(unix)]
@@ -186,6 +187,29 @@ fn debug_rejects_gdb_when_the_engine_has_no_gdbstub() {
     assert!(
         stderr_text(&output).contains(
             "engine dosbox-x does not provide the gdbstub capability; the qemu engine provides it"
+        ),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn debug_rejects_gdb_when_the_bochs_engine_has_no_gdbstub() {
+    let root = CliRoot::new();
+    let (id, _listener) = seed_running(&root, "000000000305", "debug-bochs", "bochs");
+
+    let output = root.run(&["debug", "--gdb", id.as_str()]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stderr_text(&output).contains(
+            "engine bochs does not provide the gdbstub capability; the qemu engine provides it"
         ),
         "stderr: {}",
         stderr_text(&output)

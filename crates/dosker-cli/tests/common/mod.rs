@@ -485,6 +485,69 @@ pub fn import_image_for_dosbox_x(root: &CliRoot, source: &Path, reference: &str)
     reference.to_owned()
 }
 
+/// Builds a command that selects the Bochs engine.
+///
+/// `DOSKER_BOCHS` comes from the environment, falling back to the default
+/// program name on `PATH`. `DOSKER_AGENT_EXE` points at the real agent so an
+/// imported image carries a working `C:\DOSKER\DOSKER.EXE`.
+pub fn command_with_bochs(root: &CliRoot) -> Command {
+    let mut command = root.base_command();
+    command.env(
+        "DOSKER_BOCHS",
+        std::env::var("DOSKER_BOCHS").unwrap_or_else(|_| "bochs".to_owned()),
+    );
+    command.env(
+        "DOSKER_AGENT_EXE",
+        agent_executable().expect("locate the agent executable"),
+    );
+    command
+}
+
+/// Runs a command against the Bochs engine named by `DOSKER_BOCHS`.
+pub fn run_with_bochs(root: &CliRoot, args: &[&str]) -> Output {
+    let mut command = command_with_bochs(root);
+    command.args(args);
+    run_captured(&mut command, Duration::from_secs(180))
+}
+
+/// Imports a disk image for Bochs and disables its network device.
+pub fn import_image_for_bochs(root: &CliRoot, source: &Path, reference: &str) -> String {
+    let mut command = command_with_bochs(root);
+    command.args([
+        "image",
+        "import",
+        source.to_str().expect("source path is utf-8"),
+        reference,
+    ]);
+    let output = run_captured(&mut command, Duration::from_secs(45));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+
+    let store = OciStore::new(root.path().to_path_buf());
+    let parsed = ImageReference::parse(reference).expect("parse the image reference");
+    let image_ref = ImageRef::Tag(parsed.clone());
+    let manifest = store
+        .load_manifest(&image_ref)
+        .expect("load the imported manifest");
+    let mut config = store
+        .load_config(&image_ref)
+        .expect("load the imported config");
+    config.machine.net = "none".to_owned();
+    store
+        .commit_image(
+            Some(&parsed),
+            &config,
+            manifest.layers.clone(),
+            manifest.annotations.clone().unwrap_or_default(),
+        )
+        .expect("commit the rewritten image");
+    reference.to_owned()
+}
+
 impl Drop for CliRoot {
     fn drop(&mut self) {
         let Ok(records) = self.store().list() else {
