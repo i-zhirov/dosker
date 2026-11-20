@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-20
-- **Status**: Approved
+- **Status**: Implemented
 - **Design**: `.sdd/specs/2026-11-01-dosker/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-01-dosker/roadmap.md` — slice: `bochs-adapter`
 - **Depends on**: `qemu-runtime-slice`, `volumes-and-nat`, `development-mode`
@@ -279,7 +279,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
 
 ## Tasks
 
-- [ ] **Task 1: Provider table and capability messages for Bochs**
+- [x] **Task 1: Provider table and capability messages for Bochs**
     - **Implements:** FR-011, FR-016; design §Engine Strategy, §Engine
       Capability Matrix, §Error Handling.
     - **Precondition before any code:** read the completed Results table in
@@ -320,7 +320,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
       `cargo test --workspace` passes again at Task 9.
     - **Verify:** `cargo test -p dosker-engine`
 
-- [ ] **Task 2: Bochs crate scaffold, discovery, version banner, and
+- [x] **Task 2: Bochs crate scaffold, discovery, version banner, and
   debugger detection**
     - **Implements:** FR-011; design §Engine Strategy, §Testing Strategy;
       the spike Environment and Decisions tables.
@@ -442,7 +442,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           `audio` as absent.
     - **Verify:** `cargo test -p dosker-engine-bochs`
 
-- [ ] **Task 3: Disk geometry rule**
+- [x] **Task 3: Disk geometry rule**
     - **Implements:** FR-011; design §Build And Runtime Semantics; the
       spike Disk geometry section.
     - **Create `crates/dosker-engine-bochs/src/geometry.rs`**
@@ -467,7 +467,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
         - Declare the `geometry` module and re-export `DiskGeometry`.
     - **Verify:** `cargo test -p dosker-engine-bochs --test geometry`
 
-- [ ] **Task 4: Bochs config generation and endpoints**
+- [x] **Task 4: Bochs config generation and endpoints**
     - **Implements:** FR-011; design §Component Interfaces (Engine
       Adapter), §Build And Runtime Semantics; doskerfile §ENGINE-CONFIG;
       the spike Decisions table.
@@ -570,7 +570,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           `render_config`, `write_config`, and `BochsEndpoints`.
     - **Verify:** `cargo test -p dosker-engine-bochs --test config && cargo test -p dosker-engine-bochs --test endpoints`
 
-- [ ] **Task 5: Internal-debugger pseudo-terminal**
+- [x] **Task 5: Internal-debugger pseudo-terminal**
     - **Implements:** FR-011; design §Component Interfaces (Engine
       Adapter), §Testing Strategy; the spike Debugger section and
       `assets/bochs-spike/debugger/pty-session.txt`.
@@ -585,20 +585,26 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           termios with
           `tcgetattr`, applies `cfmakeraw`, and writes it back with
           `tcsetattr(TCSANOW)`; wraps the master fd in a `File`.
-        - `PtyPair::slave_path() -> &Path`, `PtyPair::slave() ->
-          Option<&File>`, `PtyPair::take_slave() -> Option<File>`,
-          `PtyPair::master() -> &File`, `PtyPair::master_clone() ->
-          Result<File, EngineError>`, and `PtyPair::write_line(&self, line:
-          &str) -> Result<(), EngineError>` writing `line` and a newline to
-          the **master** and flushing.
+        - `PtyPair::slave_path() -> &Path`, `PtyPair::take_slave() ->
+          Option<File>`, `PtyPair::master() -> &File`,
+          `PtyPair::master_clone() -> Result<File, EngineError>`, and
+          `PtyPair::write_line(&self, line: &str) -> Result<(),
+          EngineError>` writing `line` and a newline to the **master**
+          through `self.master()` and flushing. The pty tests read the
+          private `slave` field; no `slave()` accessor exists.
         - The child gets the slave as stdin and stdout; the parent keeps
           the master and drains it. Writing to the master reaches the
           child's stdin, and what the child writes to the slave is read
           from the master. A client cannot share the child's slave side;
           the session bridges a debug client to the master instead.
-        - The session sets the master non-blocking with
-          `libc::fcntl(F_SETFL, O_NONBLOCK)` so its reader can poll and
-          stop.
+        - The master is blocking at spawn. The debug bridge sets it
+          non-blocking when the first client attaches; a `dup` from
+          `master_clone` shares the status flags, so the reader and every
+          master writer poll after that point. `write_line` is called only
+          before the bridge starts, while the master is still blocking.
+          The debug reader polls the master with `libc::poll` and a 20 ms
+          timeout, checks its stop flag between polls, and reads only after
+          a readable poll.
         - Add a `#[cfg(all(test, unix))] mod tests`:
           `pty_opens_a_pair_with_a_slave_path` — the path exists and is a
           character device; `pty_master_reads_what_the_slave_writes` — a
@@ -610,7 +616,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
         - Declare the Unix-only `pty` module.
     - **Verify:** `cargo test -p dosker-engine-bochs pty_`
 
-- [ ] **Task 6: Bochs session: serial, exec, stop, and the pty debugger**
+- [x] **Task 6: Bochs session: serial, exec, stop, and the pty debugger**
     - **Implements:** FR-011; design §Component Interfaces (Engine
       Adapter), §Build And Runtime Semantics, §Error Handling; the spike
       Decisions table and `assets/bochs-spike/debugger/pty-session.txt`.
@@ -650,9 +656,11 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           interleave.
         - `#[cfg(unix)] struct DebugReader { stop: Arc<AtomicBool>, handle:
           Option<JoinHandle<()>> }` with `start(master: File, log: File,
-          channel: Arc<DebugChannel>) -> Self` spawning a thread that reads
-          `DEBUG_BRIDGE_BUFFER`-sized chunks from the master, appends each
-          chunk to the log, and calls `channel.publish`; `WouldBlock` and
+          channel: Arc<DebugChannel>) -> Self` spawning a thread that polls
+          the blocking master with `libc::poll` and a `DEBUG_BRIDGE_POLL`
+          timeout, checks `stop` between polls, and after a readable poll
+          reads `DEBUG_BRIDGE_BUFFER`-sized chunks, appends each chunk to
+          the log, and calls `channel.publish`; `WouldBlock` and
           `Interrupted` sleep `DEBUG_BRIDGE_POLL`; EOF or any other error
           ends the thread; `Drop` sets `stop` and joins.
         - `#[cfg(unix)] struct DebugBridge { stop: Arc<AtomicBool>, handle:
@@ -680,7 +688,8 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           null and stdout and stderr go to the log. It spawns through
           `ProcessSupervisor::prepare_engine`, assigns the Windows
           `JobObject::kill_on_close`, and after a successful spawn writes
-          `c` to the master when a pty exists.
+          `c` to the master and `debug pty <slave_path>` to `engine.log`
+          when a pty exists.
         - `EngineSession::pid`, `process_group`, `ready`, `exec`, `stop`,
           `kill`, `try_exit`, `command`, `endpoints`, `put_file`,
           `get_file`, and `debug_endpoint`.
@@ -769,7 +778,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
         - Add `"debug"` to the names in `engine_socket_names_are_unique`.
     - **Verify:** `cargo test -p dosker-engine-bochs && cargo test -p dosker-platform --test engine_socket`
 
-- [ ] **Task 7: Bochs adapter and command line**
+- [x] **Task 7: Bochs adapter and command line**
     - **Implements:** FR-011; design §Component Interfaces (Engine
       Adapter), §Build And Runtime Semantics, §Error Handling; the spike
       Decisions table.
@@ -807,7 +816,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
         - Re-export `BochsAdapter`.
     - **Verify:** `cargo test -p dosker-engine-bochs --test adapter`
 
-- [ ] **Task 8: CLI engine registry, discovery, and reporting**
+- [x] **Task 8: CLI engine registry, discovery, and reporting**
     - **Implements:** FR-011; design §Component Interfaces (CLI),
       §Error Handling.
     - **Modify `crates/dosker-cli/Cargo.toml`**
@@ -853,7 +862,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           binaries explicitly.
     - **Verify:** `cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_engines`
 
-- [ ] **Task 9: Create-time gates for Bochs**
+- [x] **Task 9: Create-time gates for Bochs**
     - **Implements:** FR-011, FR-016; design §Error Handling; doskerfile
       §REQUIRES.
     - **Modify `crates/dosker-cli/src/commands/create.rs`**
@@ -905,7 +914,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           provider list now includes `bochs`.
     - **Verify:** `cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_create && cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_requires && cargo test -p dosker-cli --features qemu-engine,mock-engine --test cli_debug && cargo test -p dosker-cli --features qemu-engine,mock-engine --lib`
 
-- [ ] **Task 10: Document the Bochs capability set and engine behavior**
+- [x] **Task 10: Document the Bochs capability set and engine behavior**
     - **Implements:** FR-011, FR-016; design §Engine Capability Matrix,
       §Error Handling, §Testing Strategy.
     - **Modify `docs/engines.md`**
@@ -976,7 +985,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           listed in the capability table.
     - **Verify:** `test -f docs/engines.md && rg -Fq "and the QEMU, DOSBox-X, and Bochs runtime engines" docs/engines.md && rg -Fq "qemu, dosbox-x, and bochs have adapters" docs/engines.md && rg -Fq "## Capability table" docs/engines.md && rg -Fq "| \`gdbstub\` | yes | no | no |" docs/engines.md && rg -Fq "DOSKER_BOCHS_SHA256" docs/engines.md && rg -Fq "8c1d38ac5fe8dba981fc9c7321ec46723324fdaa6cb39f01e86d4afab08c447c" docs/engines.md && rg -Fq "native debugger <socket>" docs/engines.md && rg -Fq "SIGINT" docs/engines.md && rg -Fq "does not support a window display" docs/engines.md && rg -Fq "bochs are available for \`run\` and \`create\`" docs/builds.md && rg -Fq "engine bochs: unsupported engine" docs/builds.md && rg -Fq "DOSBox-X and Bochs do not declare it in this release" docs/volumes-and-network.md && rg -Fq "docs/engines.md" README.md && ! rg -Fq "\`bochs\` is a known engine name" docs/engines.md && ! rg -Fq "\`bochs\` is not implemented" docs/builds.md`
 
-- [ ] **Task 11: Real Bochs runtime integration tests**
+- [x] **Task 11: Real Bochs runtime integration tests**
     - **Implements:** FR-011; design §Testing Strategy, SC-005, SC-006;
       roadmap `Done when`.
     - **Modify `crates/dosker-test-support/src/fixtures.rs`**
@@ -1022,7 +1031,7 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           open the pty.
     - **Verify:** `DOSKER_INTEGRATION=1 DOSKER_BOCHS=/opt/homebrew/bin/bochs DOSKER_BOCHS_VERSION=3.1 DOSKER_BOCHS_SHA256=8c1d38ac5fe8dba981fc9c7321ec46723324fdaa6cb39f01e86d4afab08c447c DOSKER_BOCHS_IMAGE=agent/fixtures/dosker-agent.img cargo test -p dosker-cli --features qemu-engine --test bochs_runtime -- --nocapture`
 
-- [ ] **Task 12: Optional gdbstub build test**
+- [x] **Task 12: Optional gdbstub build test**
     - **Implements:** FR-011; design §Testing Strategy; the spike gdbstub
       row.
     - **Modify `crates/dosker-engine-bochs/Cargo.toml`**
@@ -1047,3 +1056,51 @@ pub fn build(engine: &str) -> Result<Box<dyn EngineAdapter>, CliError>;
           two-second read timeout; sends `$qSupported#37`; asserts the
           reply starts with `+` or contains `$`; kills the session.
     - **Verify:** `DOSKER_INTEGRATION=1 DOSKER_BOCHS_GDBSTUB=$HOME/bochs-gdbstub/bin/bochs DOSKER_BOCHS_IMAGE=agent/fixtures/dosker-agent.img cargo test -p dosker-engine-bochs --test gdbstub_build -- --nocapture`
+
+## Deviations
+
+Each ruling below is a plan-local correction made during execution. No
+public interface in `Interfaces` changed.
+
+- **The pty master is blocking at spawn and non-blocking once the bridge
+  starts.** A `dup` from `master_clone` shares the open file description, so
+  the bridge's `O_NONBLOCK` also applies to the reader and to
+  `PtyPair::master()`. The reader and every master writer poll after that
+  point; `write_line` is called only at spawn, before the bridge. Reason: the
+  review found that the earlier "stays blocking" wording hid the shared-flag
+  hazard; the code was already polling on both sides.
+- **The pty accessors are the ones the session uses.** `PtyPair::slave()` was
+  removed (the tests read the private field); `write_line` uses
+  `PtyPair::master()`; the session logs `debug pty <slave_path>` so
+  `slave_path()` is consumed. Reason: the unused accessors would fail the
+  workspace `-D warnings` build.
+- **A control port outside COM1/COM2 is rejected.** `render_config` returns
+  `EngineError::Setup` when `spec.control_port` is not 1 or 2. Reason: the
+  machine profile accepts 1..=4, and the Bochs serial renderer only has two
+  ports; a 3 or 4 would boot with no agent line and time out.
+- **The version probe drains both pipes.** The probe reads stdout and stderr
+  concurrently while polling, so a verbose build cannot fill a pipe and block
+  before it reads `quit`; a verbose-output test pins it. Reason: the reference
+  build fits the pipe, but a build with more plugins would produce a false
+  timeout.
+- **The debug endpoint breaks the guest on every call.** `debug_endpoint`
+  sends `SIGINT` each time, not only when the bridge starts, so a second
+  `dosker debug` breaks a guest that was continued with `c`. Reason: repeated
+  debug sessions must re-enter the debugger.
+- **The pending-restore test forces a write failure.** The test shuts down the
+  client's write side before attaching, because a write to a Unix socket with
+  a dropped peer can still succeed on macOS. Reason: the original test was
+  platform-flaky.
+- **The capability-report test does not need the agent.** It builds `engines`
+  from `base_command()` and sets `DOSKER_BOCHS`, like the DOSBox-X
+  counterpart, instead of `command_with_bochs`, which eagerly resolves
+  `agent/build/DOSKER.EXE`.
+- **The docs state the reference build's capability set.** The declared set is
+  static; a Bochs build without the internal debugger still declares
+  `debug_native` in the table but has no endpoint. The docs also name the
+  gdbstub gates and checksum separately, say `SIGINT` breaks the guest, give
+  `nc -U` for the socket, and note the suites are Unix-only and need the built
+  agent.
+- **The workspace is expected red from Task 1 until Task 9.** The provider
+  table gains Bochs in Task 1 and the CLI dispatch lands in Task 8/9; only the
+  per-task verify is expected to pass in that window.

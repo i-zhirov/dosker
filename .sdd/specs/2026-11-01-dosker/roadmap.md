@@ -342,7 +342,7 @@ size equals `C*H*S*512`, the `-dbg` internal debugger pass-through, and the
 capability declaration from the spike evidence. Out of scope: a gdbstub in a
 build that does not have it.
 
-- **Status:** Planned
+- **Status:** Implemented
 - **Depends on:** Slices 3, 9, and 10. The Bochs spike is a manual
   prerequisite.
 - **Requirements:** FR-011, FR-016
