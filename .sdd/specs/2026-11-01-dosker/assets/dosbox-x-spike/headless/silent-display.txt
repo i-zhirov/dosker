@@ -1,0 +1,4 @@
+SDL: version 2.32.74, Video dummy, Audio dummy
+Configured windowposition: -
+SDL: Current window pixel format: SDL_PIXELFORMAT_RGB888
+The 'scanline render on demand' option is available and may provide a modest boost in video render performance if set to true.

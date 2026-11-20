@@ -1,0 +1,8 @@
+
+[2JZ:\>IMGMOUNT C /Users/iliazhirov/dosbox-x-spike/agent.img -t hdd
+Image geometry auto detection: -size 512,32,16,128
+Drive C is mounted as /Users/iliazhirov/dosbox-x-spike/agent.img
+Z:\>BOOT C:
+Booting from drive C...
+Drive number 0 mounted as empty
+Drive number 1 mounted as empty

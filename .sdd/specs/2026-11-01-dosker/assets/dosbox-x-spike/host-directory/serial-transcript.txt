@@ -1,0 +1,8 @@
+connected after 109.571542ms
+HELLO protocol_version=1 agent_version=1.0.0 dos="FreeDOS 1.3" memory_kb=640 control_port=2 max_payload=4096 features=["exec", "put", "get", "stat"] after=11.049032834s
+EXEC "TYPE D:\\HOST.TXT" exit=0 truncated=false not_found=false duration_ms=329 output="ONE\r\n"
+SLEEP 8000ms
+EXEC "TYPE D:\\HOST.TXT" exit=0 truncated=false not_found=false duration_ms=329 output="ONE\r\n"
+EXEC "DIR D:\\" exit=0 truncated=false not_found=false duration_ms=1813 output=" Volume in drive D is \r\n Volume Serial Number is 0EC9-2CC1\r\n Directory of D:\\\r\n\r\nHOST     TXT             5  11-19-26 11:57p\r\n         1 file(s)              5 bytes\r\n         0 dir(s)     264,142,848 bytes free\r\n"
+EXEC "COPY C:\\AUTOEXEC.BAT D:\\GUEST.TXT" exit=0 truncated=false not_found=false duration_ms=329 output="C:\\AUTOEXEC.BAT =>> D:\\GUEST.TXT\r\n"
+EXEC "TYPE D:\\GUEST.TXT" exit=0 truncated=false not_found=false duration_ms=329 output="@ECHO OFF\r\nSET COMSPEC=C:\\COMMAND.COM\r\nC:\\DOSKER\\DOSKER.EXE\r\n"

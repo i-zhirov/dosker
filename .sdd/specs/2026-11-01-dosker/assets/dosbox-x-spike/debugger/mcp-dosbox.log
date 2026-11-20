@@ -1,0 +1,588 @@
+Logging: opened logfile '/Users/iliazhirov/dosbox-x-spike/mcpfull-dosbox.log' successfully. All further logging will go to this file.
+DOSBox-X version 2026.10.01 Commit f1c4414 (macOS ARM SDL2 64-bit)
+macOS EXE path: /opt/homebrew/bin/dosbox-x
+macOS Resource path: 
+macOS: NSTouchBar support detected in system
+Prevent capture: 0
+SDL: version 2.32.74, Video dummy, Audio coreaudio
+Host keyboard layout is now us (US English)
+Mapper keyboard layout is now us (US English)
+SDL2 reports desktop display mode 1024 x 768
+WARNING: SDL2 unable to create GL context
+Could not initialize OpenGL, switching back to surface
+Configured windowposition: -
+SDL: Current window pixel format: SDL_PIXELFORMAT_RGB888
+SDL: You are running in 24 bpp mode, this will slow down things!
+Releasing keyboard
+Screen report: Method 'None' (-1.000 x -1.000 pixels) at (0.000 x 0.000) (-1.000 x -1.000 mm) (-0.039 x -0.039 in) (-1.000 x -1.000 DPI)
+ISA BCLK: 8333333.333Hz (25000000/3)
+monopal: green, 
+Active save slot: 1 [Empty]
+USING AVI+ZMBV
+Max 1073741824 sz 16384
+Final 16384
+Final arrangement: Below 4GB = 16384KB, Above 4GB = 0KB
+MIDI:Opened device:coreaudio
+VOODOO LFB now at d0000000
+Serial1: BASE 3f8h
+Serial2: BASE 2f8h
+SDLNET: Initialized SDL network subsystem
+Serial2: Nullmodem server waiting for connection on TCP port 5500...
+Parallel1: BASE 378h
+MPU-401 Registering I/O ports as if IBM PC MPU-401 at base 330h
+Memory I/O complexity optimization enabled aka option 'memory io optimization 1'. If the game or demo is unable to draw to the screen properly, set the option to false.
+The 'scanline render on demand' option is available and may provide a modest boost in video render performance if set to true.
+Allocated APM BIOS pm entry point at f000:ce40
+Writing code to fce40
+Writing code to fce60
+ISA Plug & Play BIOS enabled
+VGA ROM BIOS init callback
+WARNING: No translation support (to host) for code page 0
+DOS keyboard layout loaded with main language code US for layout us
+XMS: 50 handles allocated for use by the DOS environment
+EMS page frame at 0xe000-0xefff
+COMMAND.COM env size:             720 bytes
+COMMAND.COM main body (PSP):      0x0701 sz=0x009a
+COMMAND.COM environment block:    0x079c sz=0x002d
+COMMAND.COM stack:                0x071b
+DOS CON: 
+DOS CON: [2JZ:\>IMGMOUNT C /Users/iliazhirov/dosbox-x-spike/agent.img -t hdd
+DOS CON: Image geometry auto detection: -size 512,32,16,128
+FAT: Partition type is MBR (IBM PC)
+Mounted FAT volume is FAT16 with 62963 clusters
+DOS CON: Drive C is mounted as /Users/iliazhirov/dosbox-x-spike/agent.img
+IDE: Disk size: 32MB, BIOS C/H/S: 128/16/32, IDE: 128/16/32
+IMGMOUNT: HDD image mounted to drive no. 2 (IDE Primary Master)
+DOS CON: Z:\>BOOT C:
+DOS CON: Booting from drive C...
+Mounted empty C/H/S/sz 80/2/18/512 1440KB
+DOS CON: Drive number 0 mounted as empty
+Mounted empty C/H/S/sz 80/2/18/512 1440KB
+DOS CON: Drive number 1 mounted as empty
+Booting guest OS stack_seg=0x0030 load_seg=0x07c0
+Removing UMB block 0xcc00-0xdfff
+Loading 512 bytes of boot code to 7c00
+Alright: DOS kernel shutdown, booting a guest OS
+  CS:IP=0000:7c00 SS:SP=0030:0100 AX=0000 BX=7c00 CX=0001 DX=0080
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+pixratio 1.350, dw false, dh false
+Aspect ratio: 720 x 540  xToY=1.333 yToX=0.750
+surface consider=720x400 final=720x400
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+cr0:00000010 cr2:00000000 cr3:00000000  cpl=0
+eflags:00007202 [vm=0 iopl=3 nt=1]
+GDT base=00000000 limit=0000FFFF
+IDT base=00000000 limit=000003FF
+TR selector=0000, base=F053F000 limit=0000CA60*1
+LDT selector=0000, base=F053F000 limit=0000CA60*1
+Debugger commands (enter all values in hex or as register):
+Commands------------------------------------------------
+BP     [segment]:[offset] - Set breakpoint.
+BPINT  [intNr] *          - Set interrupt breakpoint.
+BPINT  [intNr] [ah] *     - Set interrupt breakpoint with ah.
+BPINT  [intNr] [ah] [al]  - Set interrupt breakpoint with ah and al.
+BPM    [segment]:[offset] - Set memory breakpoint (memory change).
+BPPM   [selector]:[offset]- Set pmode-memory breakpoint (memory change).
+BPLM   [linear address]   - Set linear memory breakpoint (memory change).
+BPLIST                    - List breakpoints.
+BPDEL  [bpNr] / *         - Delete breakpoint nr / all.
+C / D  [segment]:[offset] - Set code / data view address.
+DV [addr]                 - Set data view to linear (virtual) address
+DP [addr]                 - Set data view to physical address
+DOS MCBS                  - Show Memory Control Block chain.
+DOS KERN                  - Show DOS kernel memory blocks.
+DOS XMS                   - Show XMS memory handles.
+DOS EMS                   - Show EMS memory handles.
+DOS FNKEY                 - Show PC-98 FnKey mapping.
+BIOS MEM                  - Show BIOS memory blocks.
+CALLBACKS                 - Show callbacks of interrupts.
+INT [nr] / INTT [nr]      - Execute / Trace into interrupt.
+LOG [num]                 - Write CPU log file.
+LOGS/LOGL/LOGC [num]      - Write short/long/cs:ip-only CPU log file.
+HEAVYLOG                  - Enable/Disable automatic CPU log when DOSBox-X exits.
+ZEROPROTECT               - Enable/Disable zero code execution detection.
+ADDLOG [message]          - Add message to the log file.
+SR [reg] [value]          - Set register value. Multiple pairs allowed.
+SM [seg]:[off] [val] [.]..- Set memory with following values.
+SMV [addr] [val] [.]..    - Set memory with following values at linear (virtual) address.
+FM [seg]:[off]            - Freeze memory value at address.
+EV [value [value] ...]    - Show register value(s).
+IV [seg]:[off] [name]     - Create var name for memory address.
+SV [filename]             - Save var list in file.
+LV [filename]             - Load var list from file.
+VRD                       - Redraw video.
+VGA cmd                   - VGA related debugging commands.
+PC98 cmd                  - PC98 related debugging commands.
+EMU MEM/MACHINE           - Show emulator memory or machine info.
+MEMDUMP [seg]:[off] [len] [filename] - Write memory to a text file (default: MEMDUMP.TXT).
+MEMDUMPBIN [s]:[o] [len] [filename]  - Write memory to a binary file (default: MEMDUMP.BIN).
+MEMFIND [seg]:[off] [.].. - Start memory find search instance.
+MEMS [operator] [value]   - Search value within instance.
+SELINFO [segName]         - Show selector info.
+INTVEC [filename]         - Writes interrupt vector table to file.
+INTHAND [intNum]          - Set code view to interrupt handler.
+MMX [=t] [reg]            - Display MMX register file (t can be B,W,D,Q)
+MMX [=t] [reg] SET [val]  - Set MMX register (t can be B,W,D,Q), val is comma-separated
+SSE [=t] [reg]            - Display SSE register file (t can be B,W,D,Q,X,S,F)
+SSE [=t] [reg] SET [val]  - Set SSE register (t can be B,W,D,Q,X,S,F), val is comma-separated
+CPU                       - Display CPU status information.
+FPU                       - Display FPU status information.
+GDT                       - Lists descriptors of the GDT.
+LDT                       - Lists descriptors of the LDT.
+IDT                       - Lists descriptors of the IDT.
+PAGING [page]             - Display content of page table.
+EXTEND                    - Toggle additional info.
+TIMERIRQ                  - Run the system timer.
+TIME [time]               - Display or change the internal time.
+DATE [date]               - Display or change the internal date.
+VRT                       - Run, then enter debugger at next vertical retrace.
+IN[P|W|D] [port]          - I/O port read byte/word/dword.
+OUT[P|W|D] [port] [data]  - I/O port write byte/word/dword.
+HELP                      - Help
+Keys------------------------------------------------
+F3/F6                     - Previous command in history.
+F4/F7                     - Next command in history.
+F5                        - Run.
+F8                        - Toggle printable characters.
+F9                        - Set/Remove breakpoint.
+F10/F11                   - Step over / trace into instruction.
+ALT + D/E/S/X/B           - Set data view to DS:SI/ES:DI/SS:SP/DS:DX/ES:BX.
+Escape                    - Clear input line.
+Up/Down                   - Scroll up/down in the current window.
+Page Up/Down              - Page up/down in the current window.
+Home/End                  - Move to begin/end of the current window.
+TAB/Shift+TAB             - Select next/prev window
+INT13: Check Extensions Present for drive: 0x80
+DEBUG: Set breakpoint at 0000:0000
+INT13: Check Extensions Present for drive: 0x80
+INT13: Check Extensions Present for drive: 0x80
+Debugger in Mac OS X is not available unless you start DOSBox-X from a terminal or from the Terminal application
+                 - Redraw video.
+LOG: VGA cmd                   - VGA related debugging commands.
+LOG: PC98 cmd                  - PC98 related debugging commands.
+LOG: EMU MEM/MACHINE           - Show emulator memory or machine info.
+LOG: MEMDUMP [seg]:[off] [len] [filename] - Write memory to a text file (default: MEMDUMP.TXT).
+LOG: MEMDUMPBIN [s]:[o] [len] [filename]  - Write memory to a binary file (default: MEMDUMP.BIN).
+LOG: MEMFIND [seg]:[off] [.].. - Start memory find search instance.
+LOG: MEMS [operator] [value]   - Search value within instance.
+LOG: SELINFO [segName]         - Show selector info.
+LOG: INTVEC [filename]         - Writes interrupt vector table to file.
+LOG: INTHAND [intNum]          - Set code view to interrupt handler.
+LOG: MMX [=t] [reg]            - Display MMX register file (t can be B,W,D,Q)
+LOG: MMX [=t] [reg] SET [val]  - Set MMX register (t can be B,W,D,Q), val is comma-separated
+LOG: SSE [=t] [reg]            - Display SSE register file (t can be B,W,D,Q,X,S,F)
+LOG: SSE [=t] [reg] SET [val]  - Set SSE register (t can be B,W,D,Q,X,S,F), val is comma-separated
+LOG: CPU                       - Display CPU status information.
+LOG: FPU                       - Display FPU status information.
+LOG: GDT                       - Lists descriptors of the GDT.
+LOG: LDT                       - Lists descriptors of the LDT.
+LOG: IDT                       - Lists descriptors of the IDT.
+LOG: PAGING [page]             - Display content of page table.
+LOG: EXTEND                    - Toggle additional info.
+LOG: TIMERIRQ                  - Run the system timer.
+LOG: TIME [time]               - Display or change the internal time.
+LOG: DATE [date]               - Display or change the internal date.
+LOG: VRT                       - Run, then enter debugger at next vertical retrace.
+LOG: IN[P|W|D] [port]          - I/O port read byte/word/dword.
+LOG: OUT[P|W|D] [port] [data]  - I/O port write byte/word/dword.
+LOG: HELP                      - Help
+LOG: Keys------------------------------------------------
+LOG: F3/F6                     - Previous command in history.
+LOG: F4/F7                     - Next command in history.
+LOG: F5                        - Run.
+LOG: F8                        - Toggle printable characters.
+LOG: F9                        - Set/Remove breakpoint.
+LOG: F10/F11                   - Step over / trace into instruction.
+LOG: ALT + D/E/S/X/B           - Set data view to DS:SI/ES:DI/SS:SP/DS:DX/ES:BX.
+LOG: Escape                    - Clear input line.
+LOG: Up/Down                   - Scroll up/down in the current window.
+LOG: Page Up/Down              - Page up/down in the current window.
+LOG: Home/End                  - Move to begin/end of the current window.
+LOG: TAB/Shift+TAB             - Select next/prev window
+LOG: INT13: Check Extensions Present for drive: 0x80
+[ControlClient] mcp command REQ 4 EXEC BP
+LOG: DEBUG: Set breakpoint at 0000:0000
+LOG: INT13: Check Extensions Present for drive: 0x80
+LOG: INT13: Check Extensions Present for drive: 0x80
+[ControlClient] mcp command REQ 5 BREAK
+LOG: Debugger in Mac OS X is not available unless you start DOSBox-X from a terminal or from the Terminal application
+[ControlClient] mcp command REQ 6 EXEC RUN
+[ControlClient] connection closed
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...
+[ControlClient] connecting to 127.0.0.1:5630...

@@ -1,0 +1,8 @@
+SLIRP: Slirp version: 4.9.5
+SLIRP: Processing TCP port forward rule: 8080:80
+SLIRP: Setup TCP port 8080:80 forward
+SLIRP: Processing TCP port forward rule: 8081:80
+SLIRP: Setup TCP port 8081:80 forward
+SLIRP: Successfully initialized
+ETHERNET: NE2000 Ethernet emulation backend selected: slirp
+NE2000: Base=0x300 irq=9

@@ -1,0 +1,35 @@
+launched pid=58369 stdin=DEVNULL start_new_session=True (no controlling terminal)
+MCP connected from ('127.0.0.1', 58260) at t+98819.6
+--- 20s after connect, guest running ---
+SEND: REQ 1 PING
+RECV: BEGIN 1 OK
+PONG
+END 1
+
+SEND: REQ 2 EXEC CPU
+RECV: BEGIN 2 OK
+cr0:00000010 cr2:00000000 cr3:00000000  cpl=0
+eflags:00007242 [vm=0 iopl=3 nt=1]
+GDT base=00000000 limit=0000FFFF
+IDT base=00000000 limit=000003FF
+TR selector=0000, base=000EF000 limit=0000CA60*1
+LDT selector=0000, base=000EF000 limit=0000CA60*1
+END 2
+
+SEND: REQ 3 EXEC BP 0:7C00
+RECV: BEGIN 3 OK
+DEBUG: Set breakpoint at 0000:7C00
+END 3
+
+SEND: REQ 4 EXEC EV AX BX
+RECV: BEGIN 4 OK
+EV of 'AX BX' is:
+1100 5fe
+END 4
+
+SEND: REQ 5 BREAK
+RECV: BEGIN 5 OK
+Debugger in Mac OS X is not available unless you start DOSBox-X from a terminal or from the Terminal application
+END 5
+
+dosbox exit 0

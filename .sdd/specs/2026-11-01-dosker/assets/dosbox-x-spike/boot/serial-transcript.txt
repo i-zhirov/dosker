@@ -1,0 +1,4 @@
+connected after 207.041µs
+HELLO protocol_version=1 agent_version=1.0.0 dos="FreeDOS 1.3" memory_kb=640 control_port=2 max_payload=4096 features=["exec", "put", "get", "stat"] after=10.894793041s
+EXEC "ECHO HELLO" exit=0 truncated=false not_found=false duration_ms=329 output="HELLO \r\n"
+SHUTDOWN ack ready=true after=38.876875ms

@@ -1,7 +1,7 @@
 # DOSBox-X Spike
 
 - **Date**: 2026-11-19
-- **Status**: Ready to run
+- **Status**: Complete
 - **Purpose**: Settle the DOSBox-X cells of the engine capability matrix before
   the DOSBox-X adapter is planned for execution.
 - **Consumes**: `design.md` §Engine Capability Matrix, §Testing Strategy;
@@ -339,30 +339,41 @@ set of rows marked `proven`.
 
 | Capability | Result | Evidence |
 | --- | --- | --- |
-| `boot` | | |
-| `serial` | | |
-| `stop` | | |
-| `headless` | | |
-| `host_dir_live` | | |
-| `debug_native` | | |
-| `gdbstub` | not tested; do not declare | |
-| `screenshot` | not tested; do not declare | |
-| `vnc` | not tested; do not declare | |
-| `nat` | | |
+| `boot` | proven | `IMGMOUNT C <image> -t hdd` then `BOOT C:` boots the copy; agent `HELLO` arrives. `assets/dosbox-x-spike/boot/` |
+| `serial` | proven | `serial2 = nullmodem port:<port> sock:0 transparent:1`; `HELLO` in ~10.9 s with protocol 1, control port 2, `max_payload` 4096. `assets/dosbox-x-spike/boot/serial-transcript.txt` |
+| `stop` | proven | Agent `SHUTDOWN` is acknowledged but does not exit DOSBox-X; `SIGTERM` exits with code 0 in ~2.9 s. `SIGINT` is ignored. `assets/dosbox-x-spike/boot/` |
+| `headless` | proven | `[sdl] videodriver = dummy` (`-set "sdl videodriver=dummy"`): no window, process alive past 60 s, `EXEC` answers. `assets/dosbox-x-spike/headless/` |
+| `host_dir_live` | unproven | `MOUNT D <host>` before `BOOT` converts the directory to a FAT snapshot. A host edit after mount is not visible (`TYPE` still returns `ONE`), guest writes do not reach the host, and `-nocachedir` does not change this. `assets/dosbox-x-spike/host-directory/` |
+| `debug_native` | proven | `[dosbox] mcp_server = <port>`; DOSBox-X connects out to `127.0.0.1:<port>` and answers `REQ <id> EXEC CPU` with a register dump while detached (stdin null, no controlling terminal). The interactive `BREAK` UI is unavailable on macOS without a terminal; the command channel works. `assets/dosbox-x-spike/debugger/mcp-session.txt` |
+| `gdbstub` | not tested; do not declare | — |
+| `screenshot` | not tested; do not declare | — |
+| `vnc` | not tested; do not declare | — |
+| `nat` | unproven | `[ne2000]` + `[ethernet, slirp] tcp_port_forwards = 8080:80` reaches the guest with no root, but the forward binds `INADDR_ANY` (`*:8080`), and this build has no loopback-only option. Declaring it would bypass the design's `127.0.0.1` default for published ports. `assets/dosbox-x-spike/nat/` |
 
 Also record the adapter decisions the plan consumes:
 
 | Decision | Value |
 | --- | --- |
-| Working boot command | |
-| Working serial line | |
-| Serial endpoint kind (TCP or pipe) | |
-| Working headless flags | |
-| Stop mechanism and exit code | |
-| Debug endpoint kind, if any | |
-| Host-directory mechanism, if any | |
-| NAT backend and port-forward key, if any | |
-| Pinned DOSBox-X version and checksum | |
+| Working boot command | `IMGMOUNT C "<image>" -t hdd` then `BOOT C:`. The image path must be double-quoted: the macOS data root contains a space (`Application Support`), and an unquoted path with a space is rejected. The candidates in the procedure were wrong: `-hdd` is rejected and `BOOT -l c` is not a valid form (`-L` is ignored). `BOOT <image>` also fails for a copy under `/private/tmp`; the mount form works from the data root. |
+| Working serial line | `serial2 = nullmodem port:<port> sock:0 transparent:1`. `port:` is the TCP **server**; `server:` is the TCP client and fails with `Connection failed.` without a listener. Without `transparent:1`, DOSBox-X injects `0xFF` modem-status bytes that corrupt the agent frame stream. |
+| Serial endpoint kind (TCP or pipe) | TCP. The host connects to `127.0.0.1:<port>`; DOSBox-X listens. |
+| Working headless flags | `-set "sdl videodriver=dummy"` (equivalent to `[sdl] videodriver = dummy`). `-silent` also runs without a window and stays alive while `BOOT` blocks, but it also switches audio to `dummy` and is documented to exit after `AUTOEXEC.BAT`; it is not the recorded form. |
+| Stop mechanism and exit code | Send the agent `SHUTDOWN`, wait for `SHUTDOWN_ACK`, then `SIGTERM` the DOSBox-X process. Exit code 0, about 2.9 s after the signal. |
+| Debug endpoint kind, if any | TCP MCP control channel, with the direction reversed: DOSBox-X is the TCP client and the host listens. Config key `[dosbox] mcp_server = <port>`. Requests are line-oriented: `REQ <id> PING`, `REQ <id> BREAK`, `REQ <id> EXEC <debugger command>`; responses are `BEGIN <id> OK` … `END <id>`. Sample: `REQ 2 EXEC CPU` returns the register dump. |
+| Host-directory mechanism, if any | None live. `MOUNT D <host>` before `BOOT` creates a FAT snapshot (`Converting drive D: to FAT...`); `-nocachedir` does not make it live. |
+| NAT backend and port-forward key, if any | Backend `slirp`; keys `[ne2000] ne2000 = true`, `nicbase = 300`, `nicirq = 9` (the fixture packet driver uses IRQ 9), `backend = slirp`; `[ethernet, slirp] tcp_port_forwards = host:guest ...`. Works with no root, but the listener binds all host interfaces. |
+| Pinned DOSBox-X version and checksum | `2026.10.01` SDL2; `6934abe66fe55d71487ded37e097416de65981250c902a9cca2bfd1284e98c96`. |
+
+## Evidence
+
+Raw evidence is under `assets/dosbox-x-spike/`:
+
+- `environment.md` — host, binary, fixture, and tooling record.
+- `boot/` — working config, serial transcript, DOS CON log, `IMGMOUNT`/`BOOT` help.
+- `headless/` — display-driver log lines for the dummy driver and `-silent`.
+- `debugger/` — MCP session transcript and the DOSBox-X log.
+- `host-directory/` — config, serial transcript, DOS CON log, `MOUNT` help.
+- `nat/` — config, slirp log lines.
 
 ## Reporting
 

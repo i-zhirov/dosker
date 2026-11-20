@@ -1,0 +1,90 @@
+Logging: opened logfile '/Users/iliazhirov/dosbox-x-spike/help2.log' successfully. All further logging will go to this file.
+DOSBox-X version 2026.10.01 Commit f1c4414 (macOS ARM SDL2 64-bit)
+macOS EXE path: /opt/homebrew/bin/dosbox-x
+macOS Resource path: 
+macOS: NSTouchBar support detected in system
+Prevent capture: 0
+SDL: version 2.32.74, Video dummy, Audio coreaudio
+Host keyboard layout is now us (US English)
+Mapper keyboard layout is now us (US English)
+SDL2 reports desktop display mode 1024 x 768
+WARNING: SDL2 unable to create GL context
+Could not initialize OpenGL, switching back to surface
+Configured windowposition: -
+SDL: Current window pixel format: SDL_PIXELFORMAT_RGB888
+SDL: You are running in 24 bpp mode, this will slow down things!
+Releasing keyboard
+Screen report: Method 'None' (-1.000 x -1.000 pixels) at (0.000 x 0.000) (-1.000 x -1.000 mm) (-0.039 x -0.039 in) (-1.000 x -1.000 DPI)
+ISA BCLK: 8333333.333Hz (25000000/3)
+monopal: green, 
+Active save slot: 1 [Empty]
+USING AVI+ZMBV
+Pentium CMPXCHG8B emulation is enabled
+Max 1073741824 sz 16384
+Final 16384
+Final arrangement: Below 4GB = 16384KB, Above 4GB = 0KB
+MIDI:Opened device:coreaudio
+VOODOO LFB now at d0000000
+Serial1: BASE 3f8h
+Serial2: BASE 2f8h
+Parallel1: BASE 378h
+MPU-401 Registering I/O ports as if IBM PC MPU-401 at base 330h
+Memory I/O complexity optimization enabled aka option 'memory io optimization 1'. If the game or demo is unable to draw to the screen properly, set the option to false.
+The 'scanline render on demand' option is available and may provide a modest boost in video render performance if set to true.
+Allocated APM BIOS pm entry point at f000:ce40
+Writing code to fce40
+Writing code to fce60
+ISA Plug & Play BIOS enabled
+VGA ROM BIOS init callback
+WARNING: No translation support (to host) for code page 0
+DOS keyboard layout loaded with main language code US for layout us
+XMS: 50 handles allocated for use by the DOS environment
+EMS page frame at 0xe000-0xefff
+COMMAND.COM env size:             720 bytes
+COMMAND.COM main body (PSP):      0x0701 sz=0x009a
+COMMAND.COM environment block:    0x079c sz=0x002d
+COMMAND.COM stack:                0x071b
+DOS CON: 
+DOS CON: [2JZ:\>HELP MOUNT
+DOS CON: Mounts directories or drives in the host system as DOSBox-X drives.
+DOS CON: Usage: 
+DOS CON: [34;1m
+DOS CON: [32;1mMOUNT
+DOS CON: [0m 
+DOS CON: [37;1mdrive
+DOS CON: [0m 
+DOS CON: [36;1mlocal_directory
+DOS CON: [0m [option]
+DOS CON: [0m
+DOS CON:  
+DOS CON: [37;1mdrive
+DOS CON: [0m            Drive letter where the directory or drive will be mounted.
+DOS CON:  
+DOS CON: [36;1mlocal_directory
+DOS CON: [0m  Local directory or drive in the host system to be mounted.
+DOS CON:  [option]         Option(s) for mounting. The following options are accepted:
+DOS CON:  -t               Specify the drive type the mounted drive to behave as.
+DOS CON:                   Supported drive type: dir, floppy, cdrom, overlay
+DOS CON:  (Note that 'overlay' redirects writes for mounted drive to another directory)
+DOS CON:  -label [name]    Set the volume label name of the drive (all upper case).
+DOS CON:  -nl              Use next available drive letter if the drive is mounted.
+DOS CON:  -ro              Mount the drive in read-only mode.
+DOS CON:  -pr              Specify the path is relative to the config file location.
+DOS CON:  -cd              Generate a list of local CD drive's "drive #" values.
+pixratio 1.350, dw false, dh false
+Aspect ratio: 720 x 540  xToY=1.333 yToX=0.750
+surface consider=720x400 final=720x400
+DOS CON:  -usecd [drive #] For direct hardware emulation such as audio playback.
+DOS CON:  -ioctl           Use lowest level hardware access (following -usecd option).
+DOS CON:  -aspi            Use the installed ASPI layer (following -usecd option).
+DOS CON:  -freesize [size] Specify the free disk space of drive in MB (KB for floppies).
+DOS CON:  -nocachedir      Enable real-time update and do not cache the drive.
+DOS CON:  -z drive         Move virtual drive Z: to a different letter.
+DOS CON:  -o               Report the drive as: local, remote.
+DOS CON:  -q               Quiet mode (no message output).
+DOS CON:  -u               Unmount the drive.
+DOS CON:  
+DOS CON: [32;1m-examples        Show some usage examples.
+DOS CON: [0m
+DOS CON: Type MOUNT with no parameters to display a list of mounted drives.Z:\>exit
+--END OF LOG--
