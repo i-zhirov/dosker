@@ -369,13 +369,13 @@ images, and stale cache entries, checksum-verified engine discovery, and the
 MIT or Apache-2.0 dual license files. Out of scope: a registry, compose files,
 and a shared L2 network.
 
-- **Status:** Unplanned
+- **Status:** In Progress
 - **Depends on:** Slices 1 to 12.
 - **Requirements:** FR-020, FR-021, and the release-facing parts of the
   design.
 - **Manual prerequisites:** release runners for Linux, macOS, and Windows,
   and signing credentials. A macOS CI runner with the engine builds.
-- **Plan:** —
+- **Plan:** [`.sdd/specs/2026-11-01-dosker/plan-packaging-and-release.md`](plan-packaging-and-release.md)
 - **Done when:** `save` and `load` round-trip an image on all three hosts.
   `system prune` removes only stopped containers, unused images, and stale
   cache entries. Engine discovery works on Linux, macOS, and Windows with
