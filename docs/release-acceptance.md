@@ -23,23 +23,24 @@ check is `pass` when its command exits 0 on that host.
 
 | Criterion | Host | Command | Result |
 | --- | --- | --- | --- |
-| SC-001 | Linux x86_64 | `DOSKER_INTEGRATION=1` with `DOSKER_QEMU_IMAGE` and `DOSKER_QEMU`; `qemu_runtime` | not run on this host |
-| SC-001 | macOS arm64 | `DOSKER_INTEGRATION=1` with `DOSKER_QEMU_IMAGE` and `DOSKER_QEMU`; `qemu_runtime` | pass, local; QEMU 11.1.1; nightly pin 11.1.3 not run |
-| SC-001 | Windows x86_64 | `DOSKER_INTEGRATION=1` with `DOSKER_QEMU_IMAGE`, `DOSKER_QEMU`, `DOSKER_QEMU_VERSION=11.1.3`, and `DOSKER_QEMU_SHA256`; `windows_qemu_runtime` | not run on this host |
-| SC-002 | Linux x86_64 | `DOSKER_INTEGRATION=1`; `qemu_build` | not run on this host |
+| SC-001 | Linux x86_64 | `DOSKER_INTEGRATION=1` with `DOSKER_QEMU_IMAGE` and `DOSKER_QEMU`; `qemu_runtime` | pass, CI run 44902589361; QEMU 10.2.1 |
+| SC-001 | macOS arm64 | `DOSKER_INTEGRATION=1` with `DOSKER_QEMU_IMAGE` and `DOSKER_QEMU`; `qemu_runtime` | pass, local (QEMU 11.1.1) and nightly run 44903500634 (QEMU 11.1.3) |
+| SC-001 | Windows x86_64 | `DOSKER_INTEGRATION=1` with `DOSKER_QEMU_IMAGE`, `DOSKER_QEMU`, `DOSKER_QEMU_VERSION=11.1.0`, and `DOSKER_QEMU_SHA256`; `windows_qemu_runtime` | pass, CI run 44902589361 |
+| SC-002 | Linux x86_64 | `DOSKER_INTEGRATION=1`; `qemu_build` | pass, CI run 44902589361 |
 | SC-003 | macOS arm64 | `DOSKER_INTEGRATION=1` with `DOSKER_DOSBOX_X`, `DOSKER_DOSBOX_X_VERSION=2026.10.01`, `DOSKER_DOSBOX_X_SHA256`, and `DOSKER_DOSBOX_X_IMAGE`; `dosbox_x_runtime` | pass |
-| SC-004 | all | `cargo test -p dosker-core --test lockfile` | pass |
-| SC-004 | Linux x86_64 | `DOSKER_INTEGRATION=1` for `qemu_freedos` | not run on this host |
-| SC-005 | all | `cargo test -p dosker-engine` and `cargo test -p dosker-cli --test cli_requires` | pass |
-| SC-006 | Linux x86_64 | workspace suite, then `qemu_runtime`, `qemu_volumes`, `qemu_freedos`, `qemu_run`, and `qemu_ports` | not run on this host |
-| SC-006 | macOS arm64 | workspace suite, then `qemu_runtime`, `qemu_volumes`, `qemu_run`, and `qemu_ports` | pass, local |
-| SC-007 | Linux x86_64 | `DOSKER_INTEGRATION=1` for `qemu_runtime` | not run on this host |
-| SC-007 | macOS arm64 | `DOSKER_INTEGRATION=1` for `qemu_runtime` | pass, local |
-| SC-007 | Windows x86_64 | `DOSKER_INTEGRATION=1` for `windows_qemu_runtime` | not run on this host |
-| Release workflow | GitHub-hosted runners | push `v0.1.0` or `workflow_dispatch` with `tag=v0.1.0` | not run; configuration linted, no publication |
-| Release artifacts | macOS arm64 | manual macOS commands from `docs/release.md` | built and verified locally |
-| Release artifacts | Linux x86_64 | manual Linux commands from `docs/release.md` | not run on this host |
-| Release artifacts | Windows x86_64 | manual Windows commands from `docs/release.md` | not run on this host |
+| SC-004 | all | `cargo test -p dosker-core --test lockfile` | pass, CI and local |
+| SC-004 | Linux x86_64 | `DOSKER_INTEGRATION=1` for `qemu_freedos` | pass, CI run 44902589361 |
+| SC-005 | all | `cargo test -p dosker-engine` and `cargo test -p dosker-cli --test cli_requires` | pass, CI and local |
+| SC-006 | Linux x86_64 | workspace suite, then `qemu_runtime`, `qemu_volumes`, `qemu_freedos`, `qemu_run`, and `qemu_ports` | pass, CI run 44902589361 |
+| SC-006 | macOS arm64 | workspace suite, then `qemu_runtime`, `qemu_volumes`, `qemu_run`, and `qemu_ports` | pass, local and nightly run 44903500634 |
+| SC-007 | Linux x86_64 | `DOSKER_INTEGRATION=1` for `qemu_runtime` | pass, CI run 44902589361 |
+| SC-007 | macOS arm64 | `DOSKER_INTEGRATION=1` for `qemu_runtime` | pass, local and nightly run 44903500634 |
+| SC-007 | Windows x86_64 | `DOSKER_INTEGRATION=1` for `windows_qemu_runtime` | pass, CI run 44902589361 |
+| Release workflow | GitHub-hosted runners | push `v0.1.0` or `workflow_dispatch` with `tag=v0.1.0` | pass; run 44904029239 published `v0.1.0` |
+| Release artifacts | Linux x86_64 | release workflow | published by the release workflow |
+| Release artifacts | macOS arm64 | release workflow | published by the release workflow; local build also verified |
+| Release artifacts | Windows x86_64 | release workflow | published by the release workflow |
+| Published checksums | macOS arm64 | `shasum -a 256 -c SHA256SUMS` | pass, all three archives |
 | Save/load | macOS arm64 | `cli_save_load` | pass |
 | Prune | macOS arm64 | `cli_system` | pass |
 | Engine discovery | macOS arm64 | `cli_engine_pins` and `dosker engines` | pass |
@@ -48,14 +49,15 @@ check is `pass` when its command exits 0 on that host.
 
 The release workflow publishes `dosker-0.1.0-linux-x86_64.tar.gz`,
 `dosker-0.1.0-macos-arm64.tar.gz`, `dosker-0.1.0-windows-x86_64.zip`, their
-`.sha256` files, and `SHA256SUMS` through `gh release create`. The
-`workflow_dispatch` input is `tag=v0.1.0`. None of these ran from the release
-workflow on this host.
+`.sha256` files, and `SHA256SUMS` through `gh release create`. Run 44904029239
+published them for `v0.1.0`. The three archives were downloaded from the
+release, `shasum -a 256 -c SHA256SUMS` passed, and `file` reported ELF 64-bit
+x86-64, Mach-O 64-bit arm64, and PE32+ x86-64. The macOS binary printed
+`dosker 0.1.0`.
 
-## Local record
+## Verification hosts
 
-Host: the macOS arm64 host is the only available release host (Darwin,
-arm64). Installed QEMU: `11.1.1`. Installed
+Local host: the macOS arm64 host is Darwin, arm64. Installed QEMU: `11.1.1`. Installed
 DOSBox-X: `2026.10.01` SDL2, checksum
 `6934abe66fe55d71487ded37e097416de65981250c902a9cca2bfd1284e98c96`.
 Installed Bochs: `3.1`, checksum
@@ -64,6 +66,12 @@ The optional Bochs gdbstub build is at `$HOME/bochs-gdbstub/bin/bochs`.
 The `SETBOOT.EXE` and `REBOOT.EXE` helpers came from the CI
 `dosker-agent-binaries` artifact; `agent/build.sh` produces the same files
 from `agent/test/setboot.c` and `agent/test/reboot.c`.
+
+CI hosts: GitHub-hosted `ubuntu-latest` with QEMU `10.2.1`, `macos-15` with
+Homebrew QEMU `11.1.3`, and `windows-latest` with QEMU `11.1.0` from the
+pinned Windows archive.
+
+### Local record
 
 | Command | Result | Evidence |
 | --- | --- | --- |
@@ -75,25 +83,32 @@ from `agent/test/setboot.c` and `agent/test/reboot.c`.
 | `cargo test -p dosker-cli --features mock-engine --test cli_system` | pass | prune |
 | `cargo test -p dosker-cli --test cli_engine_pins` | pass | engine pins |
 | `cargo test -p dosker-cli --test cli_engines` | pass | `engines` and `doctor` |
-| `DOSKER_INTEGRATION=1` `qemu_runtime` | pass | SC-001 and SC-007 on macOS arm64 |
+| `DOSKER_INTEGRATION=1` `qemu_runtime` | pass | SC-001 and SC-007 on macOS arm64; QEMU 11.1.1 |
 | `DOSKER_INTEGRATION=1` `qemu_volumes` | pass | SC-006 on macOS arm64 |
 | `DOSKER_INTEGRATION=1` `qemu_ports` | pass | SC-006 on macOS arm64 |
 | `DOSKER_INTEGRATION=1` `dosbox_x_runtime` | pass | SC-003 |
 | `DOSKER_INTEGRATION=1` `bochs_runtime` | pass | Bochs runtime evidence |
 | `DOSKER_INTEGRATION=1` `gdbstub_build` | pass | optional Bochs gdbstub build |
 | `DOSKER_INTEGRATION=1` `qemu_run` | pass | SC-006 in-DOS RUN and guest reboot |
-| `qemu_freedos` | not run on this host | Linux suite; no FreeDOS source gate |
-| `windows_qemu_runtime` | not run on this host | no Windows x86_64 host |
 | `actionlint` | pass | release, CI, and nightly workflows |
 | macOS manual release commands | built and verified locally | `dosker-0.1.0-macos-arm64.tar.gz` |
-| `shasum -a 256 -c SHA256SUMS` | pass | local macOS-only manifest |
-| extracted `dosker --version` and `dosker doctor` | pass | `dosker 0.1.0`; QEMU, DOSBox-X, Bochs found |
+| published `SHA256SUMS` | pass | all three archives; macOS `dosker --version` prints `dosker 0.1.0` |
 
-The macOS artifact is unsigned. The binary has only the ad-hoc linker
-signature from the local build, and no Developer ID identity or notarization.
-The artifact name is `dosker-0.1.0-macos-arm64.tar.gz`. The local
-`SHA256SUMS` lists only this archive because the Linux and Windows archives
-were not built on this host.
+### CI record
+
+| Run | Result | Evidence |
+| --- | --- | --- |
+| CI run 44902589361 | pass | `fmt`, `preflight`, `test` on Ubuntu, macOS, and Windows, `agent-build`, `agent-qemu`, `windows-qemu`, and FreeDOS determinism |
+| `agent-qemu` | pass | `qemu_runtime`, `qemu_volumes`, `qemu_freedos`, `qemu_build`, `qemu_run`, and `qemu_ports`; QEMU 10.2.1 |
+| `windows-qemu` | pass | `windows_qemu_runtime`; QEMU 11.1.0 |
+| `test (windows-latest)` | pass | unit, mock, adapter, transport, and detached lifecycle suites |
+| QEMU nightly run 44903500634 | pass | Homebrew QEMU 11.1.3 pin; `qemu_runtime`, `qemu_volumes`, `qemu_run`, and `qemu_ports` |
+| Release run 44904029239 | pass | published `v0.1.0`, all archives, `.sha256` files, and `SHA256SUMS` |
+
+The published artifacts are unsigned. The macOS binary has only the ad-hoc
+linker signature from the build, and no Developer ID identity or
+notarization. The release notes state `unsigned` for all three hosts. The
+published `SHA256SUMS` covers all three archives.
 
 ## Waived and narrowed prerequisites
 
@@ -102,20 +117,18 @@ are optional and unsigned artifacts are the default. The macOS and Windows
 signing steps are skipped when their secrets are absent.
 
 The Linux QEMU version pin is narrowed to the opt-in `DOSKER_QEMU_VERSION`.
-Linux records the installed `qemu-system-i386 --version`; macOS and Windows
-enforce the exact release pin. The roadmap is left unchanged. The roadmap
-sentence `Engine discovery works on Linux, macOS, and Windows with pinned versions.` is narrowed on Linux as described here.
+Linux records the installed `qemu-system-i386 --version`; macOS enforces the
+exact `11.1.3` release pin, and Windows enforces the exact `11.1.0` release
+pin with its checksum. The roadmap is left unchanged; this acceptance records
+the waiver and the narrowing. The roadmap sentence `Engine discovery works on Linux, macOS, and Windows with pinned versions.` is narrowed on Linux as described here.
+
+## Resolved findings
+
+- The Windows volume suites initially failed because holder metadata lived in
+  the locked `.lock` file. The store now writes `holder.json`, and the Windows
+  unit and mock suites pass.
 
 ## Gaps
 
-- No Linux x86_64 host is available. This gates the Linux artifact,
-  SC-001 on Linux, SC-002, SC-004 on Linux, SC-006 on Linux, and SC-007 on
-  Linux.
-- No Windows x86_64 host is available. This gates the Windows artifact,
-  SC-001 on Windows, and SC-007 on Windows.
-- The local QEMU is `11.1.1`. The nightly `DOSKER_QEMU_VERSION=11.1.3` pin was
-  not run on this host.
-- No release workflow run is recorded. The workflow was checked with
-  `actionlint`, but no artifact is `published by the release workflow`.
-- No signing secrets are available. The macOS artifact is unsigned, as
-  stated in the release notes and `docs/install.md`.
+No open gaps. Signing credentials remain optional and waived, so the published
+artifacts are unsigned.

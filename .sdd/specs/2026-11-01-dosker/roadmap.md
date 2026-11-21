@@ -369,7 +369,7 @@ images, and stale cache entries, checksum-verified engine discovery, and the
 MIT or Apache-2.0 dual license files. Out of scope: a registry, compose files,
 and a shared L2 network.
 
-- **Status:** In Progress
+- **Status:** Implemented
 - **Depends on:** Slices 1 to 12.
 - **Requirements:** FR-020, FR-021, and the release-facing parts of the
   design.

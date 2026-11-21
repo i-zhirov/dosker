@@ -892,21 +892,24 @@ The release workflow job names are `version`, `linux-x86_64`, `macos-arm64`,
 
 ## Deviations
 
-- The release ran with the local and unsigned fallbacks. No release workflow
-  run and no signing credentials were available. The macOS artifact was built
-  and verified locally and recorded as unsigned in
-  `docs/release-acceptance.md`.
-- The local QEMU is `11.1.1`, so the nightly `DOSKER_QEMU_VERSION=11.1.3` pin
-  was not run. The QEMU runtime suites ran locally without the environment
-  pin. DOSBox-X `2026.10.01` and Bochs `3.1` matched the reference checksums,
-  so their suites ran with the reference pins.
+- Release workflow run 44904029239 published `v0.1.0` with unsigned Linux,
+  macOS, and Windows artifacts, their `.sha256` files, and `SHA256SUMS`. The
+  macOS artifact was also built and verified locally earlier.
+- The local QEMU is `11.1.1`. The nightly macOS run 44903500634 installed
+  Homebrew QEMU `11.1.3`, matched the pin, and passed the runtime, volume,
+  RUN, and port suites. DOSBox-X `2026.10.01` and Bochs `3.1` matched the
+  reference checksums, so their suites ran with the reference pins.
 - The first `qemu_run` attempt did not run because the local helper binaries
   were absent. The project's CI-built `SETBOOT.EXE` and `REBOOT.EXE` were then
   placed in `agent/build`, and the suite passed on macOS arm64.
-- No Linux or Windows host was available. Their artifacts and suites are
-  recorded as `not run on this host`, and the roadmap slice and design stay
-  `In Progress` and `Approved` because the Definition Of Done is not
-  confirmed.
+- Linux and Windows were verified on GitHub-hosted runners. CI run 44902589361
+  passed the Linux and Windows unit, mock, adapter, and QEMU suites, including
+  the new `qemu_build` step. The roadmap slice is now `Implemented`.
+- The Windows volume suites exposed holder metadata inside the locked `.lock`
+  file. Holders now live in `holder.json`, and the Windows unit and mock suites
+  pass.
+- The published archives were downloaded and `shasum -a 256 -c SHA256SUMS`
+  passed. The macOS binary reported `dosker 0.1.0`.
 - The release workflow permissions use valid YAML block mappings. The literal
   strings required by the plan's `rg` checks appear in comments.
 - `tar` was added to the `dosker-cli` dev-dependencies for the corrupt-archive
