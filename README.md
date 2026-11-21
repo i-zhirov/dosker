@@ -6,9 +6,66 @@ x86_64, with a DOS serial agent for command execution and file transfer.
 
 ## Install
 
-Install a release artifact for Linux x86_64, macOS arm64, or Windows x86_64,
-verify its checksum, and run `dosker doctor`. See
-[Install](docs/install.md) for the steps.
+The `v0.1.0` release has artifacts for Linux x86_64, macOS arm64, and Windows
+x86_64. Download the archive for your host and `SHA256SUMS` from the
+[`v0.1.0` release](https://github.com/i-zhirov/dosker/releases/tag/v0.1.0).
+
+The artifacts are unsigned. See [Install](docs/install.md) for engine setup,
+`PATH` changes, and signing details.
+
+### Linux x86_64
+
+```sh
+curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.0/dosker-0.1.0-linux-x86_64.tar.gz
+curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.0/SHA256SUMS
+grep 'dosker-0.1.0-linux-x86_64.tar.gz$' SHA256SUMS | sha256sum -c -
+tar -xzf dosker-0.1.0-linux-x86_64.tar.gz
+sudo install -m 0755 dosker /usr/local/bin/dosker
+sudo apt-get install -y qemu-system-x86
+dosker --version
+dosker doctor
+```
+
+Run the `grep` command in the directory that holds the archive. `SHA256SUMS`
+lists all three artifacts, so the command selects the Linux line only. The
+command must print `OK`. The `apt-get` command is for Debian or Ubuntu. Use the
+QEMU package for your distribution.
+
+### macOS arm64
+
+```sh
+curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.0/dosker-0.1.0-macos-arm64.tar.gz
+curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.0/SHA256SUMS
+grep 'dosker-0.1.0-macos-arm64.tar.gz$' SHA256SUMS | shasum -a 256 -c -
+tar -xzf dosker-0.1.0-macos-arm64.tar.gz
+xattr -d com.apple.quarantine dosker 2>/dev/null || true
+sudo install -m 0755 dosker /usr/local/bin/dosker
+brew install qemu bochs
+dosker --version
+dosker doctor
+```
+
+Run the `grep` command in the directory that holds the archive. `SHA256SUMS`
+lists all three artifacts, so the command selects the macOS line only. The
+command must print `OK`. The `xattr` command removes the quarantine flag when
+Gatekeeper blocks the unsigned binary. Install DOSBox-X from the official
+release or Homebrew if you need that engine.
+
+### Windows x86_64
+
+```powershell
+Invoke-WebRequest -Uri https://github.com/i-zhirov/dosker/releases/download/v0.1.0/dosker-0.1.0-windows-x86_64.zip -OutFile dosker-0.1.0-windows-x86_64.zip
+Invoke-WebRequest -Uri https://github.com/i-zhirov/dosker/releases/download/v0.1.0/SHA256SUMS -OutFile SHA256SUMS
+$expected = (Get-Content SHA256SUMS | Where-Object { $_ -match 'dosker-0.1.0-windows-x86_64\.zip$' }).Split()[0]
+$actual = (Get-FileHash -Algorithm SHA256 .\dosker-0.1.0-windows-x86_64.zip).Hash.ToLower()
+if ($actual -ne $expected) { throw 'Checksum mismatch' }
+Expand-Archive -Path .\dosker-0.1.0-windows-x86_64.zip -DestinationPath .\dosker
+.\dosker\dosker.exe --version
+.\dosker\dosker.exe doctor
+```
+
+Run the commands from the download directory. The PowerShell script throws
+`Checksum mismatch` when the archive hash differs from `SHA256SUMS`.
 
 ## CI setup
 
