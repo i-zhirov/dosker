@@ -26,6 +26,7 @@ pub fn render_config(
     push_header(&mut config, "[dosbox]");
     config.push_str("machine = svga_s3\n");
     config.push_str("memsize = 16\n");
+    config.push_str("quit warning = false\n");
     if capabilities().contains(Capability::DebugNative) {
         let port = debug_port(endpoints)?;
         writeln!(config, "mcp_server = {port}").expect("write to a string");
