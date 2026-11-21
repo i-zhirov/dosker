@@ -92,6 +92,22 @@ fn renders_the_default_machine_keys() {
 }
 
 #[test]
+fn renders_a_disabled_quit_warning() {
+    let dir = tempfile::tempdir().expect("create temp directory");
+    let spec = sample_spec(dir.path());
+    let endpoints = DosboxXEndpoints::for_spec(&spec).expect("resolve endpoints");
+    let config = render_config(&spec, &endpoints).expect("render config");
+
+    let dosbox = line_index(&config, "[dosbox]");
+    let quit = line_index(&config, "quit warning = false");
+    let cpu = line_index(&config, "[cpu]");
+    assert!(
+        dosbox < quit && quit < cpu,
+        "quit warning belongs in the [dosbox] section:\n{config}"
+    );
+}
+
+#[test]
 fn renders_both_serial_ports() {
     let dir = tempfile::tempdir().expect("create temp directory");
     let mut spec = sample_spec(dir.path());
