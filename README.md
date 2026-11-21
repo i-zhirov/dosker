@@ -70,9 +70,10 @@ job is slower and runs nightly.
 
 DOSker stores images in the local OCI layout and provides `image import`,
 `images`, `tag`, `rmi`, `save`, and `load`. `dosker save` writes a tagged image
-to an OCI image-layout tar and `dosker load` restores its tags. See
-[Images](docs/images.md) for the store layout, the media types, and the
-untag-only `rmi` behavior.
+to an OCI image-layout tar and `dosker load` restores its tags.
+`dosker system prune` removes stopped containers, untagged images, and stale
+cache entries. See [Images](docs/images.md) for the store layout, the media
+types, and the untag-only `rmi` behavior.
 
 ### Engines
 

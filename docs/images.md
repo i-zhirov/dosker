@@ -83,6 +83,14 @@ is `name-tag.tar` in the current directory. The tar has the members
 tag. A failed load writes no tag. A load may leave unreferenced
 content-addressed blobs, and they do not affect a later load.
 
+## Prune
+
+`dosker system prune` removes containers in `created`, `stopped`, `exited`, or
+`failed` state, untagged manifests that no remaining container references, and
+cache records with a missing or corrupt layer blob or an unsupported schema. It
+keeps running containers, tagged images, images used by a remaining container,
+volumes, and valid cache records.
+
 ## Boot metadata
 
 A layer may carry a boot override. The effective boot is the last non-null
