@@ -817,7 +817,7 @@ impl OciStore {
         Ok((descriptor, manifest, config))
     }
 
-    fn load_index(&self) -> Result<Index, ImageError> {
+    pub(crate) fn load_index(&self) -> Result<Index, ImageError> {
         let path = self.layout_dir().join("index.json");
         match fs::read(&path) {
             Ok(bytes) => {
@@ -834,7 +834,7 @@ impl OciStore {
         }
     }
 
-    fn write_index(&self, index: &Index) -> Result<(), ImageError> {
+    pub(crate) fn write_index(&self, index: &Index) -> Result<(), ImageError> {
         self.ensure_layout()?;
         write_atomic(
             &self.layout_dir().join("index.json"),

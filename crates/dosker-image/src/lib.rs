@@ -1,5 +1,6 @@
 //! Image references, FAT image access, and the local image store.
 
+pub mod archive;
 pub mod boot;
 pub mod cache;
 pub mod canonical;
@@ -19,6 +20,9 @@ pub mod reference;
 pub mod tree;
 pub mod volume;
 
+pub use archive::{
+    ARCHIVE_MODE, ARCHIVE_MTIME_SECONDS, LoadReport, SaveReport, load_image, save_image,
+};
 pub use boot::{BlobRef, BootLayout, BootMetadata, FatType, Geometry};
 pub use cache::{CacheKeyInput, CacheRecord, CacheStore, cache_key};
 pub use canonical::{canonical_digest, canonical_json, sha256_digest};
