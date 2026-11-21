@@ -26,8 +26,7 @@ const BOCHS_VERSION_LINE: &str = "Bochs x86 Emulator 3.1";
 #[cfg(unix)]
 const BOCHS_CAPABILITIES: &str = "boot,serial,stop,headless,debug_native";
 #[cfg(unix)]
-const SECURITY: &str =
-    "security: DOSker does not sandbox untrusted images; use an outer VM for untrusted input.";
+const SECURITY: &str = "security: DOSker does not sandbox untrusted images; QEMU TCG is not a security boundary; use an outer VM for untrusted input.";
 #[cfg(unix)]
 const DEVELOPMENT_WARNING: &str = "development mode: --bind uses QEMU vvfat (beta) and can corrupt host files. Use it for development only, never in CI.";
 
