@@ -1,6 +1,7 @@
 mod common;
 
 use std::fs;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use chrono::{TimeZone, Utc};
@@ -9,6 +10,7 @@ use dosker_core::{ContainerId, Status};
 use dosker_image::{
     CacheRecord, CacheStore, ImageDigest, ImageRef, ImageReference, OciStore, sha256_digest,
 };
+#[cfg(unix)]
 use dosker_platform::process::{ProcessSupervisor, system};
 
 fn prune(root: &CliRoot) -> std::process::Output {

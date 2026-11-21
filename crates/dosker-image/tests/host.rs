@@ -14,6 +14,7 @@ fn write_file(root: &Path, relative: &str, bytes: &[u8]) -> PathBuf {
     path
 }
 
+#[cfg(unix)]
 fn write_dir(root: &Path, relative: &str) -> PathBuf {
     let path = root.join(relative);
     fs::create_dir_all(&path).expect("create the directory");

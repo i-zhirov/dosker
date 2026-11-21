@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use dosker_core::ContainerId;
