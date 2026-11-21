@@ -174,6 +174,11 @@ The `agent-build` job uploads `DOSKER.EXE`, `EXITCODE.EXE`, `SETBOOT.EXE`, and `
 the FreeDOS image, and runs the QEMU conformance and self-check scripts. It
 then runs the Rust QEMU runtime suite.
 
+## Security
+
+DOSker does not sandbox untrusted images. QEMU TCG is not a security boundary.
+Use an outer virtual machine or an isolated CI runner for untrusted input.
+
 ## Documentation
 
 - [Design](.sdd/specs/2026-11-01-dosker/design.md)

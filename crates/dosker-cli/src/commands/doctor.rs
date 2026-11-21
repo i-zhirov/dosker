@@ -11,8 +11,7 @@ use crate::context::Context;
 use crate::error::CliError;
 
 const DEVELOPMENT_MODE_WARNING: &str = "development mode: --bind uses QEMU vvfat (beta) and can corrupt host files. Use it for development only, never in CI.";
-const SECURITY_STATEMENT: &str =
-    "security: DOSker does not sandbox untrusted images; use an outer VM for untrusted input.";
+const SECURITY_STATEMENT: &str = "security: DOSker does not sandbox untrusted images; QEMU TCG is not a security boundary; use an outer VM for untrusted input.";
 
 pub fn execute(_args: DoctorArgs, context: &mut Context) -> Result<u8, CliError> {
     let root = context.paths.root().to_path_buf();

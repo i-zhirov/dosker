@@ -79,5 +79,6 @@ cargo test -p dosker-cli --features qemu-engine \
 
 ## Security
 
-DOSker does not sandbox untrusted images. Run untrusted images in an outer
-virtual machine.
+DOSker does not sandbox untrusted images. QEMU TCG is not a security
+boundary. Use an outer virtual machine or an isolated CI runner for
+untrusted input.
