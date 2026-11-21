@@ -51,6 +51,8 @@ pub enum Command {
     Images(ImagesArgs),
     Rmi(RmiArgs),
     Tag(TagArgs),
+    Save(SaveArgs),
+    Load(LoadArgs),
     Engines(EnginesArgs),
     Doctor(DoctorArgs),
     #[command(name = "__supervise", hide = true)]
@@ -237,6 +239,21 @@ pub struct RmiArgs {
 pub struct TagArgs {
     pub source: String,
     pub target: String,
+}
+
+/// Arguments for `save`.
+#[derive(Debug, Args)]
+pub struct SaveArgs {
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    pub image: String,
+}
+
+/// Arguments for `load`.
+#[derive(Debug, Args)]
+pub struct LoadArgs {
+    pub file: PathBuf,
 }
 
 /// Arguments for `engines`.
@@ -474,6 +491,14 @@ fn dispatch(command: Command) -> Result<u8, CliError> {
         Command::Tag(args) => {
             let mut context = Context::load()?;
             commands::tag::execute(args, &mut context)
+        }
+        Command::Save(args) => {
+            let mut context = Context::load()?;
+            commands::save::execute(args, &mut context)
+        }
+        Command::Load(args) => {
+            let mut context = Context::load()?;
+            commands::load::execute(args, &mut context)
         }
         Command::Engines(args) => {
             let mut context = Context::load()?;

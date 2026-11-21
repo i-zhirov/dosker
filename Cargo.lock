@@ -308,6 +308,7 @@ dependencies = [
  "dosker-test-support",
  "fatfs",
  "serde_json",
+ "tar",
  "tempfile",
  "thiserror",
 ]

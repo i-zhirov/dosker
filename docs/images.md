@@ -68,6 +68,21 @@ A digest that still has a tag returns `ImageInUse`; remove its tags first.
 Image import, tag, and remove take an exclusive `images/.lock` while they
 update the index, so concurrent mutations are serialized.
 
+## Save and load
+
+```sh
+dosker save [-o FILE] name:tag
+dosker load FILE
+```
+
+`save` writes one tagged image to an OCI image-layout tar. The default output
+is `name-tag.tar` in the current directory. The tar has the members
+`oci-layout`, `index.json`, and `blobs/sha256/<hex>`.
+
+`load` restores every tag named by the archive index and replaces an existing
+tag. A failed load writes no tag. A load may leave unreferenced
+content-addressed blobs, and they do not affect a later load.
+
 ## Boot metadata
 
 A layer may carry a boot override. The effective boot is the last non-null
