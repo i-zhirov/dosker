@@ -32,3 +32,4 @@ dosker-test-support = { workspace = true, optional = true }
 dosker-test-support.workspace = true
 tempfile.workspace = true
 fatfs.workspace = true
+tar.workspace = true
