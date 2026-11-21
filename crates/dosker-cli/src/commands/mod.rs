@@ -25,5 +25,6 @@ pub mod start;
 pub mod status;
 pub mod stop;
 pub mod supervise;
+pub mod system;
 pub mod tag;
 pub mod volume;

@@ -53,6 +53,7 @@ pub enum Command {
     Tag(TagArgs),
     Save(SaveArgs),
     Load(LoadArgs),
+    System(SystemArgs),
     Engines(EnginesArgs),
     Doctor(DoctorArgs),
     #[command(name = "__supervise", hide = true)]
@@ -255,6 +256,23 @@ pub struct SaveArgs {
 pub struct LoadArgs {
     pub file: PathBuf,
 }
+
+/// Arguments for `system`.
+#[derive(Debug, Args)]
+pub struct SystemArgs {
+    #[command(subcommand)]
+    pub command: SystemCommand,
+}
+
+/// The system subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SystemCommand {
+    Prune(PruneArgs),
+}
+
+/// Arguments for `system prune`.
+#[derive(Debug, Args)]
+pub struct PruneArgs {}
 
 /// Arguments for `engines`.
 #[derive(Debug, Args)]
@@ -499,6 +517,10 @@ fn dispatch(command: Command) -> Result<u8, CliError> {
         Command::Load(args) => {
             let mut context = Context::load()?;
             commands::load::execute(args, &mut context)
+        }
+        Command::System(args) => {
+            let mut context = Context::load()?;
+            commands::system::execute(args, &mut context, &SystemProbe::new(), Utc::now())
         }
         Command::Engines(args) => {
             let mut context = Context::load()?;
