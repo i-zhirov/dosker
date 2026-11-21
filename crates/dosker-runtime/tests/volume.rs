@@ -200,7 +200,10 @@ fn the_holder_is_stored_in_a_separate_file() {
 
     let loaded = store.load("data").unwrap();
     assert_eq!(
-        loaded.attached.expect("the volume is attached").container_name,
+        loaded
+            .attached
+            .expect("the volume is attached")
+            .container_name,
         "other"
     );
 }
