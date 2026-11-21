@@ -126,6 +126,15 @@ jobs:
               exit 1
             fi
           done
+      - name: Check QEMU discovery
+        run: |
+          set -euo pipefail
+          output="$(cargo run -p dosker-cli --features qemu-engine --bin dosker -- engines)"
+          printf '%s\n' "$output"
+          if ! printf '%s\n' "$output" | grep -q '^qemu '; then
+            printf '::error::qemu was not discovered\n' >&2
+            exit 1
+          fi
       - name: Download the DOS agent binaries
         uses: actions/download-artifact@v4
         with:
@@ -363,6 +372,16 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "DOSKER_QEMU=$($binary.FullName)"
           Add-Content -Path $env:GITHUB_ENV -Value "DOSKER_QEMU_SHA256=$binarySha256"
           Add-Content -Path $env:GITHUB_ENV -Value "DOSKER_QEMU_VERSION=$($env:DOSKER_WINDOWS_QEMU_VERSION)"
+      - name: Check QEMU discovery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $output = & cargo run -p dosker-cli --features qemu-engine --bin dosker -- engines 2>&1 | Out-String
+          Write-Output $output
+          if ($output -notmatch ('qemu ' + [regex]::Escape($env:DOSKER_QEMU_VERSION))) {
+            Write-Error "qemu $($env:DOSKER_QEMU_VERSION) was not discovered"
+            exit 1
+          }
       - name: Download the prepared image
         shell: pwsh
         env:

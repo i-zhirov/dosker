@@ -66,6 +66,8 @@ jobs:
     runs-on: macos-15
     needs: [preflight, agent-build]
     timeout-minutes: 60
+    env:
+      DOSKER_QEMU_VERSION: "11.1.3"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.98.1
@@ -73,7 +75,29 @@ jobs:
           components: rustfmt, clippy
       - name: Install QEMU
         run: brew install qemu
+      - name: Verify the QEMU version pin
+        run: |
+          set -euo pipefail
+          expected="11.1.3"
+          found="$(qemu-system-i386 --version | head -n 1)"
+          printf 'expected QEMU %s, found %s\n' "$expected" "$found"
+          case "$found" in
+            *"$expected"*) ;;
+            *)
+              printf '::error::expected QEMU %s, found %s\n' "$expected" "$found" >&2
+              exit 1
+              ;;
+          esac
       - uses: Swatinem/rust-cache@v2
+      - name: Check engine discovery
+        run: |
+          set -euo pipefail
+          output="$(cargo run -p dosker-cli --features qemu-engine --bin dosker -- engines)"
+          printf '%s\n' "$output"
+          if ! printf '%s\n' "$output" | grep -q '^qemu 11\.1\.3 '; then
+            printf '::error::qemu 11.1.3 was not discovered\n' >&2
+            exit 1
+          fi
       - name: Download the prepared image
         env:
           DOSKER_QEMU_IMAGE_URL: ${{ vars.DOSKER_QEMU_IMAGE_URL }}
@@ -157,11 +181,13 @@ jobs:
         env:
           DOSKER_INTEGRATION: "1"
           DOSKER_QEMU: qemu-system-i386
+          DOSKER_QEMU_VERSION: "11.1.3"
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_runtime -- --nocapture
       - name: Rust volume attach suite
         env:
           DOSKER_INTEGRATION: "1"
           DOSKER_QEMU: qemu-system-i386
+          DOSKER_QEMU_VERSION: "11.1.3"
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_volumes -- --nocapture
       - name: Verify the downloaded RUN test helpers
         run: |
@@ -176,9 +202,11 @@ jobs:
         env:
           DOSKER_INTEGRATION: "1"
           DOSKER_QEMU: qemu-system-i386
+          DOSKER_QEMU_VERSION: "11.1.3"
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_run -- --nocapture
       - name: Rust published port suite
         env:
           DOSKER_INTEGRATION: "1"
           DOSKER_QEMU: qemu-system-i386
+          DOSKER_QEMU_VERSION: "11.1.3"
         run: cargo test -p dosker-cli --features qemu-engine --test qemu_ports -- --nocapture
