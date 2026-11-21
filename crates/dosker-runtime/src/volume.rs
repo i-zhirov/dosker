@@ -1,7 +1,7 @@
 //! Named volume images, their metadata, and their exclusive attachment lock.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
@@ -53,14 +53,12 @@ pub struct Volume {
 #[derive(Debug)]
 pub struct VolumeLock {
     file: File,
-    #[allow(dead_code)]
-    holder: VolumeHolder,
+    holder_path: PathBuf,
 }
 
 impl Drop for VolumeLock {
     fn drop(&mut self) {
-        let _ = self.file.set_len(0);
-        let _ = self.file.flush();
+        let _ = fs::remove_file(&self.holder_path);
         let _ = FileExt::unlock(&self.file);
     }
 }
@@ -206,13 +204,14 @@ impl VolumeStore {
 
         let lock_path = self.paths.volume_lock(parsed.as_str());
         match OpenOptions::new().read(true).write(true).open(&lock_path) {
-            Ok(mut file) => match FileExt::try_lock_exclusive(&file) {
+            Ok(file) => match FileExt::try_lock_exclusive(&file) {
                 Ok(()) => {
                     let _ = FileExt::unlock(&file);
                     drop(file);
                 }
                 Err(_) => {
-                    let holder = read_holder(&mut file, &lock_path)?;
+                    drop(file);
+                    let holder = read_holder(&self.paths.volume_holder(parsed.as_str()))?;
                     return Err(VolumeError::InUse {
                         name: parsed.as_str().to_owned(),
                         holder,
@@ -236,7 +235,7 @@ impl VolumeStore {
     pub fn acquire(&self, name: &str, holder: VolumeHolder) -> Result<VolumeLock, VolumeError> {
         let parsed = check_name(name)?;
         let path = self.paths.volume_lock(parsed.as_str());
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
@@ -251,19 +250,21 @@ impl VolumeStore {
             })?;
 
         if FileExt::try_lock_exclusive(&file).is_err() {
-            let holder = read_holder(&mut file, &path)?;
+            drop(file);
+            let holder = read_holder(&self.paths.volume_holder(parsed.as_str()))?;
             return Err(VolumeError::InUse {
                 name: parsed.as_str().to_owned(),
                 holder,
             });
         }
 
-        if let Err(error) = write_holder(&mut file, &path, &holder) {
+        let holder_path = self.paths.volume_holder(parsed.as_str());
+        if let Err(error) = write_holder(&holder_path, &holder) {
             let _ = FileExt::unlock(&file);
             return Err(error);
         }
 
-        Ok(VolumeLock { file, holder })
+        Ok(VolumeLock { file, holder_path })
     }
 
     /// Replaces the dirty flag of a volume.
@@ -313,7 +314,7 @@ impl VolumeStore {
 
     fn attached_holder(&self, name: &str) -> Result<Option<VolumeHolder>, VolumeError> {
         let path = self.paths.volume_lock(name);
-        let mut file = match OpenOptions::new().read(true).write(true).open(&path) {
+        let file = match OpenOptions::new().read(true).write(true).open(&path) {
             Ok(file) => file,
             Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(source) => return Err(io_error(&path, source)),
@@ -324,7 +325,10 @@ impl VolumeStore {
                 let _ = FileExt::unlock(&file);
                 Ok(None)
             }
-            Err(_) => Ok(Some(read_holder(&mut file, &path)?)),
+            Err(_) => {
+                drop(file);
+                Ok(Some(read_holder(&self.paths.volume_holder(name))?))
+            }
         }
     }
 }
@@ -333,20 +337,23 @@ fn check_name(name: &str) -> Result<ContainerName, VolumeError> {
     ContainerName::parse(name).map_err(|_| VolumeError::InvalidName(name.to_owned()))
 }
 
-fn read_holder(file: &mut File, path: &Path) -> Result<VolumeHolder, VolumeError> {
-    let mut message = String::from("the lock file is empty");
+fn read_holder(path: &Path) -> Result<VolumeHolder, VolumeError> {
+    let mut message = String::from("the holder file is empty");
     for attempt in 0..=HOLDER_READ_RETRIES {
         if attempt > 0 {
             thread::sleep(HOLDER_READ_RETRY_DELAY);
         }
-        file.seek(SeekFrom::Start(0))
-            .map_err(|source| io_error(path, source))?;
-        let mut text = String::new();
-        file.read_to_string(&mut text)
-            .map_err(|source| io_error(path, source))?;
+        let text = match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(source) if source.kind() == io::ErrorKind::NotFound => {
+                message = "the holder file is empty".to_owned();
+                continue;
+            }
+            Err(source) => return Err(io_error(path, source)),
+        };
         let text = text.trim();
         if text.is_empty() {
-            message = "the lock file is empty".to_owned();
+            message = "the holder file is empty".to_owned();
             continue;
         }
         match serde_json::from_str(text) {
@@ -357,22 +364,18 @@ fn read_holder(file: &mut File, path: &Path) -> Result<VolumeHolder, VolumeError
 
     Err(VolumeError::InvalidMeta {
         path: path.to_path_buf(),
-        message: format!("invalid volume lock: {message}"),
+        message: format!("invalid volume holder: {message}"),
     })
 }
 
-fn write_holder(file: &mut File, path: &Path, holder: &VolumeHolder) -> Result<(), VolumeError> {
-    file.set_len(0).map_err(|source| io_error(path, source))?;
-    file.seek(SeekFrom::Start(0))
-        .map_err(|source| io_error(path, source))?;
+fn write_holder(path: &Path, holder: &VolumeHolder) -> Result<(), VolumeError> {
     let mut bytes = serde_json::to_vec(holder).map_err(|error| VolumeError::InvalidMeta {
         path: path.to_path_buf(),
         message: error.to_string(),
     })?;
     bytes.push(b'\n');
-    file.write_all(&bytes)
-        .map_err(|source| io_error(path, source))?;
-    file.flush().map_err(|source| io_error(path, source))
+    write_atomic(path, &bytes)?;
+    Ok(())
 }
 
 fn io_error(path: &Path, source: io::Error) -> VolumeError {

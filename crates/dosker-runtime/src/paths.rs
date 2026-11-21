@@ -13,6 +13,7 @@ const VOLUMES_DIR: &str = "volumes";
 const VOLUME_IMAGE: &str = "volume.img";
 const VOLUME_META: &str = "meta.json";
 const VOLUME_LOCK: &str = ".lock";
+const VOLUME_HOLDER: &str = "holder.json";
 
 /// The paths of the runtime data root and its container entries.
 #[derive(Clone, Debug)]
@@ -105,5 +106,10 @@ impl RuntimePaths {
     /// Returns the lock file of a volume.
     pub fn volume_lock(&self, name: &str) -> PathBuf {
         self.volume_dir(name).join(VOLUME_LOCK)
+    }
+
+    /// Returns the holder file of a volume.
+    pub fn volume_holder(&self, name: &str) -> PathBuf {
+        self.volume_dir(name).join(VOLUME_HOLDER)
     }
 }
