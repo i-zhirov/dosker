@@ -4,6 +4,12 @@ DOSker is a Docker-like system for pre-configured DOS systems. The host
 runtime runs QEMU containers on Linux x86_64, macOS arm64, and Windows
 x86_64, with a DOS serial agent for command execution and file transfer.
 
+## Install
+
+Install a release artifact for Linux x86_64, macOS arm64, or Windows x86_64,
+verify its checksum, and run `dosker doctor`. See
+[Install](docs/install.md) for the steps.
+
 ## CI setup
 
 The CI workflow is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
@@ -186,6 +192,7 @@ DOSker is dual-licensed under the MIT License or the Apache License 2.0
 
 ## Documentation
 
+- [Install](docs/install.md)
 - [Design](.sdd/specs/2026-11-01-dosker/design.md)
 - [Agent protocol](.sdd/specs/2026-11-01-dosker/contracts/agent-protocol.md)
 - [Roadmap](.sdd/specs/2026-11-01-dosker/roadmap.md)
