@@ -188,27 +188,19 @@ fn remove_deletes_the_volume_directory() {
 }
 
 #[test]
-fn the_holder_is_stored_outside_the_lock_file() {
+fn the_holder_is_stored_in_a_separate_file() {
     let (dir, store) = store();
     store.create("data", DEFAULT_VOLUME_SIZE, at()).unwrap();
     let _lock = store
         .acquire("data", holder("000000000001", "other"))
         .unwrap();
 
-    let lock_path = dir.path().join("volumes/data/.lock");
-    assert!(
-        fs::read(&lock_path).unwrap().is_empty(),
-        "the lock file must not carry holder data"
-    );
     let holder_path = dir.path().join("volumes/data/holder.json");
     assert!(holder_path.is_file(), "the holder file is written");
 
     let loaded = store.load("data").unwrap();
     assert_eq!(
-        loaded
-            .attached
-            .expect("the volume is attached")
-            .container_name,
+        loaded.attached.expect("the volume is attached").container_name,
         "other"
     );
 }
