@@ -159,6 +159,10 @@ capability.
 
 ## Discovery
 
+- `DOSKER_QEMU` overrides the program name. The default is `qemu-system-i386`.
+- `DOSKER_QEMU_VERSION` pins the exact QEMU version. It is opt-in on Linux,
+  where the distribution QEMU version is reported rather than pinned.
+- `DOSKER_QEMU_SHA256` pins the checksum.
 - `DOSKER_DOSBOX_X` overrides the program name. The default is `dosbox-x`.
 - `DOSKER_DOSBOX_X_VERSION` pins the exact version.
 - `DOSKER_DOSBOX_X_SHA256` pins the checksum.
@@ -177,6 +181,26 @@ The reference checksum is:
 ```text
 8c1d38ac5fe8dba981fc9c7321ec46723324fdaa6cb39f01e86d4afab08c447c
 ```
+
+### Release engine pins
+
+| Engine | Version | Checksum variable | Checksum |
+| --- | --- | --- | --- |
+| QEMU | `11.1.3` | `DOSKER_QEMU_SHA256` | Managed or official builds. The Windows installer uses `DOSKER_WINDOWS_QEMU_SHA256`. |
+| DOSBox-X | `2026.10.01` SDL2 | `DOSKER_DOSBOX_X_SHA256` | `6934abe66fe55d71487ded37e097416de65981250c902a9cca2bfd1284e98c96` |
+| Bochs | `3.1` | `DOSKER_BOCHS_SHA256` | `8c1d38ac5fe8dba981fc9c7321ec46723324fdaa6cb39f01e86d4afab08c447c` |
+
+### Discovery by host
+
+- Linux x86_64 uses the distribution QEMU and reports its installed version.
+  The `DOSKER_QEMU_VERSION` pin is opt-in on Linux.
+- macOS arm64 sources come from Homebrew QEMU and Bochs, and from the official
+  DOSBox-X arm64 release or Homebrew. The exact release pins apply to these
+  managed sources.
+- Windows x86_64 uses the official engine builds. The exact release pins
+  apply to these builds.
+- Homebrew verifies its bottles. The binary checksum pin applies to managed or
+  official builds.
 
 ## Integration tests
 
