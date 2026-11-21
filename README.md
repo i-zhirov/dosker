@@ -179,6 +179,11 @@ then runs the Rust QEMU runtime suite.
 DOSker does not sandbox untrusted images. QEMU TCG is not a security boundary.
 Use an outer virtual machine or an isolated CI runner for untrusted input.
 
+## License
+
+DOSker is dual-licensed under the MIT License or the Apache License 2.0
+(SPDX: MIT OR Apache-2.0), at your option. See LICENSE-MIT and LICENSE-APACHE.
+
 ## Documentation
 
 - [Design](.sdd/specs/2026-11-01-dosker/design.md)
