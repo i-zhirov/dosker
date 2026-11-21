@@ -110,6 +110,10 @@ pub enum ImageError {
     #[error("corrupt image at {}: {message}", path.display())]
     Corrupt { path: PathBuf, message: String },
 
+    /// An image archive is malformed.
+    #[error("invalid image archive at {}: {message}", path.display())]
+    Archive { path: PathBuf, message: String },
+
     /// A file operation failed at a named path.
     #[error("i/o error at {}: {source}", path.display())]
     Io { path: PathBuf, source: io::Error },
