@@ -639,6 +639,67 @@ impl OciStore {
         })
     }
 
+    /// Returns sorted manifest digests that no tag and no in-use container
+    /// reference.
+    pub fn untagged_manifest_digests(
+        &self,
+        in_use: &BTreeSet<String>,
+    ) -> Result<Vec<String>, ImageError> {
+        const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+
+        let index = self.load_index()?;
+        let tagged: BTreeSet<String> = index
+            .manifests
+            .iter()
+            .map(|descriptor| descriptor.digest.clone())
+            .collect();
+        let entries = match fs::read_dir(self.blobs_dir()) {
+            Ok(entries) => entries,
+            Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(source) => {
+                return Err(ImageError::Io {
+                    path: self.blobs_dir(),
+                    source,
+                });
+            }
+        };
+        let mut untagged = BTreeSet::new();
+        for entry in entries {
+            let entry = entry.map_err(|source| ImageError::Io {
+                path: self.blobs_dir(),
+                source,
+            })?;
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if name.starts_with(".tmp.")
+                || name.len() != 64
+                || !name.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                continue;
+            }
+            let metadata = match entry.metadata() {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
+            };
+            if metadata.len() > MAX_MANIFEST_BYTES {
+                continue;
+            }
+            let digest = format!("sha256:{name}");
+            if tagged.contains(&digest) || in_use.contains(&digest) {
+                continue;
+            }
+            let Ok(bytes) = self.read_blob(&digest) else {
+                continue;
+            };
+            if serde_json::from_slice::<Manifest>(&bytes).is_ok() {
+                untagged.insert(digest);
+            }
+        }
+        Ok(untagged.into_iter().collect())
+    }
+
     /// Lists every tag, sorted by name and tag.
     pub fn list(&self) -> Result<Vec<Image>, ImageError> {
         let index = self.load_index()?;
@@ -709,16 +770,16 @@ impl OciStore {
                 if !index.find_digest(digest.as_str()).is_empty() {
                     return Err(ImageError::ImageInUse(digest.to_string()));
                 }
-                let image = self.load(reference)?;
-                let manifest_path = self.blob_path(&image.manifest_digest)?;
-                let manifest = self.read_blob(&image.manifest_digest)?;
+                let manifest_digest = digest.as_str().to_owned();
+                let manifest_path = self.blob_path(&manifest_digest)?;
+                let manifest = self.read_blob(&manifest_digest)?;
                 let manifest: Manifest =
                     serde_json::from_slice(&manifest).map_err(|error| ImageError::Corrupt {
                         path: manifest_path.clone(),
                         message: error.to_string(),
                     })?;
                 let mut owned = BTreeSet::new();
-                owned.insert(image.manifest_digest.clone());
+                owned.insert(manifest_digest);
                 owned.insert(manifest.config.digest.clone());
                 owned.extend(manifest.layers.iter().map(|layer| layer.digest.clone()));
                 if let Some(raw) = manifest.raw_disk_digest() {
