@@ -14,6 +14,8 @@ and the QEMU, DOSBox-X, and Bochs runtime engines.
   is `dosbox-x` or `bochs` fails with `engine dosbox-x: unsupported engine`
   or `engine bochs: unsupported engine` after the `REQUIRES` check passes,
   before the step loop.
+- The post-M4 decision to keep multi-engine is recorded in
+  [docs/multi-engine-decision.md](multi-engine-decision.md).
 
 ## ENGINE-CONFIG
 
