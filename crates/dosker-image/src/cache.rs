@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 
 use crate::canonical::hex;
 use crate::error::ImageError;
+use crate::oci::OciStore;
 
 /// The cache entry schema version.
 pub const CACHE_SCHEMA_VERSION: u32 = 1;
@@ -110,6 +111,48 @@ impl CacheStore {
                 source,
             }),
         }
+    }
+
+    /// Removes corrupt records, unsupported schemas, and records whose layer
+    /// blob is missing or corrupt. Returns the removed count.
+    pub fn prune(&self, store: &OciStore) -> Result<usize, ImageError> {
+        let directory = self.root.join("cache");
+        let entries = match fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(0),
+            Err(source) => {
+                return Err(ImageError::Io {
+                    path: directory,
+                    source,
+                });
+            }
+        };
+        let mut removed = 0;
+        for entry in entries {
+            let entry = entry.map_err(|source| ImageError::Io {
+                path: directory.clone(),
+                source,
+            })?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(key) = path.file_stem().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            let keep = match self.load(key) {
+                Ok(Some(record)) => {
+                    record.layer_digest.is_empty() || store.read_blob(&record.layer_digest).is_ok()
+                }
+                Ok(None) => false,
+                Err(_) => false,
+            };
+            if !keep {
+                fs::remove_file(&path).map_err(|source| ImageError::Io { path, source })?;
+                removed += 1;
+            }
+        }
+        Ok(removed)
     }
 
     /// Lists every valid record.
