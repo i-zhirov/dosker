@@ -900,8 +900,9 @@ The release workflow job names are `version`, `linux-x86_64`, `macos-arm64`,
   was not run. The QEMU runtime suites ran locally without the environment
   pin. DOSBox-X `2026.10.01` and Bochs `3.1` matched the reference checksums,
   so their suites ran with the reference pins.
-- The `qemu_run` suite was not run because `SETBOOT.EXE` and `REBOOT.EXE` are
-  absent. The acceptance records it as `not run on this host`.
+- The first `qemu_run` attempt did not run because the local helper binaries
+  were absent. The project's CI-built `SETBOOT.EXE` and `REBOOT.EXE` were then
+  placed in `agent/build`, and the suite passed on macOS arm64.
 - No Linux or Windows host was available. Their artifacts and suites are
   recorded as `not run on this host`, and the roadmap slice and design stay
   `In Progress` and `Approved` because the Definition Of Done is not

@@ -32,7 +32,7 @@ check is `pass` when its command exits 0 on that host.
 | SC-004 | Linux x86_64 | `DOSKER_INTEGRATION=1` for `qemu_freedos` | not run on this host |
 | SC-005 | all | `cargo test -p dosker-engine` and `cargo test -p dosker-cli --test cli_requires` | pass |
 | SC-006 | Linux x86_64 | workspace suite, then `qemu_runtime`, `qemu_volumes`, `qemu_freedos`, `qemu_run`, and `qemu_ports` | not run on this host |
-| SC-006 | macOS arm64 | workspace suite, then `qemu_runtime`, `qemu_volumes`, `qemu_run`, and `qemu_ports` | partial: `qemu_run` not run on this host, missing `SETBOOT.EXE` and `REBOOT.EXE` |
+| SC-006 | macOS arm64 | workspace suite, then `qemu_runtime`, `qemu_volumes`, `qemu_run`, and `qemu_ports` | pass, local |
 | SC-007 | Linux x86_64 | `DOSKER_INTEGRATION=1` for `qemu_runtime` | not run on this host |
 | SC-007 | macOS arm64 | `DOSKER_INTEGRATION=1` for `qemu_runtime` | pass, local |
 | SC-007 | Windows x86_64 | `DOSKER_INTEGRATION=1` for `windows_qemu_runtime` | not run on this host |
@@ -61,6 +61,9 @@ DOSBox-X: `2026.10.01` SDL2, checksum
 Installed Bochs: `3.1`, checksum
 `8c1d38ac5fe8dba981fc9c7321ec46723324fdaa6cb39f01e86d4afab08c447c`.
 The optional Bochs gdbstub build is at `$HOME/bochs-gdbstub/bin/bochs`.
+The `SETBOOT.EXE` and `REBOOT.EXE` helpers came from the CI
+`dosker-agent-binaries` artifact; `agent/build.sh` produces the same files
+from `agent/test/setboot.c` and `agent/test/reboot.c`.
 
 | Command | Result | Evidence |
 | --- | --- | --- |
@@ -78,7 +81,7 @@ The optional Bochs gdbstub build is at `$HOME/bochs-gdbstub/bin/bochs`.
 | `DOSKER_INTEGRATION=1` `dosbox_x_runtime` | pass | SC-003 |
 | `DOSKER_INTEGRATION=1` `bochs_runtime` | pass | Bochs runtime evidence |
 | `DOSKER_INTEGRATION=1` `gdbstub_build` | pass | optional Bochs gdbstub build |
-| `qemu_run` | not run on this host | missing `SETBOOT.EXE` and `REBOOT.EXE` |
+| `DOSKER_INTEGRATION=1` `qemu_run` | pass | SC-006 in-DOS RUN and guest reboot |
 | `qemu_freedos` | not run on this host | Linux suite; no FreeDOS source gate |
 | `windows_qemu_runtime` | not run on this host | no Windows x86_64 host |
 | `actionlint` | pass | release, CI, and nightly workflows |
@@ -110,8 +113,6 @@ sentence `Engine discovery works on Linux, macOS, and Windows with pinned versio
   Linux.
 - No Windows x86_64 host is available. This gates the Windows artifact,
   SC-001 on Windows, and SC-007 on Windows.
-- The `qemu_run` helpers `SETBOOT.EXE` and `REBOOT.EXE` are absent. This
-  gates the macOS `qemu_run` row of SC-006.
 - The local QEMU is `11.1.1`. The nightly `DOSKER_QEMU_VERSION=11.1.3` pin was
   not run on this host.
 - No release workflow run is recorded. The workflow was checked with
