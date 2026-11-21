@@ -193,6 +193,7 @@ DOSker is dual-licensed under the MIT License or the Apache License 2.0
 ## Documentation
 
 - [Install](docs/install.md)
+- [Release](docs/release.md)
 - [Multi-engine decision](docs/multi-engine-decision.md)
 - [Design](.sdd/specs/2026-11-01-dosker/design.md)
 - [Agent protocol](.sdd/specs/2026-11-01-dosker/contracts/agent-protocol.md)
