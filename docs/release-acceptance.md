@@ -110,6 +110,20 @@ linker signature from the build, and no Developer ID identity or
 notarization. The release notes state `unsigned` for all three hosts. The
 published `SHA256SUMS` covers all three archives.
 
+## Release 0.1.1
+
+- Workflow run 45018165204 published `v0.1.1` from commit `8d487a8`.
+- The run published `dosker-0.1.1-linux-x86_64.tar.gz`,
+  `dosker-0.1.1-macos-arm64.tar.gz`, `dosker-0.1.1-windows-x86_64.zip`,
+  their `.sha256` files, and `SHA256SUMS`.
+- `shasum -a 256 -c SHA256SUMS` passed for all three archives.
+- The macOS binary printed `dosker 0.1.1`.
+- The Homebrew tap formula was updated in commit `a77aa6e`.
+- `brew reinstall dosker` installed `0.1.1` from the tap.
+- The installed binary passed `cd dosker` and `dir` in an attached shell
+  without `BAD_PATH`.
+- The release is unsigned.
+
 ## Waived and narrowed prerequisites
 
 The roadmap's signing-credentials prerequisite is waived. Signing credentials
