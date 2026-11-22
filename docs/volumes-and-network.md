@@ -133,9 +133,10 @@ A host path that contains a comma is rejected, because the comma
 separates QEMU drive options.
 
 A host edit becomes visible when the guest re-reads the directory. DOS
-caches directory sectors and QEMU caches the cluster it last served, so
-after saving a file on the host, run `DIR` on the drive in the guest
-before reading the file again.
+caches directory sectors and QEMU caches the cluster it last served. Run
+`DIR` on the drive in the guest before reading a file again. If the editor
+replaces the file with a rename (an atomic save), the guest may keep the
+old directory entry. Recreate the container to reload the host directory.
 
 ### Sync fallback
 

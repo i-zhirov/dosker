@@ -282,6 +282,60 @@ entries. It does not remove named volumes. Remove `hello-data` first.
 - The example uses a POSIX shell. Windows users can run the same commands in
   PowerShell with Windows paths and `$env:NAME` variables.
 
+## Example: OpenWatcom C/C++ on FreeDOS
+
+[`examples/openwatcom-dos`](examples/openwatcom-dos) runs the DOS-hosted
+OpenWatcom v2 toolchain inside FreeDOS. A host source directory is mounted
+at `D:` for source and build files. OpenWatcom is installed on the
+`watcom-tools` volume at `E:`.
+
+The setup downloads the pinned OpenWatcom v2 DOS package, verifies its
+SHA-256, extracts the toolchain, creates the volume, and prints the run
+command. It needs `curl`, `unzip`, `mtools`, and QEMU.
+
+```sh
+. examples/openwatcom-dos/setup.sh
+```
+
+Run the printed command, then build and run:
+
+```sh
+dosker exec openwatcom-demo D:\BUILD.BAT
+dosker exec openwatcom-demo D:\HELLO.EXE
+```
+
+`BUILD.BAT` compiles `HELLO.C` with `WCC` and links it with `WLINK`. The
+host `src` directory receives `hello.obj`, `hello.exe`, and `hello.map`.
+QEMU vvfat may write the output names in lowercase.
+
+A host edit is not live in QEMU vvfat. Recreate the container after
+changing `HELLO.C` or `BUILD.BAT`:
+
+```sh
+dosker stop openwatcom-demo
+dosker rm openwatcom-demo
+# Run the setup's printed command again.
+```
+
+The image and the `watcom-tools` volume are reused. The source bind uses
+QEMU vvfat beta and can corrupt host files. Use it for development only.
+The source directory must contain only 8.3 names. Remove `.DS_Store` and
+similar files. Do not put `.gitignore` in `src`.
+
+The OpenWatcom package is about 122 MiB. The example caches the download
+and does not commit the toolchain.
+
+Clean up the container, the 256 MiB volume, and the data root:
+
+```sh
+dosker stop openwatcom-demo
+dosker rm openwatcom-demo
+dosker volume rm watcom-tools
+rm -rf "$DOSKER_ROOT"
+```
+
+[Manual verification](examples/openwatcom-dos/VERIFY.md).
+
 ## CI setup
 
 The CI workflow is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
@@ -468,6 +522,8 @@ DOSker is dual-licensed under the MIT License or the Apache License 2.0
 - [Install](docs/install.md)
 - [Example environment](examples/hello-dos)
 - [Example verification](examples/hello-dos/VERIFY.md)
+- [OpenWatcom example](examples/openwatcom-dos)
+- [OpenWatcom verification](examples/openwatcom-dos/VERIFY.md)
 - [Release](docs/release.md)
 - [Multi-engine decision](docs/multi-engine-decision.md)
 - [Design](.sdd/specs/2026-11-01-dosker/design.md)

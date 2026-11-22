@@ -1,0 +1,13 @@
+version = 1
+
+[[base]]
+name = "freedos"
+tag = "1.3"
+digest = "sha256:640eb8a69e594c7b37d07e68e42e23931d03e7da04666ff83115516810d71268"
+
+[engines.qemu]
+version = "11.1.3"
+source = "env"
+
+[agent]
+version = "1.0.0"
