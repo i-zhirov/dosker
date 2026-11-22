@@ -84,9 +84,11 @@ nix profile install github:i-zhirov/dosker
 
 The repository includes a runnable environment in
 [`examples/hello-dos`](examples/hello-dos). The environment contains the
-`Doskerfile`, its `Doskerfile.lock`, and three host text files: `HELLO.TXT`,
-`NOTES.TXT`, and `UPLOAD.TXT`. The Doskerfile starts FreeDOS, records a TCP
-port, attaches a data volume, and runs a command on start.
+`Doskerfile`, its `Doskerfile.lock`, a setup script, a verification checklist,
+and three host text files: `HELLO.TXT`, `NOTES.TXT`, and `UPLOAD.TXT`. The
+Doskerfile starts FreeDOS, records a TCP port, attaches a data volume, and
+runs a command on start. For a clean-checkout checklist, see
+[Manual verification](examples/hello-dos/VERIFY.md).
 
 ```doskerfile
 FROM freedos:1.3
@@ -139,6 +141,17 @@ export DOSKER_FREEDOS_SOURCE="$(
 
 The first build creates and stores the `freedos:1.3` base. Later builds reuse
 it.
+
+To automate the setup, source the script:
+
+```sh
+. examples/hello-dos/setup.sh
+```
+
+The script creates a temporary data root, downloads the DOS agent and FreeDOS
+source, builds `hello:latest`, and creates the `hello-data` volume. It prints
+the `dosker run` command to start the container. If you use the script, skip
+the build and volume creation commands below.
 
 ### Build and run
 
@@ -454,6 +467,7 @@ DOSker is dual-licensed under the MIT License or the Apache License 2.0
 
 - [Install](docs/install.md)
 - [Example environment](examples/hello-dos)
+- [Example verification](examples/hello-dos/VERIFY.md)
 - [Release](docs/release.md)
 - [Multi-engine decision](docs/multi-engine-decision.md)
 - [Design](.sdd/specs/2026-11-01-dosker/design.md)
