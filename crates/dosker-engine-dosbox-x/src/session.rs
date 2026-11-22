@@ -878,7 +878,21 @@ mod tests {
             .prepare_engine(&mut command)
             .expect("prepare the child process");
 
-        command.spawn().expect("spawn the child process")
+        // Linux can report ETXTBSY when a test spawns a script just after
+        // writing it. Retry briefly instead of failing the test.
+        let mut attempts = 0;
+        loop {
+            match command.spawn() {
+                Ok(child) => return child,
+                Err(error)
+                    if error.kind() == io::ErrorKind::ExecutableFileBusy && attempts < 20 =>
+                {
+                    attempts += 1;
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("spawn the child process: {error:?}"),
+            }
+        }
     }
 
     fn write_script(dir: &Path, name: &str, body: &str) -> PathBuf {
