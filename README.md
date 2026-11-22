@@ -80,6 +80,188 @@ nix profile install github:i-zhirov/dosker
 `dosker build` still needs `DOSKER_AGENT_EXE` and a FreeDOS source. Run
 `nix develop` in a checkout for the development environment.
 
+## Example: a small DOS environment
+
+The repository includes a runnable environment in
+[`examples/hello-dos`](examples/hello-dos). The environment contains the
+`Doskerfile` and three host text files: `HELLO.TXT`, `NOTES.TXT`, and
+`UPLOAD.TXT`. The Doskerfile starts FreeDOS, records a TCP port, attaches a
+data volume, and runs a command on start.
+
+```doskerfile
+FROM freedos:1.3
+
+ENV APP_NAME=HELLO
+MACHINE memory=16M
+ENGINE qemu
+REQUIRES boot,serial,headless
+EXPOSE 80
+VOLUME D:
+CMD ECHO HELLO FROM DOSKER
+```
+
+`FROM freedos:1.3` selects the built-in FreeDOS base. `ENV` records a value
+in the image configuration. `MACHINE` sets 16 MiB of guest memory. `ENGINE`
+pins QEMU. `REQUIRES` checks the QEMU capabilities. `EXPOSE` records a TCP
+port. `VOLUME` declares a data drive. `CMD` runs when a container starts.
+
+### Prepare the first build
+
+The first build needs QEMU, the DOS agent, and a FreeDOS 1.3 boot floppy.
+Run the commands from a repository checkout.
+
+Install QEMU. On Debian or Ubuntu:
+
+```sh
+sudo apt-get install -y qemu-system-x86
+```
+
+On macOS:
+
+```sh
+brew install qemu
+```
+
+Build the DOS agent with OpenWatcom 2.0, or download the
+`dosker-agent-binaries` artifact from a successful `agent-build` CI job.
+Then set the paths. The fetch script downloads and verifies the FreeDOS
+source:
+
+```sh
+export DOSKER_ROOT="${TMPDIR:-/tmp}/dosker-demo"
+export DOSKER_AGENT_EXE="$PWD/agent/build/DOSKER.EXE"
+export DOSKER_QEMU=qemu-system-i386
+export DOSKER_FREEDOS_SOURCE="$(
+  DOSKER_FREEDOS_SOURCE='https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.3/official/FD13-FloppyEdition.zip' \
+  bash .github/scripts/fetch-freedos-source.sh
+)"
+```
+
+The first build creates and stores the `freedos:1.3` base. Later builds reuse
+it.
+
+### Build and run
+
+```sh
+dosker build -t hello:latest examples/hello-dos
+dosker volume create --size 64M hello-data
+dosker run -d --name hello-demo --boot-timeout 120 \
+  -v hello-data:D: -p 8080:80 hello:latest
+```
+
+`dosker run` prints the container id. The `CMD` line runs on start. Show the
+state, the log, and the port mapping:
+
+```sh
+dosker ps
+dosker logs hello-demo
+dosker port hello-demo
+```
+
+The log records the `CMD` line and its exit code. `EXPOSE 80` is metadata.
+The example does not start a guest server, so the mapping is visible but no
+service answers on port 8080.
+
+### Run commands
+
+```sh
+dosker exec hello-demo ECHO HELLO
+dosker exec hello-demo MD 'C:\APP'
+dosker exec hello-demo DIR 'C:\APP'
+```
+
+The `exec` command returns the guest exit code. The default work directory is
+`C:\`. Use `-w` to change it:
+
+```sh
+dosker exec -w 'C:\APP' hello-demo DIR
+```
+
+### Copy files in and out
+
+Upload the example files:
+
+```sh
+dosker cp examples/hello-dos/HELLO.TXT 'hello-demo:C:\APP\HELLO.TXT'
+dosker cp examples/hello-dos/NOTES.TXT 'hello-demo:C:\APP\NOTES.TXT'
+dosker exec hello-demo TYPE 'C:\APP\HELLO.TXT'
+```
+
+Download a file:
+
+```sh
+dosker cp 'hello-demo:C:\APP\HELLO.TXT' "$DOSKER_ROOT/HELLO-FROM-DOS.TXT"
+```
+
+The `cp` command moves one file at a time. Quote DOS paths so the host shell
+keeps the backslashes.
+
+### Use the data volume
+
+The image declares `VOLUME D:`. The run command overrides it with the named
+volume `hello-data`. Upload a file to C:, copy it to D: inside the guest, and
+read it back:
+
+```sh
+dosker cp examples/hello-dos/UPLOAD.TXT 'hello-demo:C:\UPLOAD.TXT'
+dosker exec hello-demo COPY 'C:\UPLOAD.TXT' 'D:\DATA.TXT'
+dosker exec hello-demo TYPE 'D:\DATA.TXT'
+dosker volume ls
+```
+
+Stop and start the container. The volume keeps the file:
+
+```sh
+dosker stop hello-demo
+dosker start hello-demo --boot-timeout 120
+dosker exec hello-demo TYPE 'D:\DATA.TXT'
+```
+
+The volume stays attached until you remove the container.
+
+### Attach
+
+Open the line shell:
+
+```sh
+dosker attach hello-demo
+```
+
+Type `TYPE C:\APP\HELLO.TXT` and then `EXIT`. The container keeps running.
+
+### Save and load
+
+```sh
+dosker save -o "$DOSKER_ROOT/hello.tar" hello:latest
+dosker rmi hello:latest
+dosker load "$DOSKER_ROOT/hello.tar"
+dosker images
+```
+
+`save` writes an OCI image-layout tar. `load` restores the tags. `rmi` on a
+tag only removes the tag. The manifest stays until it is untagged and unused.
+
+### Clean up
+
+```sh
+dosker stop hello-demo
+dosker rm hello-demo
+dosker volume rm hello-data
+dosker system prune
+```
+
+`system prune` removes stopped containers, untagged images, and stale cache
+entries. It does not remove named volumes. Remove `hello-data` first.
+
+### Notes
+
+- QEMU is the only engine for the build path, in-DOS `RUN`, NAT, and named
+  volumes. DOSBox-X and Bochs are runtime-only alternatives.
+- This example uses runtime `dosker cp` for files. `COPY` and `RUN` in a
+  Doskerfile are build instructions. See [Builds](docs/builds.md).
+- The example uses a POSIX shell. Windows users can run the same commands in
+  PowerShell with Windows paths and `$env:NAME` variables.
+
 ## CI setup
 
 The CI workflow is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
@@ -264,6 +446,7 @@ DOSker is dual-licensed under the MIT License or the Apache License 2.0
 ## Documentation
 
 - [Install](docs/install.md)
+- [Example environment](examples/hello-dos)
 - [Release](docs/release.md)
 - [Multi-engine decision](docs/multi-engine-decision.md)
 - [Design](.sdd/specs/2026-11-01-dosker/design.md)

@@ -1,0 +1,11 @@
+# Build with:
+#   dosker build -t hello:latest examples/hello-dos
+FROM freedos:1.3
+
+ENV APP_NAME=HELLO
+MACHINE memory=16M
+ENGINE qemu
+REQUIRES boot,serial,headless
+EXPOSE 80
+VOLUME D:
+CMD ECHO HELLO FROM DOSKER
