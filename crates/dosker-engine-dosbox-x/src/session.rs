@@ -878,34 +878,30 @@ mod tests {
             .prepare_engine(&mut command)
             .expect("prepare the child process");
 
-        // Linux can report ETXTBSY when a test spawns a script just after
-        // writing it. Retry briefly instead of failing the test.
-        let mut attempts = 0;
-        loop {
-            match command.spawn() {
-                Ok(child) => return child,
-                Err(error)
-                    if error.kind() == io::ErrorKind::ExecutableFileBusy && attempts < 20 =>
-                {
-                    attempts += 1;
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(error) => panic!("spawn the child process: {error:?}"),
-            }
-        }
+        command.spawn().expect("spawn the child process")
     }
 
     fn write_script(dir: &Path, name: &str, body: &str) -> PathBuf {
-        use std::os::unix::fs::PermissionsExt;
-
+        // Write the script in a child process. A write descriptor in this
+        // multithreaded test process can be inherited by another test's fork,
+        // which makes exec return ETXTBSY.
         let path = dir.join(name);
-        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("write the script");
-        let mut permissions = std::fs::metadata(&path)
-            .expect("read the script metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&path, permissions).expect("set the script permissions");
-
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg("cat > \"$1\" && chmod 755 \"$1\"")
+            .arg("sh")
+            .arg(&path)
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("start the script writer");
+        {
+            let mut stdin = child.stdin.take().expect("open the script writer stdin");
+            stdin
+                .write_all(format!("#!/bin/sh\n{body}\n").as_bytes())
+                .expect("write the script body");
+        }
+        let status = child.wait().expect("wait for the script writer");
+        assert!(status.success(), "script writer failed: {status:?}");
         path
     }
 

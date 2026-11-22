@@ -1,5 +1,7 @@
 use std::ffi::OsString;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::Mutex;
 
 use dosker_engine::{EngineError, EngineSource};
@@ -45,36 +47,27 @@ fn lock() -> std::sync::MutexGuard<'static, ()> {
 
 #[cfg(unix)]
 fn write_script(dir: &Path, name: &str, body: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-
+    // Write the script in a child process. A write descriptor in this
+    // multithreaded test process can be inherited by another test's fork,
+    // which makes exec return ETXTBSY.
     let path = dir.join(name);
-    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("write script");
-    let mut permissions = std::fs::metadata(&path)
-        .expect("read script metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(&path, permissions).expect("set script permissions");
-    path
-}
-
-#[cfg(unix)]
-fn probe_script(path: PathBuf) -> QemuBinary {
-    use std::time::{Duration, Instant};
-
-    // Linux can report ETXTBSY when a test spawns a script just after
-    // writing it. Retry briefly instead of failing the test.
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        match QemuBinary::from_path(path.clone()) {
-            Ok(binary) => return binary,
-            Err(EngineError::Setup(message))
-                if message.contains("Text file busy") && Instant::now() < deadline =>
-            {
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            Err(error) => panic!("probe qemu: {error:?}"),
-        }
+    let mut child = Command::new("sh")
+        .arg("-c")
+        .arg("cat > \"$1\" && chmod 755 \"$1\"")
+        .arg("sh")
+        .arg(&path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("start the script writer");
+    {
+        let mut stdin = child.stdin.take().expect("open the script writer stdin");
+        stdin
+            .write_all(format!("#!/bin/sh\n{body}\n").as_bytes())
+            .expect("write the script body");
     }
+    let status = child.wait().expect("wait for the script writer");
+    assert!(status.success(), "script writer failed: {status:?}");
+    path
 }
 
 #[test]
@@ -300,7 +293,7 @@ fn probe_reports_the_parsed_version() {
         "echo 'QEMU emulator version 9.0.1 (v9.0.1)'",
     );
 
-    let binary = probe_script(script.clone());
+    let binary = QemuBinary::from_path(script.clone()).expect("probe qemu");
 
     assert_eq!(binary.path, script);
     assert_eq!(binary.version, QemuVersion::new(9, 0, 1));
