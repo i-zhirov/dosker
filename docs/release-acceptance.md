@@ -124,6 +124,20 @@ published `SHA256SUMS` covers all three archives.
   without `BAD_PATH`.
 - The release is unsigned.
 
+## Release 0.1.2
+
+- Workflow run 45027052360 published `v0.1.2` from commit `c3e64d0`.
+- The run published `dosker-0.1.2-linux-x86_64.tar.gz`,
+  `dosker-0.1.2-macos-arm64.tar.gz`, `dosker-0.1.2-windows-x86_64.zip`,
+  their `.sha256` files, and `SHA256SUMS`.
+- `shasum -a 256 -c SHA256SUMS` passed for all three archives.
+- The macOS binary printed `dosker 0.1.2`.
+- The Homebrew tap formula was updated in commit `64f7615`.
+- `brew reinstall dosker` installed `0.1.2` from the tap.
+- The installed help shows a description for each command and no
+  `Arguments for` placeholders.
+- The release is unsigned.
+
 ## Waived and narrowed prerequisites
 
 The roadmap's signing-credentials prerequisite is waived. Signing credentials
