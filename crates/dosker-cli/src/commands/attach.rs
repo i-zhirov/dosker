@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use dosker_core::Status;
+use dosker_image::{DosName, DosPath};
 use dosker_platform::Endpoint;
 use dosker_platform::console::Console;
 use dosker_platform::control::{ControlConnection, connect};
@@ -32,6 +33,8 @@ pub const ATTACH_COMMAND_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 pub enum ShellAction {
     /// Run a command in the shell workdir.
     Exec { command: String, workdir: String },
+    /// Report a local input error without sending it to the guest.
+    Error(String),
     /// Leave the shell without stopping the container.
     Detach,
 }
@@ -73,7 +76,10 @@ impl LineShell {
         if head.eq_ignore_ascii_case("cd") {
             let path = words.next().unwrap_or_default().trim();
             if !path.is_empty() {
-                self.workdir = path.to_owned();
+                match resolve_workdir(&self.workdir, path) {
+                    Ok(workdir) => self.workdir = workdir,
+                    Err(message) => return ShellAction::Error(format!("cd: {message}")),
+                }
             }
             return ShellAction::Exec {
                 command: String::new(),
@@ -86,6 +92,44 @@ impl LineShell {
             workdir: self.workdir.clone(),
         }
     }
+
+    /// Returns the prompt for the current workdir.
+    pub fn prompt(&self) -> String {
+        format!("{}>", self.workdir)
+    }
+}
+
+/// Resolves one `cd` argument to an absolute DOS workdir.
+fn resolve_workdir(current: &str, value: &str) -> Result<String, String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(current.to_owned());
+    }
+
+    let bytes = value.as_bytes();
+    let has_drive = bytes.len() >= 2 && bytes[0].eq_ignore_ascii_case(&b'C') && bytes[1] == b':';
+    let absolute = has_drive || value.starts_with('\\') || value.starts_with('/');
+    let root = || DosPath::parse_relative("").expect("the DOS root path is valid");
+    let mut path = if absolute {
+        root()
+    } else {
+        DosPath::parse(current).map_err(|error| error.to_string())?
+    };
+
+    let rest = if has_drive { &value[2..] } else { value };
+    for component in rest.split(['/', '\\']) {
+        if component.is_empty() || component == "." {
+            continue;
+        }
+        if component == ".." {
+            path = path.parent().unwrap_or_else(root);
+            continue;
+        }
+        let name = DosName::normalize(component).map_err(|error| error.to_string())?;
+        path = path.join(&name);
+    }
+
+    Ok(path.to_dos_string())
 }
 
 pub fn execute(
@@ -139,7 +183,7 @@ pub fn run_shell(
     let mut shell = LineShell::new(workdir);
     let mut line = String::new();
     loop {
-        output.raw(r"C:\>")?;
+        output.raw(&shell.prompt())?;
         line.clear();
         if input.read_line(&mut line)? == 0 {
             break;
@@ -147,6 +191,7 @@ pub fn run_shell(
 
         match shell.handle(&line) {
             ShellAction::Detach => break,
+            ShellAction::Error(message) => output.error_line(&message)?,
             ShellAction::Exec { command, .. } if command.is_empty() => {}
             ShellAction::Exec { command, workdir } => {
                 let request = Request::Exec {

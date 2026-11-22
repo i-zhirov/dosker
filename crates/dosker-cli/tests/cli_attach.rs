@@ -192,6 +192,64 @@ fn cd_updates_the_workdir() {
 }
 
 #[test]
+fn cd_resolves_a_relative_path() {
+    let mut shell = LineShell::new(r"C:\");
+
+    assert_eq!(
+        shell.handle("cd dosker"),
+        ShellAction::Exec {
+            command: String::new(),
+            workdir: String::from(r"C:\DOSKER"),
+        }
+    );
+    assert_eq!(
+        shell.handle("dir"),
+        ShellAction::Exec {
+            command: String::from("dir"),
+            workdir: String::from(r"C:\DOSKER"),
+        }
+    );
+    assert_eq!(shell.prompt(), r"C:\DOSKER>");
+}
+
+#[test]
+fn cd_parent_returns_to_root() {
+    let mut shell = LineShell::new(r"C:\APP");
+
+    assert_eq!(
+        shell.handle("cd .."),
+        ShellAction::Exec {
+            command: String::new(),
+            workdir: String::from(r"C:\"),
+        }
+    );
+    assert_eq!(
+        shell.handle("cd SUB"),
+        ShellAction::Exec {
+            command: String::new(),
+            workdir: String::from(r"C:\SUB"),
+        }
+    );
+}
+
+#[test]
+fn cd_invalid_path_is_reported_locally() {
+    let mut shell = LineShell::new(r"C:\APP");
+
+    assert!(matches!(
+        shell.handle("cd TOOLONGNAME"),
+        ShellAction::Error(_)
+    ));
+    assert_eq!(
+        shell.handle("DIR"),
+        ShellAction::Exec {
+            command: String::from("DIR"),
+            workdir: String::from(r"C:\APP"),
+        }
+    );
+}
+
+#[test]
 fn exit_detaches() {
     let mut shell = LineShell::new(r"C:\");
 
