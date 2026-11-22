@@ -84,9 +84,9 @@ nix profile install github:i-zhirov/dosker
 
 The repository includes a runnable environment in
 [`examples/hello-dos`](examples/hello-dos). The environment contains the
-`Doskerfile` and three host text files: `HELLO.TXT`, `NOTES.TXT`, and
-`UPLOAD.TXT`. The Doskerfile starts FreeDOS, records a TCP port, attaches a
-data volume, and runs a command on start.
+`Doskerfile`, its `Doskerfile.lock`, and three host text files: `HELLO.TXT`,
+`NOTES.TXT`, and `UPLOAD.TXT`. The Doskerfile starts FreeDOS, records a TCP
+port, attaches a data volume, and runs a command on start.
 
 ```doskerfile
 FROM freedos:1.3
@@ -147,6 +147,13 @@ dosker build -t hello:latest examples/hello-dos
 dosker volume create --size 64M hello-data
 dosker run -d --name hello-demo --boot-timeout 120 \
   -v hello-data:D: -p 8080:80 hello:latest
+```
+
+The example ships a lock file pinned to QEMU 11.1.3 and agent 1.0.0. If your
+versions differ, run the first build with `--update`:
+
+```sh
+dosker build --update -t hello:latest examples/hello-dos
 ```
 
 `dosker run` prints the container id. The `CMD` line runs on start. Show the
