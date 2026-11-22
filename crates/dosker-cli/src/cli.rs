@@ -60,7 +60,7 @@ pub enum Command {
     Supervise(SuperviseArgs),
 }
 
-/// Arguments for `build`.
+/// Build an image from a Doskerfile.
 #[derive(Debug, Args)]
 pub struct BuildArgs {
     #[arg(short = 't', long = "tag")]
@@ -79,7 +79,7 @@ pub struct BuildArgs {
     pub context: PathBuf,
 }
 
-/// Arguments for `run`.
+/// Create, start, and attach to a container.
 #[derive(Debug, Args)]
 pub struct RunArgs {
     #[arg(short = 'd', long = "detach")]
@@ -112,7 +112,7 @@ pub struct RunArgs {
     pub image: String,
 }
 
-/// Arguments for `create`.
+/// Create a container without starting it.
 #[derive(Debug, Args)]
 pub struct CreateArgs {
     #[arg(long = "name")]
@@ -139,7 +139,7 @@ pub struct CreateArgs {
     pub image: String,
 }
 
-/// Arguments for `start`.
+/// Start a created container.
 #[derive(Debug, Args)]
 pub struct StartArgs {
     #[arg(long = "boot-timeout", default_value_t = 60)]
@@ -148,7 +148,7 @@ pub struct StartArgs {
     pub container: String,
 }
 
-/// Arguments for `restart`.
+/// Restart a container.
 #[derive(Debug, Args)]
 pub struct RestartArgs {
     #[arg(long = "boot-timeout", default_value_t = 60)]
@@ -160,13 +160,13 @@ pub struct RestartArgs {
     pub container: String,
 }
 
-/// Arguments for `rm`.
+/// Remove a container.
 #[derive(Debug, Args)]
 pub struct RmArgs {
     pub container: String,
 }
 
-/// Arguments for `image`.
+/// Manage images.
 #[derive(Debug, Args)]
 pub struct ImageArgs {
     #[command(subcommand)]
@@ -179,7 +179,7 @@ pub enum ImageCommand {
     Import(ImageImportArgs),
 }
 
-/// Arguments for `image import`.
+/// Import a disk image.
 #[derive(Debug, Args)]
 pub struct ImageImportArgs {
     #[arg(long = "booter")]
@@ -190,7 +190,7 @@ pub struct ImageImportArgs {
     pub reference: String,
 }
 
-/// Arguments for `volume`.
+/// Manage volumes.
 #[derive(Debug, Args)]
 pub struct VolumeArgs {
     #[command(subcommand)]
@@ -205,7 +205,7 @@ pub enum VolumeCommand {
     Rm(VolumeRmArgs),
 }
 
-/// Arguments for `volume create`.
+/// Create a volume.
 #[derive(Debug, Args)]
 pub struct VolumeCreateArgs {
     #[arg(long = "size", default_value = "64M")]
@@ -214,35 +214,35 @@ pub struct VolumeCreateArgs {
     pub name: String,
 }
 
-/// Arguments for `volume ls`.
+/// List volumes.
 #[derive(Debug, Args)]
 pub struct VolumeLsArgs {}
 
-/// Arguments for `volume rm`.
+/// Remove a volume.
 #[derive(Debug, Args)]
 pub struct VolumeRmArgs {
     pub name: String,
 }
 
-/// Arguments for `images`.
+/// List images.
 #[derive(Debug, Args)]
 pub struct ImagesArgs {}
 
-/// Arguments for `rmi`.
+/// Remove or untag an image.
 #[derive(Debug, Args)]
 pub struct RmiArgs {
     #[arg(help = "A tag untags; a sha256 digest removes an untagged image")]
     pub reference: String,
 }
 
-/// Arguments for `tag`.
+/// Tag an image.
 #[derive(Debug, Args)]
 pub struct TagArgs {
     pub source: String,
     pub target: String,
 }
 
-/// Arguments for `save`.
+/// Save an image to an archive.
 #[derive(Debug, Args)]
 pub struct SaveArgs {
     #[arg(short = 'o', long = "output")]
@@ -251,13 +251,13 @@ pub struct SaveArgs {
     pub image: String,
 }
 
-/// Arguments for `load`.
+/// Load an image from an archive.
 #[derive(Debug, Args)]
 pub struct LoadArgs {
     pub file: PathBuf,
 }
 
-/// Arguments for `system`.
+/// Manage the DOSker data root.
 #[derive(Debug, Args)]
 pub struct SystemArgs {
     #[command(subcommand)]
@@ -270,38 +270,38 @@ pub enum SystemCommand {
     Prune(PruneArgs),
 }
 
-/// Arguments for `system prune`.
+/// Remove unused data.
 #[derive(Debug, Args)]
 pub struct PruneArgs {}
 
-/// Arguments for `engines`.
+/// List and inspect engines.
 #[derive(Debug, Args)]
 pub struct EnginesArgs {}
 
-/// Arguments for `doctor`.
+/// Check the data root and installed engines.
 #[derive(Debug, Args)]
 pub struct DoctorArgs {}
 
-/// Arguments for `ps`.
+/// List containers.
 #[derive(Debug, Args)]
 pub struct PsArgs {
     #[arg(short = 'a', long = "all")]
     pub all: bool,
 }
 
-/// Arguments for `inspect`.
+/// Show container details.
 #[derive(Debug, Args)]
 pub struct InspectArgs {
     pub container: String,
 }
 
-/// Arguments for `port`.
+/// Show a container's published ports.
 #[derive(Debug, Args)]
 pub struct PortArgs {
     pub container: String,
 }
 
-/// Arguments for `logs`.
+/// Show container logs.
 #[derive(Debug, Args)]
 pub struct LogsArgs {
     #[arg(short = 'f', long = "follow")]
@@ -316,13 +316,13 @@ pub struct LogsArgs {
     pub container: String,
 }
 
-/// Arguments for `status`.
+/// Show container status.
 #[derive(Debug, Args)]
 pub struct StatusArgs {
     pub container: String,
 }
 
-/// Arguments for `exec`.
+/// Run a command in a running container.
 #[derive(Debug, Args)]
 pub struct ExecArgs {
     #[arg(short = 'e', long = "env")]
@@ -340,20 +340,20 @@ pub struct ExecArgs {
     pub command: Vec<String>,
 }
 
-/// Arguments for `attach`.
+/// Attach to a running container.
 #[derive(Debug, Args)]
 pub struct AttachArgs {
     pub container: String,
 }
 
-/// Arguments for `cp`.
+/// Copy files between the host and a container.
 #[derive(Debug, Args)]
 pub struct CpArgs {
     pub source: String,
     pub destination: String,
 }
 
-/// Arguments for `screenshot`.
+/// Capture a container screenshot.
 #[derive(Debug, Args)]
 pub struct ScreenshotArgs {
     pub container: String,
@@ -362,7 +362,7 @@ pub struct ScreenshotArgs {
     pub output: PathBuf,
 }
 
-/// Arguments for `debug`.
+/// Start a debugger session.
 #[derive(Debug, Args)]
 pub struct DebugArgs {
     pub container: String,
@@ -371,7 +371,7 @@ pub struct DebugArgs {
     pub gdb: bool,
 }
 
-/// Arguments for `stop`.
+/// Stop a running container.
 #[derive(Debug, Args)]
 pub struct StopArgs {
     #[arg(long = "time", default_value_t = 10)]
@@ -380,7 +380,7 @@ pub struct StopArgs {
     pub container: String,
 }
 
-/// Arguments for the hidden supervisor entry.
+/// Run the internal supervisor.
 #[derive(Debug, Args)]
 pub struct SuperviseArgs {
     #[arg(long = "root")]
@@ -530,5 +530,34 @@ fn dispatch(command: Command) -> Result<u8, CliError> {
             let mut context = Context::load()?;
             commands::doctor::execute(args, &mut context)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::Cli;
+
+    #[test]
+    fn help_describes_each_command() {
+        let mut command = Cli::command();
+        let help = command.render_help().to_string();
+        assert!(!help.contains("Arguments for"), "{help}");
+        for description in [
+            "Build an image from a Doskerfile",
+            "Create, start, and attach to a container",
+            "Manage volumes",
+            "Check the data root and installed engines",
+        ] {
+            assert!(help.contains(description), "missing {description}: {help}");
+        }
+
+        let mut command = Cli::command();
+        let image = command
+            .find_subcommand_mut("image")
+            .expect("find the image subcommand");
+        let help = image.render_help().to_string();
+        assert!(help.contains("Import a disk image"), "{help}");
     }
 }
