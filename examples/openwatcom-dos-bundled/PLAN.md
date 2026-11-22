@@ -169,7 +169,7 @@ dosker exec openwatcom-bundled-demo C:\APP\HELLO.EXE
       - `MTOOLS_SKIP_CHECK=1 mtype -i "$OUTPUT@@1048576" ::/APP/BUILD.BAT` contains `WATCOM=C:\WATCOM`.
       - Boot a temporary copy of the disk with an `AUTOEXEC.BAT` that runs `C:\APP\BUILD.BAT`. Confirm the guest screen shows `BUILD OK` and `::/APP` contains `HELLO.OBJ`, `HELLO.MAP`, and `HELLO.EXE`.
 
-- [ ] **Task 3: Import the base disk and build the bundled image**
+- [x] **Task 3: Import the base disk and build the bundled image**
     - **Implements:** Design §Image and build loop
     - **Create `examples/openwatcom-dos-bundled/setup.sh`**
         - Source-only entry point like `examples/openwatcom-dos/setup.sh`.

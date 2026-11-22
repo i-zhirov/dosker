@@ -1,0 +1,10 @@
+*.img
+*.tar
+src/*.OBJ
+src/*.obj
+src/*.EXE
+src/*.exe
+src/*.MAP
+src/*.map
+src/*.ERR
+src/*.err
