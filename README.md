@@ -67,11 +67,25 @@ Expand-Archive -Path .\dosker-0.1.0-windows-x86_64.zip -DestinationPath .\dosker
 Run the commands from the download directory. The PowerShell script throws
 `Checksum mismatch` when the archive hash differs from `SHA256SUMS`.
 
+### Nix
+
+The flake builds DOSker from source and adds QEMU to the runtime `PATH`. It
+exposes macOS arm64, Linux x86_64, and Linux arm64.
+
+```sh
+nix run github:i-zhirov/dosker
+nix profile install github:i-zhirov/dosker
+```
+
+`dosker build` still needs `DOSKER_AGENT_EXE` and a FreeDOS source. Run
+`nix develop` in a checkout for the development environment.
+
 ## CI setup
 
 The CI workflow is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 It runs formatting, the Rust workspace tests on Linux, macOS, and Windows, the
-OpenWatcom agent build, and the QEMU conformance suites.
+OpenWatcom agent build, and the QEMU conformance suites. A `nix` job builds
+the flake and runs it on `ubuntu-latest` and `macos-15`.
 
 A `preflight` job checks all required QEMU repository variables before
 `agent-qemu` or `windows-qemu` starts. The macOS nightly has the same check.
