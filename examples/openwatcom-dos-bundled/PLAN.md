@@ -194,7 +194,7 @@ dosker exec openwatcom-bundled-demo C:\APP\HELLO.EXE
       - `dosker inspect` of a created container shows the volume list empty and a raw disk from the imported base.
       - `dosker volume ls` does not list a toolchain volume after cleanup.
 
-- [ ] **Task 4: Build and run from the bundled image**
+- [x] **Task 4: Build and run from the bundled image**
     - **Implements:** Design §Image and build loop
     - **Modify `examples/openwatcom-dos-bundled/setup.sh`**
         - Print the exact run command:
@@ -205,9 +205,9 @@ dosker exec openwatcom-bundled-demo C:\APP\HELLO.EXE
     - **Verify:**
       - `dosker run -d --name openwatcom-bundled-demo --boot-timeout 120 openwatcom-bundled:latest`
       - `dosker ps` shows `openwatcom-bundled-demo` running.
-      - `dosker exec openwatcom-bundled-demo C:\APP\BUILD.BAT` exits 0 and creates `C:\APP\HELLO.EXE`.
-      - `dosker exec openwatcom-bundled-demo C:\APP\HELLO.EXE` prints `HELLO FROM BUNDLED OPENWATCOM`.
-      - `dosker exec openwatcom-bundled-demo TYPE C:\WATCOM\BINW\WCC.EXE` succeeds (the compiler is in the image).
+      - `dosker exec openwatcom-bundled-demo 'C:\APP\BUILD.BAT'` exits 0 and creates `C:\APP\HELLO.EXE`.
+      - `dosker exec openwatcom-bundled-demo 'C:\APP\HELLO.EXE'` prints `HELLO FROM BUNDLED OPENWATCOM`.
+      - `dosker exec openwatcom-bundled-demo 'DIR C:\WATCOM\BINW\WCC.EXE'` succeeds (the compiler is in the image).
       - `dosker volume ls` shows no volume attached.
 
 - [ ] **Task 5: Prove save/load is self-contained**
@@ -220,7 +220,7 @@ dosker exec openwatcom-bundled-demo C:\APP\HELLO.EXE
       - `dosker rmi openwatcom-bundled:latest` and `dosker rmi openwatcom-bundled-base:1.3`.
       - `dosker load "$DOSKER_ROOT/openwatcom-bundled.tar"`.
       - `dosker run -d --name openwatcom-bundled-loaded --boot-timeout 120 openwatcom-bundled:latest`.
-      - `dosker exec openwatcom-bundled-loaded C:\APP\BUILD.BAT` and `C:\APP\HELLO.EXE` pass with no volume and no base tag.
+      - `dosker exec openwatcom-bundled-loaded 'C:\APP\BUILD.BAT'` and `'C:\APP\HELLO.EXE'` pass with no volume and no base tag.
       - The save archive is under 500 MiB.
 
 - [ ] **Task 6: Document the bundled example and keep the volume example separate**
@@ -275,3 +275,6 @@ dosker exec openwatcom-bundled-demo C:\APP\HELLO.EXE
 - Task 2 was additionally verified by booting a temporary disk copy and
   running `BUILD.BAT`; the guest screen showed `BUILD OK` and produced
   `HELLO.OBJ`, `HELLO.MAP`, and `HELLO.EXE`.
+- Task 4 prints and uses quoted DOS paths because POSIX shells consume
+  backslashes. It checks the compiler with `DIR` instead of `TYPE` to
+  avoid dumping the executable to the terminal.

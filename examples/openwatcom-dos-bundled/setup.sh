@@ -252,6 +252,6 @@ printf '  Bundled image=openwatcom-bundled:latest\n'
 printf '\nReady to run:\n'
 printf '  dosker run -d --name openwatcom-bundled-demo --boot-timeout 120 openwatcom-bundled:latest\n'
 printf '\nBuild and run:\n'
-printf '  dosker exec openwatcom-bundled-demo C:\\APP\\BUILD.BAT\n'
-printf '  dosker exec openwatcom-bundled-demo C:\\APP\\HELLO.EXE\n'
+printf "  dosker exec openwatcom-bundled-demo 'C:\\\\APP\\\\BUILD.BAT'\n"
+printf "  dosker exec openwatcom-bundled-demo 'C:\\\\APP\\\\HELLO.EXE'\n"
 printf '\nThe image contains OpenWatcom and the source. It needs no volume or bind.\n'
