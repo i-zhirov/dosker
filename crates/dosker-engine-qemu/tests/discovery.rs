@@ -57,6 +57,26 @@ fn write_script(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
+#[cfg(unix)]
+fn probe_script(path: PathBuf) -> QemuBinary {
+    use std::time::{Duration, Instant};
+
+    // Linux can report ETXTBSY when a test spawns a script just after
+    // writing it. Retry briefly instead of failing the test.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match QemuBinary::from_path(path.clone()) {
+            Ok(binary) => return binary,
+            Err(EngineError::Setup(message))
+                if message.contains("Text file busy") && Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("probe qemu: {error:?}"),
+        }
+    }
+}
+
 #[test]
 fn version_parses_a_three_part_version() {
     let version = QemuVersion::parse("QEMU emulator version 8.2.0").expect("parse version");
@@ -280,7 +300,7 @@ fn probe_reports_the_parsed_version() {
         "echo 'QEMU emulator version 9.0.1 (v9.0.1)'",
     );
 
-    let binary = QemuBinary::from_path(script.clone()).expect("probe qemu");
+    let binary = probe_script(script.clone());
 
     assert_eq!(binary.path, script);
     assert_eq!(binary.version, QemuVersion::new(9, 0, 1));
