@@ -138,6 +138,20 @@ published `SHA256SUMS` covers all three archives.
   `Arguments for` placeholders.
 - The release is unsigned.
 
+## Release 0.1.3
+
+- Workflow run 45203295182 published `v0.1.3` from commit `bf69108`.
+- The run published `dosker-0.1.3-linux-x86_64.tar.gz`,
+  `dosker-0.1.3-macos-arm64.tar.gz`, `dosker-0.1.3-windows-x86_64.zip`,
+  their `.sha256` files, and `SHA256SUMS`.
+- `shasum -a 256 -c SHA256SUMS` passed for all three archives.
+- The macOS binary printed `dosker 0.1.3`.
+- The Homebrew tap formula was updated in commit `695f4f3`.
+- `brew reinstall dosker` installed `0.1.3` from the tap.
+- `brew test dosker` passed.
+- The Clippy failure in CI run 45170495560 was fixed in commit `b16d44f`.
+- The release is unsigned.
+
 ## Waived and narrowed prerequisites
 
 The roadmap's signing-credentials prerequisite is waived. Signing credentials
