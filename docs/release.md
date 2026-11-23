@@ -40,7 +40,7 @@ Use these commands when a hosted runner is unavailable. Run them from the
 repository root and write the artifacts into `dist`. The Linux commands:
 
 ```sh
-VERSION=0.1.2
+VERSION=0.1.3
 mkdir -p dist
 cargo build -p dosker-cli --release --target x86_64-unknown-linux-gnu --bin dosker --features qemu-engine
 strip target/x86_64-unknown-linux-gnu/release/dosker

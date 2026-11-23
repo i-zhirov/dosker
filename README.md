@@ -6,9 +6,9 @@ x86_64, with a DOS serial agent for command execution and file transfer.
 
 ## Install
 
-The `v0.1.2` release has artifacts for Linux x86_64, macOS arm64, and Windows
+The `v0.1.3` release has artifacts for Linux x86_64, macOS arm64, and Windows
 x86_64. Download the archive for your host and `SHA256SUMS` from the
-[`v0.1.2` release](https://github.com/i-zhirov/dosker/releases/tag/v0.1.2).
+[`v0.1.3` release](https://github.com/i-zhirov/dosker/releases/tag/v0.1.3).
 
 The artifacts are unsigned. See [Install](docs/install.md) for engine setup,
 `PATH` changes, and signing details.
@@ -16,10 +16,10 @@ The artifacts are unsigned. See [Install](docs/install.md) for engine setup,
 ### Linux x86_64
 
 ```sh
-curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.2/dosker-0.1.2-linux-x86_64.tar.gz
-curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.2/SHA256SUMS
-grep 'dosker-0.1.2-linux-x86_64.tar.gz$' SHA256SUMS | sha256sum -c -
-tar -xzf dosker-0.1.2-linux-x86_64.tar.gz
+curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.3/dosker-0.1.3-linux-x86_64.tar.gz
+curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.3/SHA256SUMS
+grep 'dosker-0.1.3-linux-x86_64.tar.gz$' SHA256SUMS | sha256sum -c -
+tar -xzf dosker-0.1.3-linux-x86_64.tar.gz
 sudo install -m 0755 dosker /usr/local/bin/dosker
 sudo apt-get install -y qemu-system-x86
 dosker --version
@@ -34,10 +34,10 @@ QEMU package for your distribution.
 ### macOS arm64
 
 ```sh
-curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.2/dosker-0.1.2-macos-arm64.tar.gz
-curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.2/SHA256SUMS
-grep 'dosker-0.1.2-macos-arm64.tar.gz$' SHA256SUMS | shasum -a 256 -c -
-tar -xzf dosker-0.1.2-macos-arm64.tar.gz
+curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.3/dosker-0.1.3-macos-arm64.tar.gz
+curl -fLO https://github.com/i-zhirov/dosker/releases/download/v0.1.3/SHA256SUMS
+grep 'dosker-0.1.3-macos-arm64.tar.gz$' SHA256SUMS | shasum -a 256 -c -
+tar -xzf dosker-0.1.3-macos-arm64.tar.gz
 xattr -d com.apple.quarantine dosker 2>/dev/null || true
 sudo install -m 0755 dosker /usr/local/bin/dosker
 brew install qemu bochs
@@ -54,12 +54,12 @@ release or Homebrew if you need that engine.
 ### Windows x86_64
 
 ```powershell
-Invoke-WebRequest -Uri https://github.com/i-zhirov/dosker/releases/download/v0.1.2/dosker-0.1.2-windows-x86_64.zip -OutFile dosker-0.1.2-windows-x86_64.zip
-Invoke-WebRequest -Uri https://github.com/i-zhirov/dosker/releases/download/v0.1.2/SHA256SUMS -OutFile SHA256SUMS
-$expected = (Get-Content SHA256SUMS | Where-Object { $_ -match 'dosker-0.1.2-windows-x86_64\.zip$' }).Split()[0]
-$actual = (Get-FileHash -Algorithm SHA256 .\dosker-0.1.2-windows-x86_64.zip).Hash.ToLower()
+Invoke-WebRequest -Uri https://github.com/i-zhirov/dosker/releases/download/v0.1.3/dosker-0.1.3-windows-x86_64.zip -OutFile dosker-0.1.3-windows-x86_64.zip
+Invoke-WebRequest -Uri https://github.com/i-zhirov/dosker/releases/download/v0.1.3/SHA256SUMS -OutFile SHA256SUMS
+$expected = (Get-Content SHA256SUMS | Where-Object { $_ -match 'dosker-0.1.3-windows-x86_64\.zip$' }).Split()[0]
+$actual = (Get-FileHash -Algorithm SHA256 .\dosker-0.1.3-windows-x86_64.zip).Hash.ToLower()
 if ($actual -ne $expected) { throw 'Checksum mismatch' }
-Expand-Archive -Path .\dosker-0.1.2-windows-x86_64.zip -DestinationPath .\dosker
+Expand-Archive -Path .\dosker-0.1.3-windows-x86_64.zip -DestinationPath .\dosker
 .\dosker\dosker.exe --version
 .\dosker\dosker.exe doctor
 ```
