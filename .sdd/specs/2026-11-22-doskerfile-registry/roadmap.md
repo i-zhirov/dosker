@@ -113,7 +113,7 @@ coverage check on publish; and the rule that a license correction becomes a new
 version. Out of scope: the client commands and the takedown workflow. The slice
 verifies on its own against fixtures and one real image.
 
-- **Status:** Unplanned
+- **Status:** In Progress
 - **Depends on:** Slices 1 and 2
 - **Requirements:** FR-010, FR-011, FR-012, FR-013, FR-014, FR-015, FR-022,
   FR-026 (publish part), FR-030
@@ -122,7 +122,7 @@ verifies on its own against fixtures and one real image.
   Actions workflow; settle the DOS agent/OpenWatcom license terms; decide the
   GPL source-offer wording; decide how registry CI obtains the DOSKER agent
   binaries (the DOSker release does not include `DOSKER.EXE` today).
-- **Plan:** —
+- **Plan:** [`plan-static-registry-repository.md`](plan-static-registry-repository.md)
 - **Done when:** `validate.yml` passes on a good fixture and fails on each bad
   fixture; `publish.yml` publishes the example image idempotently; the
   generated site passes the schemas; a rebuild from the repository and the
@@ -148,13 +148,13 @@ on every pull even when cached; and auto-pull with `--no-pull` for `build`. Out
 of scope: `push`, accounts, private registries, and takedown. Tests use a local
 static server, so the slice verifies on its own.
 
-- **Status:** Unplanned
+- **Status:** Implemented
 - **Depends on:** Slices 2 and 3
 - **Requirements:** FR-006, FR-007, FR-008, FR-009, FR-018, FR-019, FR-023,
   FR-027, FR-028
 - **Manual prerequisites:** none beyond a published or fixture registry site.
   Tests use a local static server.
-- **Plan:** —
+- **Plan:** [`plan-client-distribution.md`](plan-client-distribution.md)
 - **Done when:** an end-to-end test builds, publishes to a temporary directory,
   serves, pulls, and runs; a tampered asset fails; an abandonware image refuses
   to pull without the acceptance flag and succeeds with it; a tampered catalog
