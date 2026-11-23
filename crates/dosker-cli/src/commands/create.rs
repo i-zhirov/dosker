@@ -188,12 +188,12 @@ pub fn create_container(
         let _ = context.store.remove(&record);
         return Err(error.into());
     }
-    if needs_tree_projection(&config) {
-        if let Err(error) = project_create_disk(context, &reference, &disk) {
-            remove_anonymous(context, &anonymous);
-            let _ = context.store.remove(&record);
-            return Err(error);
-        }
+    if needs_tree_projection(&config)
+        && let Err(error) = project_create_disk(context, &reference, &disk)
+    {
+        remove_anonymous(context, &anonymous);
+        let _ = context.store.remove(&record);
+        return Err(error);
     }
 
     let record = record.with_disk(disk);
