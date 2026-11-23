@@ -125,6 +125,7 @@
 - 2026-11-23: Slice 3 is deployed and verified, so its status is `Implemented`. The design and roadmap overall stay `Approved` for the design's remaining OpenWatcom license review; the resume and signing questions are deferred.
 - 2026-11-23: The takedown workflow was exercised against `i-zhirov/takedown-test`. The takedown deleted the tar, omitted the image, and a fresh pull failed while the local copy stayed. The exercise also found that an empty CI release directory skipped the version-immutability check; the publish workflow now downloads the existing sidecars before publishing.
 - 2026-11-23: The content-immutability extension was exercised. The sidecar records the manifest-layer content digest; the takedown stamps it for older versions; a bumped version of the revoked test image was rejected by the publish build with `content is revoked`, while the release and site stayed unchanged.
+- 2026-11-23: The registry CI gate was exercised with a good and a bad pull request. The design and roadmap are now `Implemented`; the resume and signing questions are explicitly deferred.
 
 ## Deviations
 

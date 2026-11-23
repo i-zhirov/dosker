@@ -4,7 +4,7 @@
 > slice with the `executing-plans` skill.
 
 - **Date**: 2026-11-23
-- **Status**: Approved
+- **Status**: Implemented
 - **Design**: `.sdd/specs/2026-11-22-doskerfile-registry/design.md`
 - **Strategy**: Five dependency-ordered slices across two repositories. Slice 1
   is the smallest end-to-end license tracer: the `LICENSE` instruction, the

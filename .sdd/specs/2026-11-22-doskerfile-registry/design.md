@@ -1,7 +1,7 @@
 # DOSkerfile Registry — Design
 
 - **Date**: 2026-11-22
-- **Status**: Approved
+- **Status**: Implemented
 - **Input**: Design a DOSker image registry like Docker's counterpart, hostable on GitHub Pages with Releases for binary builds, and add license information to the Doskerfile, including an exception for abandonware.
 
 ## Index
@@ -500,7 +500,7 @@ Compatibility:
 | Question | Owner | Resolution Path |
 | --- | --- | --- |
 | Final registry domain and schema `$id` | User | Resolved: `https://i-zhirov.github.io/dosker-registry`; the schemas and the client default use it |
-| The DOS agent's true license, including the OpenWatcom runtime question | User and maintainer | Settle the runtime terms before the first publish |
+| The DOS agent's true license, including the OpenWatcom runtime question | User and maintainer | Resolved: the source is `MIT OR Apache-2.0`; the compiled binary includes the Open Watcom runtime under the Sybase Open Watcom Public License. `POLICY.md` records both. |
 | Final wording of the GPL source offer in `POLICY.md` | User and maintainer | Resolved: `POLICY.md` names the `SOURCE_URL` offer. |
 | Resume for partial downloads | Maintainer | Defer. Restart from zero in the first version |
 | Signing and attestation | Maintainer | Resolved for the first version: deferred and recorded in `POLICY.md`. |

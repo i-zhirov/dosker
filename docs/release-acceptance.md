@@ -178,6 +178,17 @@ published `SHA256SUMS` covers all three archives.
 - The test image, its revocation record, and its Release were removed after the
   exercise.
 
+## Registry CI gate exercise (2026-11-23)
+
+- Positive PR #1: validate run 45261051551 passed the metadata checks, the
+  pinned release install, the FreeDOS base and DOS agent preparation, and
+  `dosker registry validate`.
+- Negative PR #2: validate run 45261448147 failed with
+  `duplicate tag latest: images/i-zhirov/bad/registry.toml and
+  images/i-zhirov/hello-dos/registry.toml`. The bad-license fixture is rejected
+  by the gate.
+- Both pull requests were closed without merging and their branches deleted.
+
 ## Release 0.1.2
 
 - Workflow run 45027052360 published `v0.1.2` from commit `c3e64d0`.
