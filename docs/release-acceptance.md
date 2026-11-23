@@ -163,6 +163,21 @@ published `SHA256SUMS` covers all three archives.
   exercise. The site lists only `i-zhirov/hello-dos`, and its pull still
   verifies the digest.
 
+## Takedown content-immutability exercise (2026-11-23)
+
+- Test image `i-zhirov/takedown-test:0.1.0`, digest
+  `sha256:487aef351d55c6aab285ff7904897a4b8988fa72f6036c5af621bc3c03abb305`,
+  content digest `sha256:25d6f56fb7c3e9d9a865036c8369a5a349b8533a036a03244e4a7a02efcfd181`.
+- Publish run 45258017912 wrote the sidecar with the content digest. The
+  revocation omitted the image, and takedown run 45259437696 stamped the
+  sidecar and deleted the tar.
+- The version was then bumped to 0.1.1. Publish run 45259644181 failed with
+  `image i-zhirov/takedown-test content is revoked; change the content before
+  publishing a new version`. The release kept only the 0.1.0 sidecar, and the
+  site stayed on `i-zhirov/hello-dos`.
+- The test image, its revocation record, and its Release were removed after the
+  exercise.
+
 ## Release 0.1.2
 
 - Workflow run 45027052360 published `v0.1.2` from commit `c3e64d0`.

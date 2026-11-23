@@ -133,7 +133,8 @@ A maintainer records a revoked digest in `revoked.toml`. The site deploy omits
 the version from every tag and version list, so a pull fails. A maintainer then
 runs the `takedown` workflow: it checks the record, deletes the image tar, keeps
 the version sidecar, and redeploys Pages. A later publish skips a revoked
-current digest.
+current digest. A new version of the same image content is refused; the
+sidecar keeps the content digest recorded at the takedown.
 
 A local copy is never deleted. A local tag still starts with `dosker run`; the
 next pull of a revoked tag fails.
