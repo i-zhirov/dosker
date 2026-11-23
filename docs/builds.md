@@ -27,6 +27,18 @@ in-DOS `RUN`.
 - For an unchanged boot, the projection preserves the geometry, label, media
   descriptor, and disk size.
 
+## Runtime projection
+
+`create` and `run` project the final tree onto the private C: disk for a
+non-booter image whose history contains a non-empty `COPY` or `RUN`.
+This uses the same `project_tree` path as in-DOS `RUN`, so `COPY` and
+`RUN` files are visible in the running container.
+
+Config-only, imported, and FreeDOS-base images keep the raw-disk copy
+unchanged. Booter images are never projected. The projected disk is
+runtime state only; the image's raw disk and its annotation do not change.
+Boot overrides are not applied by `create`.
+
 ## Partition overrides
 
 A layer can carry a boot override. A changed MBR, partition table, or boot

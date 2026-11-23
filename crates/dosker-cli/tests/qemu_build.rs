@@ -162,8 +162,8 @@ fn built_image_boots_and_answers_exec() {
         "the built image changed the raw-disk annotation"
     );
 
-    // The built image boots the retained base disk. The tree checks above prove
-    // COPY and RUN --host. This boot proves boot and exec only.
+    // The build keeps the base raw disk. create projects the final tree onto
+    // the private disk, so the guest sees COPY and RUN --host here.
     let started = root.run_with_qemu(&["run", "-d", "--name", CONTAINER_NAME, "built:latest"]);
     assert_eq!(
         started.status.code(),
@@ -186,6 +186,34 @@ fn built_image_boots_and_answers_exec() {
         stdout_text(&hello).contains("HELLO"),
         "stdout: {}",
         stdout_text(&hello)
+    );
+
+    let copied = root.run_with_qemu(&["exec", id.as_str(), "TYPE", r"C:\APPS\HELLO.TXT"]);
+    assert_eq!(
+        copied.status.code(),
+        Some(0),
+        "stdout: {}; stderr: {}",
+        stdout_text(&copied),
+        stderr_text(&copied)
+    );
+    assert!(
+        stdout_text(&copied).contains("COPIED"),
+        "stdout: {}",
+        stdout_text(&copied)
+    );
+
+    let generated = root.run_with_qemu(&["exec", id.as_str(), "TYPE", r"C:\GEN.TXT"]);
+    assert_eq!(
+        generated.status.code(),
+        Some(0),
+        "stdout: {}; stderr: {}",
+        stdout_text(&generated),
+        stderr_text(&generated)
+    );
+    assert!(
+        stdout_text(&generated).contains("HOST"),
+        "stdout: {}",
+        stdout_text(&generated)
     );
 
     let stopped = root.run_with_qemu(&["stop", id.as_str()]);

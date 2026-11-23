@@ -18,13 +18,13 @@ The current `examples/openwatcom-dos` example is volume-based. Its
 117.8 MiB OpenWatcom tree into the host-side `watcom-tools` volume. The
 image alone does not contain the compiler.
 
-`COPY` and `RUN` cannot fix that. They change build tree layers only.
-`create` copies the image's annotated raw-disk blob to the container
-disk, and the raw disk remains the one from the base. The runtime does
-not project tree layers onto that disk. `docs/builds.md` and
-`crates/dosker-cli/src/commands/create.rs` show this split.
+This plan predates runtime tree projection. At the time, `COPY` and
+`RUN` changed build tree layers only. `create` copied the base raw disk
+and did not project those layers, so the example used an imported disk.
+Runtime projection now exists; this example remains the prebuilt-disk
+variant.
 
-Use the existing normal DOS disk import path instead:
+The example uses the existing normal DOS disk import path:
 
 ```text
 256 MiB bootable FreeDOS raw disk

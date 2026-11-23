@@ -18,6 +18,12 @@ The store uses these media types:
 Blobs are content-addressed by SHA-256 and are read-only. Container disks are
 private writable copies; the stored image is never modified.
 
+When a non-booter image's history contains a non-empty `COPY` or `RUN`,
+`create` copies the image raw disk and projects the final image tree onto
+the private copy. The stored raw disk and its annotation are unchanged;
+the projected disk is runtime state only. Config-only and import-only
+images keep the raw-disk copy. Booter images are never projected.
+
 ## Import
 
 ```sh
@@ -41,7 +47,8 @@ opaque: it gets no agent and no annotations.
 The manifest of a disk import records two annotations:
 
 - `org.dosker.rawdisk.digest` is the digest of the stored raw disk after
-  injection, which is the blob that `copy_disk_to` materializes.
+  injection, which is the blob that `copy_disk_to` materializes. The
+  private container disk may then receive the final tree projection.
 - `org.dosker.source.digest` is the digest of the original source file before
   injection.
 

@@ -185,6 +185,15 @@ fn create_records_the_digest_and_booter_flag() {
         .expect("load the booter container");
     assert_eq!(booted.image_digest, booter_record.manifest_digest);
     assert!(booted.booter);
+    let booter_disk = booted
+        .disk_path
+        .clone()
+        .expect("the booter container has a private disk");
+    assert_eq!(
+        fs::read(&booter_disk).expect("read the booter private disk"),
+        fs::read(&blob).expect("read the booter blob"),
+        "a booter image must not be projected"
+    );
 }
 
 #[test]

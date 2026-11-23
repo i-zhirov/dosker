@@ -11,9 +11,9 @@ use std::time::Duration;
 
 use common::{CliRoot, run_captured, stderr_text, stdout_text};
 #[cfg(unix)]
-use dosker_core::{AgentPin, BasePin, LOCK_FILE_NAME, LockFile};
+use dosker_core::{AgentPin, BasePin, ContainerId, LOCK_FILE_NAME, LockFile};
 #[cfg(unix)]
-use dosker_image::{ImageDigest, ImageRef, ImageReference, OciStore};
+use dosker_image::{DosPath, ImageDigest, ImageRef, ImageReference, OciStore, TreeNode, read_tree};
 
 const RUN_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(unix)]
@@ -495,4 +495,78 @@ fn build_prints_run_host_output() {
     assert!(text.contains("host-output"), "stdout: {text}");
     assert!(text.contains("Step 1/1: built"), "stdout: {text}");
     assert_eq!(built_digest(&output).len(), "sha256:".len() + 64);
+}
+
+#[cfg(unix)]
+#[test]
+fn create_projects_copy_layers_onto_the_private_disk() {
+    let fixture = Fixture::new();
+    let payload = b"projected\r\n";
+    fixture.write("ADD.TXT", payload);
+    fixture.doskerfile("FROM base:latest\nCOPY ADD.TXT C:/APPS/\n");
+
+    let build = fixture.build(&["-t", "built:latest"]);
+    assert_eq!(
+        build.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&build)
+    );
+
+    let output = fixture
+        .root
+        .run(&["create", "built:latest", "--name", "projected"]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    let id = ContainerId::parse(stdout_text(&output).trim()).expect("parse the container id");
+    let record = fixture
+        .root
+        .store()
+        .load(&id)
+        .expect("load the created container");
+    let disk = record.disk_path.expect("the record has a private disk");
+
+    let tree = read_tree(&disk).expect("read the projected container disk");
+    let path = DosPath::parse(r"C:\APPS\ADD.TXT").expect("the DOS path parses");
+    match tree.get(&path) {
+        Some(TreeNode::File(file)) => {
+            assert_eq!(file.bytes.as_slice(), payload);
+        }
+        Some(TreeNode::Dir(_)) => panic!("the COPY destination is a directory"),
+        None => panic!("the projected disk has no COPY destination"),
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn create_rejects_a_tree_that_does_not_fit_the_disk() {
+    let fixture = Fixture::new();
+    let payload = vec![b'x'; 40 * 1024 * 1024];
+    fixture.write("BIG.TXT", &payload);
+    fixture.doskerfile("FROM base:latest\nCOPY BIG.TXT C:/\n");
+
+    let build = fixture.build(&["-t", "built:latest"]);
+    assert_eq!(
+        build.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&build)
+    );
+
+    let output = fixture
+        .root
+        .run(&["create", "built:latest", "--name", "overflow"]);
+    assert_eq!(output.status.code(), Some(1));
+
+    let ps = fixture.root.run(&["ps", "-a"]);
+    assert_eq!(ps.status.code(), Some(0), "stderr: {}", stderr_text(&ps));
+    assert!(
+        !stdout_text(&ps).contains("overflow"),
+        "the failed create left a container: {}",
+        stdout_text(&ps)
+    );
 }

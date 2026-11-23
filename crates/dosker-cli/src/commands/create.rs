@@ -1,13 +1,14 @@
 //! `dosker create`: make a container and its private writable disk.
 
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use dosker_core::{ContainerId, ContainerName};
 use dosker_engine::{Capability, CapabilitySet, DisplayMode};
 use dosker_image::{
-    DEFAULT_VOLUME_SIZE, FLOPPY_1440_SIZE, Image, ImageRef, PortProtocol, VolumeLayout,
-    validate_host_tree,
+    DEFAULT_VOLUME_SIZE, FLOPPY_1440_SIZE, HistoryEntry, Image, ImageConfig, ImageRef,
+    PortProtocol, VolumeLayout, project_tree, validate_host_tree,
 };
 use dosker_platform::endpoint::control_endpoint;
 use dosker_runtime::{ContainerRecord, PortMapping, VolumeError, VolumeKind, VolumeMount};
@@ -70,6 +71,7 @@ pub fn create_container(
 ) -> Result<ContainerRecord, CliError> {
     let reference = ImageRef::parse(&options.image)?;
     let image = context.images.load(&reference)?;
+    let config = context.images.load_config(&reference)?;
 
     let engine = match options.engine {
         Some(engine) => engine,
@@ -186,6 +188,13 @@ pub fn create_container(
         let _ = context.store.remove(&record);
         return Err(error.into());
     }
+    if needs_tree_projection(&config) {
+        if let Err(error) = project_create_disk(context, &reference, &disk) {
+            remove_anonymous(context, &anonymous);
+            let _ = context.store.remove(&record);
+            return Err(error);
+        }
+    }
 
     let record = record.with_disk(disk);
     if let Err(error) = context.store.save(&record) {
@@ -195,6 +204,27 @@ pub fn create_container(
     }
 
     Ok(record)
+}
+
+fn has_tree_changes(history: &[HistoryEntry]) -> bool {
+    history.iter().any(|entry| {
+        !entry.empty_layer
+            && (entry.created_by.starts_with("COPY ") || entry.created_by.starts_with("RUN "))
+    })
+}
+
+fn needs_tree_projection(config: &ImageConfig) -> bool {
+    !config.booter && has_tree_changes(&config.history)
+}
+
+fn project_create_disk(
+    context: &Context,
+    reference: &ImageRef,
+    disk: &Path,
+) -> Result<(), CliError> {
+    let tree = context.images.load_tree(reference)?;
+    project_tree(disk, &tree)?;
+    Ok(())
 }
 
 fn resolve_volumes(
@@ -453,6 +483,7 @@ fn remove_anonymous(context: &Context, names: &[String]) {
 mod tests {
     use std::net::Ipv4Addr;
 
+    use chrono::Utc;
     use dosker_engine::{Capability, CapabilitySet};
     use dosker_image::PortProtocol;
     use dosker_runtime::PortMapping;
@@ -466,6 +497,48 @@ mod tests {
             guest_port: 80,
             protocol: PortProtocol::Tcp,
         }
+    }
+
+    fn history_entry(created_by: &str, empty_layer: bool) -> HistoryEntry {
+        HistoryEntry {
+            created_by: created_by.to_owned(),
+            created_at: Utc::now(),
+            empty_layer,
+            comment: None,
+        }
+    }
+
+    #[test]
+    fn copy_and_run_history_need_projection() {
+        assert!(has_tree_changes(&[history_entry(
+            r"COPY ADD.TXT C:\APPS\",
+            false
+        )]));
+        assert!(has_tree_changes(&[history_entry(
+            "RUN COPY ADD.TXT MADE.TXT",
+            false
+        )]));
+        assert!(has_tree_changes(&[history_entry(
+            "RUN --host printf HOST > GEN.TXT",
+            false
+        )]));
+    }
+
+    #[test]
+    fn config_only_history_does_not_need_projection() {
+        assert!(!has_tree_changes(&[
+            history_entry("ENV \"A=1\"", true),
+            history_entry("CMD ECHO BUILT", true),
+            history_entry("MACHINE memory=32M", true),
+        ]));
+    }
+
+    #[test]
+    fn empty_copy_and_run_layers_do_not_need_projection() {
+        assert!(!has_tree_changes(&[
+            history_entry(r"COPY ADD.TXT C:\APPS\", true),
+            history_entry("RUN COPY ADD.TXT MADE.TXT", true),
+        ]));
     }
 
     #[test]
