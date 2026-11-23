@@ -282,7 +282,7 @@ entries. It does not remove named volumes. Remove `hello-data` first.
 - The example uses a POSIX shell. Windows users can run the same commands in
   PowerShell with Windows paths and `$env:NAME` variables.
 
-## Example: OpenWatcom C/C++ on FreeDOS
+## Example: OpenWatcom C/C++ on FreeDOS with a toolchain volume
 
 [`examples/openwatcom-dos`](examples/openwatcom-dos) runs the DOS-hosted
 OpenWatcom v2 toolchain inside FreeDOS. A host source directory is mounted
@@ -300,8 +300,8 @@ command. It needs `curl`, `unzip`, `mtools`, and QEMU.
 Run the printed command, then build and run:
 
 ```sh
-dosker exec openwatcom-demo D:\BUILD.BAT
-dosker exec openwatcom-demo D:\HELLO.EXE
+dosker exec openwatcom-demo 'D:\BUILD.BAT'
+dosker exec openwatcom-demo 'D:\HELLO.EXE'
 ```
 
 `BUILD.BAT` compiles `HELLO.C` with `WCC` and links it with `WLINK`. The
@@ -335,6 +335,57 @@ rm -rf "$DOSKER_ROOT"
 ```
 
 [Manual verification](examples/openwatcom-dos/VERIFY.md).
+
+## Example: Bundled OpenWatcom C/C++ on FreeDOS
+
+[`examples/openwatcom-dos-bundled`](examples/openwatcom-dos-bundled) is a
+separate, self-contained workflow. Its setup builds a 256 MiB FreeDOS
+disk, installs OpenWatcom in `C:\WATCOM`, and puts `HELLO.C` and
+`BUILD.BAT` in `C:\APP`. It imports the disk as
+`openwatcom-bundled-base:1.3` and builds `openwatcom-bundled:latest`.
+
+The image contains the compiler. It needs no `watcom-tools` volume and no
+source bind. The setup needs `curl`, `unzip`, `mtools`, and QEMU.
+
+```sh
+. examples/openwatcom-dos-bundled/setup.sh
+```
+
+Run the printed command, then build and run:
+
+```sh
+dosker exec openwatcom-bundled-demo 'C:\APP\BUILD.BAT'
+dosker exec openwatcom-bundled-demo 'C:\APP\HELLO.EXE'
+```
+
+The quoted paths are required in POSIX shells because the backslashes are
+otherwise consumed by the shell. The build writes `HELLO.OBJ`,
+`HELLO.MAP`, and `HELLO.EXE` to `C:\APP`.
+
+The source is baked into the image. To change `HELLO.C` or `BUILD.BAT`,
+rebuild the disk and image by sourcing the setup again. This example does
+not use QEMU vvfat or a host bind.
+
+The image can be saved and loaded without the base tag:
+
+```sh
+dosker save -o "$DOSKER_ROOT/openwatcom-bundled.tar" openwatcom-bundled:latest
+dosker rmi openwatcom-bundled:latest
+dosker rmi openwatcom-bundled-base:1.3
+dosker load "$DOSKER_ROOT/openwatcom-bundled.tar"
+dosker run -d --name openwatcom-bundled-loaded --boot-timeout 120 openwatcom-bundled:latest
+```
+
+The save archive is about 375 MiB. It contains the 256 MiB raw disk and
+the toolchain. Loading it restores only `openwatcom-bundled:latest`; the
+base tag is not needed.
+
+The OpenWatcom package is about 122 MiB and is not committed. Publishing
+a saved image redistributes OpenWatcom; check the OpenWatcom license
+before distributing the archive. Do not commit the disk, archive, or
+toolchain.
+
+[Manual verification](examples/openwatcom-dos-bundled/VERIFY.md).
 
 ## CI setup
 
@@ -522,8 +573,10 @@ DOSker is dual-licensed under the MIT License or the Apache License 2.0
 - [Install](docs/install.md)
 - [Example environment](examples/hello-dos)
 - [Example verification](examples/hello-dos/VERIFY.md)
-- [OpenWatcom example](examples/openwatcom-dos)
-- [OpenWatcom verification](examples/openwatcom-dos/VERIFY.md)
+- [OpenWatcom volume example](examples/openwatcom-dos)
+- [OpenWatcom volume verification](examples/openwatcom-dos/VERIFY.md)
+- [Bundled OpenWatcom example](examples/openwatcom-dos-bundled)
+- [Bundled OpenWatcom verification](examples/openwatcom-dos-bundled/VERIFY.md)
 - [Release](docs/release.md)
 - [Multi-engine decision](docs/multi-engine-decision.md)
 - [Design](.sdd/specs/2026-11-01-dosker/design.md)

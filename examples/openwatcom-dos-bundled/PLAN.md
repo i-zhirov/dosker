@@ -5,7 +5,7 @@
 > Verify command passes.
 
 - **Date**: 2026-11-22
-- **Status**: In Progress
+- **Status**: Implemented
 - **Design**: This plan's Design section (self-contained imported-disk example)
 - **Depends on**: —
 - **Manual prerequisites**: QEMU, `dosker` 0.1.2+, `curl`, `unzip`, `mtools`, a FreeDOS 1.3 source image, network access, and about 2 GiB free disk.
@@ -223,7 +223,7 @@ dosker exec openwatcom-bundled-demo C:\APP\HELLO.EXE
       - `dosker exec openwatcom-bundled-loaded 'C:\APP\BUILD.BAT'` and `'C:\APP\HELLO.EXE'` pass with no volume and no base tag.
       - The save archive is under 500 MiB.
 
-- [ ] **Task 6: Document the bundled example and keep the volume example separate**
+- [x] **Task 6: Document the bundled example and keep the volume example separate**
     - **Implements:** Design §Design; §Constraints
     - **Modify `README.md`**
         - Add a bundled-example section after the existing OpenWatcom volume example.
