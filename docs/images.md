@@ -45,6 +45,38 @@ The manifest of a disk import records two annotations:
 - `org.dosker.source.digest` is the digest of the original source file before
   injection.
 
+## Pull
+
+```sh
+dosker pull owner/name:tag
+dosker pull owner/name@sha256:<hex>
+dosker pull owner/name:tag --accept-license <image-digest>
+```
+
+`pull` resolves the reference through the Pages API, verifies the manifest,
+the config, the asset, and every blob, and stores the image. A tag pull stores
+`owner/name:<tag>`; a digest pull stores `owner/name:<version>`.
+
+An image whose verified config license summary is not `redistributable`
+refuses with exit code `3` and prints the exact digest to accept. Acceptance is
+stored by digest under `<data-root>/accepted/`. The downloaded asset is cached
+at `<data-root>/cache/registry/assets/<hex>.tar` and re-hashed on every pull.
+
+`run`, `create`, and `build` pull a missing remote reference. Pass `--no-pull`
+to keep the local-only behavior.
+
+## Search and remote inspect
+
+```sh
+dosker search <term> [--json]
+dosker image inspect owner/name:tag
+```
+
+`search` filters the catalog from `/index.json` by name, description, and tag.
+`--json` prints the catalog object with the filtered images. `image inspect`
+shows a local image or a remote image; the remote view shows the tag or digest,
+version, digests, asset URL and size, license summary, and the license entries.
+
 ## List and tag
 
 ```sh

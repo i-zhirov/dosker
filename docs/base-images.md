@@ -1,7 +1,8 @@
 # FreeDOS base images
 
 DOSker builds its default `freedos:1.3` base locally from a pinned FreeDOS
-distribution. It does not redistribute FreeDOS.
+distribution. The `dosker-registry` repository can publish an image built on
+that base; the image records the FreeDOS license entry and its source URL.
 
 ## Inputs
 
@@ -144,6 +145,10 @@ digest = "sha256:<manifest digest>"
 [agent]
 version = "1.0.0"
 ```
+
+A namespaced base that is missing locally is pulled before the build;
+`build --no-pull` keeps the local-only error. A pulled base is pinned by its
+manifest digest in the lock file.
 
 `dosker build --update` refreshes a moved pin. It does not rebuild a stored
 base. To rebuild the base, remove its tag with `dosker rmi freedos:1.3` and

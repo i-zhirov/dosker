@@ -17,6 +17,7 @@ fn options(tag: Option<&str>) -> BuildOptions {
             .timestamp_opt(1_700_000_000, 0)
             .single()
             .expect("the fixed time is valid"),
+        no_pull: false,
     }
 }
 

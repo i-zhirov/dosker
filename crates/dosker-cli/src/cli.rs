@@ -15,6 +15,7 @@ use crate::error::CliError;
 pub const EXIT_OK: u8 = 0;
 pub const EXIT_ERROR: u8 = 1;
 pub const EXIT_USAGE: u8 = 2;
+pub const EXIT_LICENSE: u8 = 3;
 pub const EXIT_TIMEOUT: u8 = 124;
 pub const EXIT_NOT_RUNNING: u8 = 125;
 
@@ -53,6 +54,8 @@ pub enum Command {
     Tag(TagArgs),
     Save(SaveArgs),
     Load(LoadArgs),
+    Pull(PullArgs),
+    Search(SearchArgs),
     System(SystemArgs),
     Registry(RegistryArgs),
     Engines(EnginesArgs),
@@ -72,6 +75,9 @@ pub struct BuildArgs {
 
     #[arg(long = "no-cache")]
     pub no_cache: bool,
+
+    #[arg(long = "no-pull")]
+    pub no_pull: bool,
 
     #[arg(long = "timeout", default_value_t = 300)]
     pub timeout: u64,
@@ -110,6 +116,9 @@ pub struct RunArgs {
     #[arg(long = "boot-timeout", default_value_t = 60)]
     pub boot_timeout: u64,
 
+    #[arg(long = "no-pull")]
+    pub no_pull: bool,
+
     pub image: String,
 }
 
@@ -136,6 +145,9 @@ pub struct CreateArgs {
 
     #[arg(long = "bind", value_name = "drive:path[:ro]")]
     pub bind: Vec<String>,
+
+    #[arg(long = "no-pull")]
+    pub no_pull: bool,
 
     pub image: String,
 }
@@ -178,6 +190,7 @@ pub struct ImageArgs {
 #[derive(Debug, Subcommand)]
 pub enum ImageCommand {
     Import(ImageImportArgs),
+    Inspect(ImageInspectArgs),
 }
 
 /// Import a disk image.
@@ -188,6 +201,12 @@ pub struct ImageImportArgs {
 
     pub file: PathBuf,
 
+    pub reference: String,
+}
+
+/// Inspect one local or remote image.
+#[derive(Debug, Args)]
+pub struct ImageInspectArgs {
     pub reference: String,
 }
 
@@ -258,6 +277,28 @@ pub struct LoadArgs {
     pub file: PathBuf,
 }
 
+/// Pull an image from a registry.
+#[derive(Debug, Args)]
+pub struct PullArgs {
+    /// A namespaced or host-qualified reference.
+    pub reference: String,
+
+    /// Accept the exact image digest for a non-redistributable image.
+    #[arg(long = "accept-license")]
+    pub accept_license: Option<String>,
+}
+
+/// Search the registry catalog.
+#[derive(Debug, Args)]
+pub struct SearchArgs {
+    /// The search term.
+    pub term: String,
+
+    /// Print the filtered catalog as JSON.
+    #[arg(long)]
+    pub json: bool,
+}
+
 /// Manage the DOSker data root.
 #[derive(Debug, Args)]
 pub struct SystemArgs {
@@ -287,6 +328,8 @@ pub struct RegistryArgs {
 pub enum RegistryCommand {
     /// Validate one image directory or a registry root.
     Validate(RegistryValidateArgs),
+    /// Recheck the final tree of a built image.
+    CheckFinal(CheckFinalArgs),
 }
 
 /// Arguments for `registry validate`.
@@ -298,6 +341,13 @@ pub struct RegistryValidateArgs {
     /// Override the discovered registry root.
     #[arg(long)]
     pub registry_root: Option<PathBuf>,
+}
+
+/// Arguments for `registry check-final`.
+#[derive(Debug, Args)]
+pub struct CheckFinalArgs {
+    /// A tag or digest reference in the local store.
+    pub image: String,
 }
 
 /// List and inspect engines.
@@ -543,6 +593,14 @@ fn dispatch(command: Command) -> Result<u8, CliError> {
         Command::Load(args) => {
             let mut context = Context::load()?;
             commands::load::execute(args, &mut context)
+        }
+        Command::Pull(args) => {
+            let mut context = Context::load()?;
+            commands::pull::execute(args, &mut context, Utc::now())
+        }
+        Command::Search(args) => {
+            let mut context = Context::load()?;
+            commands::search::execute(args, &mut context)
         }
         Command::System(args) => {
             let mut context = Context::load()?;

@@ -58,6 +58,9 @@ dosker-build = { path = "crates/dosker-build" }
 ignore = "0.4"
 fatfs = "0.3"
 sha2 = "0.10"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
+url = "2"
 base64 = "0.22"
 tar = "0.4"
 fs2 = "0.4"

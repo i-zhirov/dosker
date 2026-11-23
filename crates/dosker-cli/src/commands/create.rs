@@ -5,9 +5,10 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, Utc};
 use dosker_core::{ContainerId, ContainerName};
 use dosker_engine::{Capability, CapabilitySet, DisplayMode};
+use dosker_image::remote::{self, PullError, PullRequest, RegistryClient};
 use dosker_image::{
-    DEFAULT_VOLUME_SIZE, FLOPPY_1440_SIZE, Image, ImageRef, PortProtocol, VolumeLayout,
-    validate_host_tree,
+    DEFAULT_VOLUME_SIZE, FLOPPY_1440_SIZE, Image, ImageError, ImageRef, PortProtocol,
+    ReferenceSelector, RegistryReference, VolumeLayout, validate_host_tree,
 };
 use dosker_platform::endpoint::control_endpoint;
 use dosker_runtime::{ContainerRecord, PortMapping, VolumeError, VolumeKind, VolumeMount};
@@ -30,6 +31,7 @@ pub struct CreateOptions {
     pub publish: Vec<String>,
     pub volumes: Vec<String>,
     pub binds: Vec<String>,
+    pub no_pull: bool,
 }
 
 pub fn execute(
@@ -55,6 +57,7 @@ pub fn execute(
             publish: args.publish,
             volumes: args.volumes,
             binds: args.bind,
+            no_pull: args.no_pull,
         },
         now,
     )?;
@@ -68,8 +71,37 @@ pub fn create_container(
     options: CreateOptions,
     now: DateTime<Utc>,
 ) -> Result<ContainerRecord, CliError> {
-    let reference = ImageRef::parse(&options.image)?;
-    let image = context.images.load(&reference)?;
+    let registry = RegistryReference::parse(&options.image)?;
+    let remote = registry.host().is_some() || registry.repository().is_namespaced();
+    let reference = match registry.selector() {
+        ReferenceSelector::Tag(_) => ImageRef::Tag(
+            registry
+                .local_reference()
+                .expect("a tag selector has a local reference"),
+        ),
+        ReferenceSelector::Digest(digest) => ImageRef::Digest(digest.clone()),
+    };
+    let image = match context.images.load(&reference) {
+        Ok(image) => image,
+        Err(ImageError::NotFound(_)) if remote && !options.no_pull => {
+            let client = RegistryClient::for_reference(&registry)
+                .map_err(|error| CliError::Pull(PullError::Remote(error)))?;
+            let request = PullRequest {
+                reference: registry,
+                accept: None,
+            };
+            remote::pull(
+                &client,
+                &context.images,
+                &context.registry_cache,
+                &context.acceptance,
+                &request,
+                now,
+            )?;
+            context.images.load(&reference)?
+        }
+        Err(error) => return Err(error.into()),
+    };
 
     let engine = match options.engine {
         Some(engine) => engine,

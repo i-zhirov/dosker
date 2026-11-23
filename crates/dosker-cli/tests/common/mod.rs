@@ -10,17 +10,20 @@ use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use dosker_core::ContainerId;
+use dosker_core::{
+    ContainerId, LicenseBasis, LicenseEntry, LicenseStatus, LicenseSummary, license_summary,
+};
 use dosker_image::{
-    BlobRef, BootLayout, BootMetadata, DosFlavour, FatType as ImageFatType, Geometry, HistoryEntry,
-    ImageConfig, ImageRef, ImageReference, Layer, MachineProfile, OciStore, Tree,
-    VolumeDeclaration, fixed_timestamp,
+    Attributes, BlobRef, BootLayout, BootMetadata, DosFlavour, DosPath, FatType as ImageFatType,
+    Geometry, HistoryEntry, ImageConfig, ImageRef, ImageReference, Layer, LayerDelta,
+    MachineProfile, OciStore, Tree, TreeFile, VolumeDeclaration, fixed_timestamp,
 };
 use dosker_platform::process::{ProcessSupervisor, system};
 use dosker_runtime::StateStore;
 use dosker_test_support::fixtures::{
     agent_executable, kill_process, mock_engine_path, qemu_binary,
 };
+use dosker_test_support::registry_site::SiteImage;
 use fatfs::{FatType, FileSystem, FormatVolumeOptions, FsOptions, format_volume};
 
 const SECTOR_SIZE: u64 = 512;
@@ -158,6 +161,115 @@ impl CliRoot {
             .expect("the base image commits");
 
         (registry, image)
+    }
+
+    /// Stores one final tree image with explicit licenses and returns its digest.
+    pub fn store_final_image(
+        &self,
+        reference: &str,
+        licenses: Vec<LicenseEntry>,
+        files: &[(&str, &[u8])],
+    ) -> String {
+        let mut delta = LayerDelta::new();
+        for (path, bytes) in files {
+            delta.add_file(TreeFile {
+                path: DosPath::parse(path).expect("the file path parses"),
+                attributes: Attributes {
+                    archive: true,
+                    ..Attributes::default()
+                },
+                timestamp: fixed_timestamp(),
+                bytes: bytes.to_vec(),
+            });
+        }
+        let mut tree = Tree::new();
+        tree.apply_delta(&delta).expect("the final tree applies");
+
+        let store = OciStore::new(self.path().to_path_buf());
+        let layer = Layer::from_delta(&tree.to_delta(), "final", None, None)
+            .expect("the final layer builds");
+        let descriptor = store.put_layer(&layer).expect("the final layer stores");
+        let mut config = sample_config(sample_boot(), Some("1.2.3"));
+        config.licenses = licenses;
+        let reference = ImageReference::parse(reference).expect("the final reference parses");
+        store
+            .commit_image(Some(&reference), &config, vec![descriptor], BTreeMap::new())
+            .expect("the final image commits")
+            .manifest_digest
+    }
+
+    /// Builds a command that points at a registry base.
+    pub fn command_with_registry(&self, url: &str) -> Command {
+        let mut command = self.command();
+        command.env("DOSKER_REGISTRY", url);
+        command
+    }
+
+    /// Builds one fixture site image from a committed tree test image.
+    pub fn registry_site_image(
+        &self,
+        reference: &str,
+        version: &str,
+        tag: &str,
+        description: &str,
+        licenses: Vec<LicenseEntry>,
+    ) -> SiteImage {
+        self.store_final_image(reference, licenses, &[]);
+        self.site_image_from_store(reference, version, tag, description)
+    }
+
+    /// Builds one fixture site image from an imported disk image.
+    pub fn registry_site_image_disk(
+        &self,
+        reference: &str,
+        version: &str,
+        tag: &str,
+        description: &str,
+    ) -> SiteImage {
+        self.import_image_as(reference);
+        self.site_image_from_store(reference, version, tag, description)
+    }
+
+    fn site_image_from_store(
+        &self,
+        reference: &str,
+        version: &str,
+        tag: &str,
+        description: &str,
+    ) -> SiteImage {
+        let parsed = ImageReference::parse(reference).expect("a reference");
+        let store = OciStore::new(self.path().to_path_buf());
+        let image = store
+            .load(&ImageRef::Tag(parsed.clone()))
+            .expect("the image");
+        let manifest_bytes = store
+            .read_blob(&image.manifest_digest)
+            .expect("the manifest");
+        let config_bytes = store.read_blob(&image.config_digest).expect("the config");
+        let config: dosker_image::ImageConfig =
+            serde_json::from_slice(&config_bytes).expect("the config parses");
+        let tar = tempfile::NamedTempFile::new().expect("a temporary tar");
+        dosker_image::save_image(&store, &parsed, tar.path()).expect("the save");
+        let asset_tar = fs::read(tar.path()).expect("the tar");
+        let summary = license_summary(&config.licenses).unwrap_or(LicenseSummary::Redistributable);
+        SiteImage {
+            owner: parsed
+                .repository()
+                .namespace()
+                .expect("a namespaced fixture")
+                .to_string(),
+            name: parsed.repository().name().to_string(),
+            version: version.to_owned(),
+            tag: tag.to_owned(),
+            description: description.to_owned(),
+            homepage: None,
+            deprecated: None,
+            license_summary: summary.as_str().to_owned(),
+            manifest_bytes,
+            config_bytes,
+            asset_tar,
+            published_at: "2026-11-23T12:00:00Z".to_owned(),
+        }
     }
 
     /// Builds a command with only `DOSKER_ROOT` set.
@@ -830,5 +942,37 @@ fn sample_config(boot: BootMetadata, agent_version: Option<&str>) -> ImageConfig
             comment: Some("base".to_owned()),
         }],
         licenses: Vec::new(),
+    }
+}
+
+/// Returns one redistributable test license.
+pub fn redistributable_license() -> LicenseEntry {
+    LicenseEntry {
+        name: "APP".to_owned(),
+        spdx: "MIT".to_owned(),
+        holder: None,
+        status: LicenseStatus::Redistributable,
+        basis: Some(LicenseBasis::OpenSourceLicense),
+        evidence: None,
+        license_url: None,
+        covers: Vec::new(),
+        source_url: None,
+        notice: None,
+    }
+}
+
+/// Returns one abandonware test license.
+pub fn abandonware_license() -> LicenseEntry {
+    LicenseEntry {
+        name: "OLD".to_owned(),
+        spdx: "NONE".to_owned(),
+        holder: None,
+        status: LicenseStatus::Abandonware,
+        basis: Some(LicenseBasis::GoodFaith),
+        evidence: Some("https://example.test/evidence".to_owned()),
+        license_url: None,
+        covers: Vec::new(),
+        source_url: None,
+        notice: Some("Old content.".to_owned()),
     }
 }

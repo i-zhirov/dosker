@@ -117,6 +117,11 @@ impl OciStore {
         Self { root }
     }
 
+    /// Returns the data root.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// Returns the OCI layout directory.
     pub fn layout_dir(&self) -> PathBuf {
         self.root.join("images")

@@ -144,6 +144,31 @@ pub fn save_image(
 
 /// Loads every tag from an OCI image-layout tar and replaces existing tags.
 pub fn load_image(store: &OciStore, source: &Path) -> Result<LoadReport, ImageError> {
+    load_image_inner(store, source, None, None)
+}
+
+/// Loads one archive and commits only the given reference.
+pub fn load_image_as(
+    store: &OciStore,
+    source: &Path,
+    reference: &ImageReference,
+    expected_manifest: &str,
+    expected_config: &str,
+) -> Result<LoadReport, ImageError> {
+    load_image_inner(
+        store,
+        source,
+        Some(reference),
+        Some((expected_manifest, expected_config)),
+    )
+}
+
+fn load_image_inner(
+    store: &OciStore,
+    source: &Path,
+    target: Option<&ImageReference>,
+    expected: Option<(&str, &str)>,
+) -> Result<LoadReport, ImageError> {
     let first = scan_archive(source)?;
     let layout: OciLayout = parse_member(source, &first, LAYOUT_MEMBER, "layout marker")?;
     if layout.image_layout_version != OCI_LAYOUT_VERSION {
@@ -203,6 +228,28 @@ pub fn load_image(store: &OciStore, source: &Path) -> Result<LoadReport, ImageEr
         manifests.insert(descriptor.digest.clone(), (manifest, bytes.len() as u64));
     }
 
+    if let Some((expected_manifest, expected_config)) = expected {
+        let descriptor = index
+            .manifests
+            .iter()
+            .find(|descriptor| descriptor.digest == expected_manifest)
+            .ok_or_else(|| {
+                archive_error(
+                    source,
+                    format!("the archive manifest {expected_manifest} is missing"),
+                )
+            })?;
+        let (manifest, _) = manifests
+            .get(&descriptor.digest)
+            .expect("every index manifest is parsed");
+        if manifest.config.digest != expected_config {
+            return Err(ImageError::DigestMismatch {
+                expected: expected_config.to_owned(),
+                actual: manifest.config.digest.clone(),
+            });
+        }
+    }
+
     let mut needed = BTreeSet::new();
     for (manifest, _) in manifests.values() {
         needed.insert(manifest.config.digest.clone());
@@ -252,23 +299,46 @@ pub fn load_image(store: &OciStore, source: &Path) -> Result<LoadReport, ImageEr
 
     let _lock = store.lock_index()?;
     let mut stored = store.load_index()?;
-    let mut references = Vec::new();
-    for descriptor in &index.manifests {
-        let reference = descriptor_ref(source, descriptor)?;
-        let (_, size) = manifests
-            .get(&descriptor.digest)
-            .expect("every index manifest is parsed");
-        stored.remove_ref(&reference.to_string());
-        let mut annotations = BTreeMap::new();
-        annotations.insert(ANNOTATION_REF_NAME.to_owned(), reference.to_string());
-        stored.add(Descriptor {
-            media_type: MEDIA_TYPE_MANIFEST.to_owned(),
-            digest: descriptor.digest.clone(),
-            size: *size,
-            annotations: Some(annotations),
-        });
-        references.push(reference.to_string());
-    }
+    let references = match target {
+        Some(reference) => {
+            let expected_manifest = expected
+                .expect("a targeted load has an expected manifest")
+                .0;
+            let (_, size) = manifests
+                .get(expected_manifest)
+                .expect("the expected manifest is parsed");
+            stored.remove_ref(&reference.to_string());
+            let mut annotations = BTreeMap::new();
+            annotations.insert(ANNOTATION_REF_NAME.to_owned(), reference.to_string());
+            stored.add(Descriptor {
+                media_type: MEDIA_TYPE_MANIFEST.to_owned(),
+                digest: expected_manifest.to_owned(),
+                size: *size,
+                annotations: Some(annotations),
+            });
+            vec![reference.to_string()]
+        }
+        None => {
+            let mut references = Vec::new();
+            for descriptor in &index.manifests {
+                let reference = descriptor_ref(source, descriptor)?;
+                let (_, size) = manifests
+                    .get(&descriptor.digest)
+                    .expect("every index manifest is parsed");
+                stored.remove_ref(&reference.to_string());
+                let mut annotations = BTreeMap::new();
+                annotations.insert(ANNOTATION_REF_NAME.to_owned(), reference.to_string());
+                stored.add(Descriptor {
+                    media_type: MEDIA_TYPE_MANIFEST.to_owned(),
+                    digest: descriptor.digest.clone(),
+                    size: *size,
+                    annotations: Some(annotations),
+                });
+                references.push(reference.to_string());
+            }
+            references
+        }
+    };
     store.write_index(&stored)?;
 
     Ok(LoadReport {

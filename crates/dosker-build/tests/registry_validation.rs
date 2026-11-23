@@ -3,11 +3,16 @@ mod support;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use dosker_build::{RegistryError, resolve_target, validate_registry, validate_target};
-use dosker_core::LicenseSummary;
-use dosker_image::OciStore;
+use dosker_build::{
+    RegistryError, resolve_target, validate_final, validate_registry, validate_target,
+};
+use dosker_core::{LicenseBasis, LicenseEntry, LicenseStatus, LicenseSummary};
+use dosker_image::{
+    Attributes, DosPath, ImageRef, LayerDelta, OciStore, Tree, TreeDir, TreeFile, fixed_timestamp,
+};
 use support::{
-    empty_tree, sample_license, store_booter_base, store_licensed_tree_base, store_tree_base,
+    empty_tree, sample_license, store_booter_base, store_final_booter, store_final_tree,
+    store_licensed_tree_base, store_tree_base,
 };
 
 fn write(path: &Path, text: &str) {
@@ -331,4 +336,100 @@ fn a_missing_namespaced_base_reports_a_pull_hint() {
         }
         other => panic!("expected a base error, got {other:?}"),
     }
+}
+
+fn final_tree(dirs: &[&str], files: &[(&str, &[u8])]) -> Tree {
+    let mut delta = LayerDelta::new();
+    for dir in dirs {
+        delta.add_dir(TreeDir {
+            path: DosPath::parse(dir).expect("the directory path parses"),
+            attributes: Attributes::default(),
+            timestamp: fixed_timestamp(),
+        });
+    }
+    for (path, bytes) in files {
+        delta.add_file(TreeFile {
+            path: DosPath::parse(path).expect("the file path parses"),
+            attributes: Attributes {
+                archive: true,
+                ..Attributes::default()
+            },
+            timestamp: fixed_timestamp(),
+            bytes: bytes.to_vec(),
+        });
+    }
+    let mut tree = Tree::new();
+    tree.apply_delta(&delta).expect("the tree applies");
+    tree
+}
+
+fn final_license(name: &str, spdx: &str, covers: &[&str]) -> LicenseEntry {
+    LicenseEntry {
+        name: name.to_owned(),
+        spdx: spdx.to_owned(),
+        holder: None,
+        status: LicenseStatus::Redistributable,
+        basis: Some(LicenseBasis::OpenSourceLicense),
+        evidence: None,
+        license_url: None,
+        covers: covers.iter().map(|cover| (*cover).to_owned()).collect(),
+        source_url: None,
+        notice: None,
+    }
+}
+
+#[test]
+fn a_final_tree_outside_coverage_fails() {
+    let (store_dir, store) = store();
+    let tree = final_tree(&["APP"], &[("APP/FOO.TXT", b"x")]);
+    store_final_tree(
+        store_dir.path(),
+        "final:latest",
+        &tree,
+        vec![final_license("APP", "MIT", &[r"C:\OTHER\*"])],
+    );
+    let reference = ImageRef::parse("final:latest").unwrap();
+
+    let error = validate_final(&reference, &store).unwrap_err();
+
+    match error {
+        RegistryError::Final { reason, .. } => {
+            assert!(reason.contains("does not cover"), "{reason}");
+        }
+        other => panic!("expected a coverage error, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_final_tree_with_the_notice_passes() {
+    let (store_dir, store) = store();
+    let tree = final_tree(
+        &["APP", "DOSKER"],
+        &[("APP/FOO.TXT", b"x"), ("DOSKER/NOTICE.TXT", b"notice")],
+    );
+    let mut license = final_license("APP", "GPL-2.0-only", &[r"C:\APP\*"]);
+    license.source_url = Some("https://example.org/source".to_owned());
+    store_final_tree(store_dir.path(), "final:latest", &tree, vec![license]);
+    let reference = ImageRef::parse("final:latest").unwrap();
+
+    let validation = validate_final(&reference, &store).unwrap();
+
+    assert_eq!(validation.image, "final:latest");
+    assert_eq!(validation.license_summary, LicenseSummary::Redistributable);
+}
+
+#[test]
+fn a_final_booter_without_a_wildcard_fails() {
+    let (store_dir, store) = store();
+    store_final_booter(
+        store_dir.path(),
+        "boot:latest",
+        b"BOOT",
+        vec![final_license("BOOT", "MIT", &[])],
+    );
+    let reference = ImageRef::parse("boot:latest").unwrap();
+
+    let error = validate_final(&reference, &store).unwrap_err();
+
+    assert!(matches!(error, RegistryError::BooterNeedsWildcard));
 }

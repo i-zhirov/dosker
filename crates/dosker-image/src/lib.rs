@@ -1,5 +1,6 @@
 //! Image references, FAT image access, and the local image store.
 
+pub mod acceptance;
 pub mod archive;
 pub mod boot;
 pub mod cache;
@@ -9,6 +10,7 @@ pub mod error;
 pub mod fat;
 pub mod freedos;
 pub mod host;
+pub mod http;
 pub mod image;
 pub mod inject;
 pub mod layer;
@@ -18,11 +20,13 @@ pub mod oci;
 pub mod path;
 pub mod project;
 pub mod reference;
+pub mod remote;
 pub mod tree;
 pub mod volume;
 
 pub use archive::{
-    ARCHIVE_MODE, ARCHIVE_MTIME_SECONDS, LoadReport, SaveReport, load_image, save_image,
+    ARCHIVE_MODE, ARCHIVE_MTIME_SECONDS, LoadReport, SaveReport, load_image, load_image_as,
+    save_image,
 };
 pub use boot::{BlobRef, BootLayout, BootMetadata, FatType, Geometry};
 pub use cache::{CacheKeyInput, CacheRecord, CacheStore, cache_key};

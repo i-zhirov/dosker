@@ -9,7 +9,9 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use dosker_core::{BasePin, Doskerfile, EngineName, FromSource, Instruction, InstructionKind};
+use dosker_image::acceptance::AcceptanceStore;
 use dosker_image::freedos::{BaseInputs, FreedosVersion, ensure_freedos_base};
+use dosker_image::remote::{self, PullError, PullRequest, RegistryClient, RemoteCache};
 use dosker_image::{
     BootMetadata, CacheKeyInput, CacheStore, Descriptor, DosPath, ImageConfig, ImageDigest,
     ImageError, ImageMedia, ImageRef, ImageReference, Layer, OciStore, ReferenceSelector,
@@ -50,6 +52,8 @@ pub struct BuildOptions {
     pub timeout: Duration,
     /// The clock recorded in new history entries.
     pub now: DateTime<Utc>,
+    /// Whether a missing remote base is left for a later pull.
+    pub no_pull: bool,
 }
 
 /// The result of one successful build.
@@ -131,7 +135,7 @@ impl Builder {
         })?;
         let doskerfile = Doskerfile::parse_bytes(&bytes)?;
         let source = from_source(&doskerfile)?;
-        let base = self.resolve_base(&context, source)?;
+        let base = self.resolve_base(&context, source, options.no_pull)?;
         let initial_engine = initial_engine(&base.config);
         let final_engine = final_engine(&doskerfile.instructions, &base.config);
         check_capabilities(&doskerfile.instructions, &base.config, final_engine)?;
@@ -433,6 +437,7 @@ impl Builder {
         &self,
         context: &BuildContext,
         source: &FromSource,
+        no_pull: bool,
     ) -> Result<ResolvedBase, BuildError> {
         match source {
             FromSource::Freedos { version } => {
@@ -440,7 +445,7 @@ impl Builder {
                 ensure_freedos_base(&self.store, self.freedos_inputs.as_ref(), &version)?;
                 self.load_stored_base(&format!("freedos:{}", version.as_str()))
             }
-            FromSource::Image(value) => self.resolve_image_base(value),
+            FromSource::Image(value) => self.resolve_image_base(value, no_pull),
             FromSource::LocalPath(path) => self.import_base(context.root(), path, ImageMedia::Disk),
             FromSource::BooterPath(path) => {
                 self.import_base(context.root(), path, ImageMedia::Booter)
@@ -448,7 +453,7 @@ impl Builder {
         }
     }
 
-    fn resolve_image_base(&self, value: &str) -> Result<ResolvedBase, BuildError> {
+    fn resolve_image_base(&self, value: &str, no_pull: bool) -> Result<ResolvedBase, BuildError> {
         if ImageDigest::parse(value).is_ok() {
             return self.load_stored_base(value);
         }
@@ -464,18 +469,44 @@ impl Builder {
             ReferenceSelector::Digest(digest) => (ImageRef::Digest(digest.clone()), String::new()),
         };
         let name = registry.identity();
+        let retry_name = name.clone();
+        let retry_tag = tag.clone();
 
         match self.load_base(&reference, name, tag) {
             Ok(base) => Ok(base),
             Err(BuildError::Image(ImageError::NotFound(_)))
                 if registry.host().is_some() || registry.repository().is_namespaced() =>
             {
-                Err(BuildError::RegistryBaseNotLocal {
-                    reference: value.to_owned(),
-                })
+                if no_pull {
+                    return Err(BuildError::RegistryBaseNotLocal {
+                        reference: value.to_owned(),
+                    });
+                }
+                self.pull_base(&registry)?;
+                self.load_base(&reference, retry_name, retry_tag)
             }
             Err(error) => Err(error),
         }
+    }
+
+    fn pull_base(&self, registry: &RegistryReference) -> Result<(), BuildError> {
+        let client = RegistryClient::for_reference(registry)
+            .map_err(|error| BuildError::Pull(PullError::Remote(error)))?;
+        let cache = RemoteCache::new(self.root.clone());
+        let acceptance = AcceptanceStore::new(self.root.clone());
+        let request = PullRequest {
+            reference: registry.clone(),
+            accept: None,
+        };
+        remote::pull(
+            &client,
+            &self.store,
+            &cache,
+            &acceptance,
+            &request,
+            Utc::now(),
+        )?;
+        Ok(())
     }
 
     fn load_stored_base(&self, value: &str) -> Result<ResolvedBase, BuildError> {

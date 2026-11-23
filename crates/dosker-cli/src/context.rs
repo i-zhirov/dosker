@@ -3,6 +3,8 @@
 use std::path::PathBuf;
 
 use dosker_image::OciStore;
+use dosker_image::acceptance::AcceptanceStore;
+use dosker_image::remote::RemoteCache;
 use dosker_platform::console::Console;
 use dosker_platform::data_root::data_root;
 use dosker_runtime::{RuntimePaths, StateStore, VolumeStore};
@@ -15,6 +17,8 @@ pub struct Context {
     pub store: StateStore,
     pub images: OciStore,
     pub volumes: VolumeStore,
+    pub acceptance: AcceptanceStore,
+    pub registry_cache: RemoteCache,
     pub console: Console,
 }
 
@@ -31,7 +35,9 @@ impl Context {
             paths: RuntimePaths::new(root.clone()),
             store: StateStore::new(root.clone()),
             images: OciStore::new(root.clone()),
-            volumes: VolumeStore::new(root),
+            volumes: VolumeStore::new(root.clone()),
+            acceptance: AcceptanceStore::new(root.clone()),
+            registry_cache: RemoteCache::new(root),
             console,
         }
     }

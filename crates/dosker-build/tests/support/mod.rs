@@ -230,6 +230,50 @@ pub fn store_booter_base(root: &Path, reference: &str, bytes: &[u8]) -> String {
     committed.manifest_digest
 }
 
+/// Stores one final tree image with explicit licenses and returns its digest.
+pub fn store_final_tree(
+    root: &Path,
+    reference: &str,
+    tree: &Tree,
+    licenses: Vec<LicenseEntry>,
+) -> String {
+    let store = OciStore::new(root.to_path_buf());
+    let layer =
+        Layer::from_delta(&tree.to_delta(), "final", None, None).expect("the final layer builds");
+    let descriptor = store.put_layer(&layer).expect("the final layer stores");
+    let mut config = sample_config(sample_boot(), Some("1.2.3"));
+    config.licenses = licenses;
+    let reference = ImageReference::parse(reference).expect("the final reference parses");
+    let committed = store
+        .commit_image(Some(&reference), &config, vec![descriptor], BTreeMap::new())
+        .expect("the final image commits");
+    committed.manifest_digest
+}
+
+/// Stores one final booter image with explicit licenses and returns its digest.
+pub fn store_final_booter(
+    root: &Path,
+    reference: &str,
+    bytes: &[u8],
+    licenses: Vec<LicenseEntry>,
+) -> String {
+    let store = OciStore::new(root.to_path_buf());
+    let blob = store.put_blob(bytes).expect("the booter blob stores");
+    let descriptor = dosker_image::Descriptor {
+        media_type: MEDIA_TYPE_BOOTER.to_owned(),
+        digest: blob.digest,
+        size: blob.size,
+        annotations: None,
+    };
+    let mut config = sample_config(BootMetadata::opaque(bytes.len() as u64), None);
+    config.licenses = licenses;
+    let reference = ImageReference::parse(reference).expect("the booter reference parses");
+    let committed = store
+        .commit_image(Some(&reference), &config, vec![descriptor], BTreeMap::new())
+        .expect("the booter image commits");
+    committed.manifest_digest
+}
+
 /// Writes a 4 MiB superfloppy FAT16 image with an `AUTOEXEC.BAT`.
 pub fn write_fat_image(path: &Path) {
     let size = 4 * MIB;

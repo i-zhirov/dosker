@@ -33,6 +33,7 @@ pub fn execute(args: RunArgs, context: &mut Context, now: DateTime<Utc>) -> Resu
             publish: args.publish,
             volumes: args.volumes,
             binds: args.bind,
+            no_pull: args.no_pull,
         },
         now,
     )?;

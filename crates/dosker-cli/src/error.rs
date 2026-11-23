@@ -5,10 +5,11 @@ use std::io;
 use dosker_build::BuildError;
 use dosker_core::CoreError;
 use dosker_image::ImageError;
+use dosker_image::remote::PullError;
 use dosker_platform::PlatformError;
 use dosker_runtime::{StoreError, VolumeError};
 
-use crate::cli::{EXIT_ERROR, EXIT_USAGE};
+use crate::cli::{EXIT_ERROR, EXIT_LICENSE, EXIT_USAGE};
 
 /// A failure in a CLI command.
 #[derive(Debug, thiserror::Error)]
@@ -45,6 +46,10 @@ pub enum CliError {
     #[error(transparent)]
     Build(#[from] BuildError),
 
+    /// A registry pull failed.
+    #[error(transparent)]
+    Pull(#[from] PullError),
+
     /// An input or output operation failed.
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -61,6 +66,9 @@ impl CliError {
             Self::Image(ImageError::InvalidReference(_)) => EXIT_USAGE,
             Self::Volume(VolumeError::InvalidName(_)) => EXIT_USAGE,
             Self::Volume(VolumeError::Image(ImageError::InvalidVolumeSize { .. })) => EXIT_USAGE,
+            Self::Pull(PullError::LicenseNotAccepted(_)) => EXIT_LICENSE,
+            Self::Build(BuildError::Pull(PullError::LicenseNotAccepted(_))) => EXIT_LICENSE,
+            Self::Pull(PullError::AcceptMismatch { .. } | PullError::NotNamespaced) => EXIT_USAGE,
             _ => EXIT_ERROR,
         }
     }

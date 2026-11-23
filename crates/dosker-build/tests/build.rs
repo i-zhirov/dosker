@@ -135,7 +135,14 @@ fn options(tag: Option<&str>) -> BuildOptions {
         no_cache: false,
         timeout: Duration::from_secs(30),
         now: fixed_now(),
+        no_pull: false,
     }
+}
+
+fn no_pull_options(tag: Option<&str>) -> BuildOptions {
+    let mut options = options(tag);
+    options.no_pull = true;
+    options
 }
 
 fn tag(value: &str) -> ImageRef {
@@ -464,7 +471,7 @@ fn build_rejects_a_missing_namespaced_base_with_a_pull_hint() {
     let fixture = Fixture::new();
     fixture.doskerfile("FROM owner/missing:latest\nENV A=1\n");
 
-    match fixture.build(&options(Some("built:latest"))).0 {
+    match fixture.build(&no_pull_options(Some("built:latest"))).0 {
         Err(BuildError::RegistryBaseNotLocal { reference }) => {
             assert_eq!(reference, "owner/missing:latest");
         }

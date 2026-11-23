@@ -67,6 +67,7 @@ fn options() -> BuildOptions {
         no_cache: false,
         timeout: Duration::from_secs(30),
         now: fixed_now(),
+        no_pull: false,
     }
 }
 

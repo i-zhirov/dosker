@@ -23,6 +23,7 @@ pub fn execute(args: BuildArgs, context: &mut Context, now: DateTime<Utc>) -> Re
         no_cache: args.no_cache,
         timeout: Duration::from_secs(args.timeout),
         now,
+        no_pull: args.no_pull,
     };
 
     let outcome = {

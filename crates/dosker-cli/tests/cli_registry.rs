@@ -121,3 +121,62 @@ fn registry_validate_honours_the_registry_root() {
         stdout_text(&output)
     );
 }
+
+fn final_license() -> dosker_core::LicenseEntry {
+    dosker_core::LicenseEntry {
+        name: "APP".to_owned(),
+        spdx: "MIT".to_owned(),
+        holder: None,
+        status: dosker_core::LicenseStatus::Redistributable,
+        basis: Some(dosker_core::LicenseBasis::OpenSourceLicense),
+        evidence: None,
+        license_url: None,
+        covers: Vec::new(),
+        source_url: None,
+        notice: None,
+    }
+}
+
+#[test]
+fn registry_check_final_accepts_a_covered_image() {
+    let root = CliRoot::new();
+    root.store_final_image("final:latest", vec![final_license()], &[]);
+
+    let output = root.run(&["registry", "check-final", "final:latest"]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stdout_text(&output).contains("checked final:latest"),
+        "stdout: {}",
+        stdout_text(&output)
+    );
+}
+
+#[test]
+fn registry_check_final_rejects_an_uncovered_executable() {
+    let root = CliRoot::new();
+    root.store_final_image(
+        "final:latest",
+        vec![final_license()],
+        &[("GAME.EXE", b"MZ")],
+    );
+
+    let output = root.run(&["registry", "check-final", "final:latest"]);
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(
+        stderr_text(&output).contains("does not cover"),
+        "{}",
+        stderr_text(&output)
+    );
+}

@@ -108,6 +108,14 @@ pub enum RegistryError {
     #[error("booter image {image} needs a notice but its tree cannot be inspected")]
     BooterNoticeUnverifiable { image: String },
 
+    /// The final image is not in the local store.
+    #[error("image {reference} is not available locally; build it first")]
+    FinalNotLocal { reference: String },
+
+    /// The final image failed a license, coverage, or notice check.
+    #[error("final image {image}: {reason}")]
+    Final { image: String, reason: String },
+
     /// A filesystem operation failed.
     #[error("i/o error at {}: {source}", path.display())]
     Io { path: PathBuf, source: io::Error },
@@ -631,6 +639,96 @@ pub fn validate_image(
         image: image_label(root, image_dir),
         version: metadata.version,
         tags: metadata.tags,
+        license_summary: license_summary(&licenses).expect("the image has license entries"),
+        checked_paths,
+    })
+}
+
+/// Validates the final tree of a built image against its config licenses.
+///
+/// `publish` runs this after the build and the `RUN` steps. It reads the
+/// stored config and tree, so it sees the final files and never the
+/// Doskerfile.
+pub fn validate_final(
+    reference: &ImageRef,
+    store: &OciStore,
+) -> Result<ImageValidation, RegistryError> {
+    let label = reference.to_string();
+    let config = match store.load_config(reference) {
+        Ok(config) => config,
+        Err(ImageError::NotFound(_)) => {
+            return Err(RegistryError::FinalNotLocal { reference: label });
+        }
+        Err(error) => {
+            return Err(RegistryError::Final {
+                image: label,
+                reason: error.to_string(),
+            });
+        }
+    };
+
+    let tree = if config.booter {
+        None
+    } else {
+        Some(
+            store
+                .load_tree(reference)
+                .map_err(|error| RegistryError::Final {
+                    image: label.clone(),
+                    reason: error.to_string(),
+                })?,
+        )
+    };
+
+    let licenses = config.licenses;
+    if licenses.is_empty() {
+        return Err(RegistryError::Final {
+            image: label,
+            reason: "the image has no license entries".to_owned(),
+        });
+    }
+    validate_licenses(&licenses).map_err(|error| RegistryError::Final {
+        image: label.clone(),
+        reason: error.to_string(),
+    })?;
+
+    let misses = match &tree {
+        Some(tree) => coverage_misses(tree, &licenses, false)?,
+        None => coverage_misses(&Tree::new(), &licenses, true)?,
+    };
+    if !misses.is_empty() {
+        return Err(RegistryError::Final {
+            image: label,
+            reason: format!("the image does not cover: {}", misses.join(", ")),
+        });
+    }
+
+    if requires_notice(&licenses) {
+        if config.booter {
+            return Err(RegistryError::BooterNoticeUnverifiable { image: label });
+        }
+        let tree = tree.as_ref().expect("a non-booter has a tree");
+        if !notice_present(tree) {
+            return Err(RegistryError::Final {
+                image: label,
+                reason: format!("the image needs a notice at {NOTICE_PATH}"),
+            });
+        }
+    }
+
+    let checked_paths = tree
+        .as_ref()
+        .map(|tree| {
+            tree.files()
+                .map(|file| file.path.to_dos_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Ok(ImageValidation {
+        image: label.clone(),
+        version: label,
+        tags: Vec::new(),
         license_summary: license_summary(&licenses).expect("the image has license entries"),
         checked_paths,
     })

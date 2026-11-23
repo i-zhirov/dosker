@@ -31,9 +31,49 @@ A pulled or namespaced image is stored locally as `owner/name:tag`. `tag`,
 by default. `images` prints the full reference.
 
 `DOSKER_REGISTRY` sets the default registry base URL. The default is
-`https://i-zhirov.github.io/doskerfile-registry`. The network client that
-fetches from it is a later slice; this release resolves a base from the local
-image store only.
+`https://i-zhirov.github.io/doskerfile-registry`.
+
+## Pull, search, and inspect
+
+```sh
+dosker pull owner/name:tag
+dosker pull owner/name@sha256:<hex>
+dosker pull owner/name:tag --accept-license <image-digest>
+dosker search <term> [--json]
+dosker image inspect <ref>
+```
+
+`pull` fetches the per-image index, `manifest.json`, and `config.json`. It
+verifies the manifest digest, the config digest, and the config, then reads
+`licenses` from the verified config. It never uses the catalog summary for the
+gate. It downloads the tar from `asset_url`, verifies the asset digest and
+size, verifies the tar's manifest and config, and stores the image.
+
+A tag pull stores `owner/name:<tag>`. A digest pull stores
+`owner/name:<version>`.
+
+An image whose verified license summary is not `redistributable` needs
+acceptance. `pull` prints the image digest and exits with code `3` until the
+user passes `--accept-license <image-digest>`. Acceptance is stored by digest
+under `<data-root>/accepted/`. A different digest needs a new acceptance.
+
+`search` reads `/index.json` and filters the image name, the description, and
+the tags. `--json` prints the catalog object with the filtered images.
+
+`image inspect` shows a local image or a remote image. A remote view shows the
+tag or digest, version, digests, asset URL and size, license summary, and the
+license entries.
+
+The client uses HTTPS. Plain HTTP is accepted only for `localhost` and
+`127.0.0.1`. A redirect from HTTPS to a non-HTTPS URL is refused. An asset is
+capped at 2 GiB.
+
+The asset is cached at `<data-root>/cache/registry/assets/<hex>.tar`. Every
+pull re-hashes the cached bytes. Site documents are fetched on every pull.
+
+`run`, `create`, and `build` pull a missing namespaced or host-qualified
+reference. `run --no-pull`, `create --no-pull`, and `build --no-pull` keep the
+local-only behavior.
 
 ## Validation
 
@@ -66,9 +106,23 @@ It checks:
 - A booter image declares `COVERS=*`. A booter with a copyleft or
   `abandonware` entry fails because its tree cannot be inspected.
 
-The base must be present in the local image store in this release. A missing
-base reports a pull hint. The remote `DOSKER_REGISTRY` base fetch arrives with
-the network client.
+A missing remote base is pulled before the build. Use `build --no-pull` to
+keep the local-only check. The validator still reads the base from the local
+image store; a missing base reports a pull hint.
 
 The registry repository runs the same command for every image in its
 `validate` workflow.
+
+## Final tree check
+
+```sh
+dosker registry check-final <ref>
+```
+
+`registry check-final` reads the stored config and final tree of a built image
+and repeats the license, coverage, and notice checks on that tree. It sees the
+files after every `RUN` step and never reads the Doskerfile. `publish` runs it
+after the build and before it uploads the tar.
+
+It exits `0` on success, `1` on a check failure, and `2` on a usage error. A
+missing image reports a build hint. A booter image uses the booter rule.

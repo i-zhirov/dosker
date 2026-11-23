@@ -356,8 +356,12 @@ job is slower and runs nightly.
 ### Images
 
 DOSker stores images in the local OCI layout and provides `image import`,
-`images`, `tag`, `rmi`, `save`, and `load`. `dosker save` writes a tagged image
-to an OCI image-layout tar and `dosker load` restores its tags.
+`images`, `tag`, `rmi`, `save`, `load`, `pull`, `search`, and
+`image inspect`. `dosker pull` fetches and verifies a registry image; an image
+whose verified license summary is not `redistributable` needs
+`--accept-license <image-digest>` and exits with code `3` until it is accepted.
+`dosker save` writes a tagged image to an OCI image-layout tar and
+`dosker load` restores its tags.
 `dosker system prune` removes stopped containers, untagged images, and stale
 cache entries. See [Images](docs/images.md) for the store layout, the media
 types, and the untag-only `rmi` behavior. The registry declaration, the

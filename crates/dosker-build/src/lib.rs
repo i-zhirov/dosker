@@ -29,8 +29,8 @@ pub use normalize::{
 pub use registry::{
     ImageValidation, NamespaceOwner, Namespaces, RegistryError, RegistryMetadata, RegistryTarget,
     coverage_misses, covers_directory, covers_glob, notice_present, parse_metadata,
-    parse_namespaces, registry_root, requires_notice, resolve_target, scan_tags, validate_image,
-    validate_metadata, validate_namespaces, validate_registry, validate_target,
+    parse_namespaces, registry_root, requires_notice, resolve_target, scan_tags, validate_final,
+    validate_image, validate_metadata, validate_namespaces, validate_registry, validate_target,
 };
 pub use reporter::BuildReporter;
 pub use run_host::{HostRunRequest, run_host};

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use dosker_core::{DoskerfileError, LockFileError};
 use dosker_image::ImageError;
+use dosker_image::remote::PullError;
 use dosker_platform::PlatformError;
 
 /// A failure in a build operation.
@@ -49,6 +50,10 @@ pub enum BuildError {
     /// The base image is not in the local store.
     #[error("base image {reference} is not available locally; pull it first")]
     RegistryBaseNotLocal { reference: String },
+
+    /// A registry pull failed.
+    #[error(transparent)]
+    Pull(#[from] PullError),
 
     /// The selected engine cannot be used.
     #[error("engine {engine}: {reason}")]

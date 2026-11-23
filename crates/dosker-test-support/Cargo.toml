@@ -13,6 +13,7 @@ dosker-core.workspace = true
 dosker-platform.workspace = true
 dosker-engine.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]

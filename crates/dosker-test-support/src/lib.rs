@@ -2,3 +2,4 @@
 
 pub mod fixtures;
 pub mod mock_adapter;
+pub mod registry_site;

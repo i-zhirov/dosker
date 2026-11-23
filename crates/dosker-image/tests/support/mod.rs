@@ -2,6 +2,8 @@
 
 //! FAT image fixtures for the image tests.
 
+pub mod site;
+
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};

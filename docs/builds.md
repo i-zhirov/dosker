@@ -102,7 +102,8 @@ network access.
 
 A build needs QEMU, `agent/build/DOSKER.EXE`, and a FreeDOS base with the
 agent. A tree-only image without a raw disk fails before the cache is
-consulted.
+consulted. A missing namespaced or host-qualified base is pulled before the
+build; `build --no-pull` keeps the local-only error.
 
 ## Example
 
