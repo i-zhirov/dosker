@@ -124,6 +124,23 @@ published `SHA256SUMS` covers all three archives.
   without `BAD_PATH`.
 - The release is unsigned.
 
+## Release 0.1.4
+
+- Workflow run 45239581834 published `v0.1.4` from commit `daaeb81`.
+- The run published `dosker-0.1.4-linux-x86_64.tar.gz`,
+  `dosker-0.1.4-macos-arm64.tar.gz`, `dosker-0.1.4-windows-x86_64.zip`, and
+  `SHA256SUMS`.
+- The macOS binary printed `dosker 0.1.4`.
+- The registry repository `i-zhirov/dosker-registry` and its Pages site are
+  live. Registry publish run 45243208834 built `i-zhirov/hello-dos:1.0.0`,
+  deployed the site, and the catalog and license record pass the schemas.
+- On this macOS arm64 host, `dosker pull i-zhirov/hello-dos:latest` pulled
+  `sha256:9e818d96d3982b36533ced11fb58db4d3b0f1a063728a45739a71b6fe5a20c86` and
+  verified the asset `sha256:c883423a58479ccdc91ec014b3612e8391869ee7ced16a9265d4efea51c34eba`.
+  The image was not started on this host.
+- The `validate.yml` workflow was not run on a pull request.
+- The `takedown` workflow is deployed; no revocation has been exercised.
+
 ## Release 0.1.2
 
 - Workflow run 45027052360 published `v0.1.2` from commit `c3e64d0`.

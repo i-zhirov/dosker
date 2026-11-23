@@ -6,7 +6,11 @@
 
 - **Date**: 2026-11-23
 - **Status**: Implemented
-- **Manual prerequisites status (2026-11-23):** local implementation proceeds for Tasks 1–8. The domain/`$id`, the GitHub repository and Pages, the license wording, the agent binaries, the `0.1.3` release, and a host `check-jsonschema` install are still open. Task 9's real publish and the CI runs wait for them. Local checks use `uvx check-jsonschema` when the binary is absent.
+- **Manual prerequisites status (2026-11-23):** resolved. The final host is
+  `https://i-zhirov.github.io/dosker-registry`; the repository and Pages are
+  live; the license wording is recorded in `POLICY.md`; registry CI builds the
+  agent and the FreeDOS base from the pinned DOSKer source; the pinned release
+  is `0.1.4`. See `## Deployment`.
 - **Design**: `.sdd/specs/2026-11-22-doskerfile-registry/design.md`
 - **Roadmap**: `.sdd/specs/2026-11-22-doskerfile-registry/roadmap.md` — slice: static-registry-repository
 - **Depends on**: registry-references-and-validation
@@ -181,6 +185,25 @@
 - `POLICY.md` covers namespace proof, abandonware claim and takedown, the GPL source offer, the agent license, and the first-image license statement.
 - Every local check in the task `Verify` lines passes. The manual prerequisites stay listed in the plan and the README.
 
+## Deployment
+
+- The final host is `https://i-zhirov.github.io/dosker-registry`. The GitHub
+  repository and Pages are live, and the site deploys through the shared
+  `site.yml` workflow.
+- The pinned DOSKer release is `0.1.4`. The earlier `v0.1.3` tag was cut from
+  `master` and predates the license core, so it could not build the notice path
+  or ship the registry commands.
+- Registry CI builds the FreeDOS base and `DOSKER.EXE` from the pinned
+  `i-zhirov/dosker` tag through `.github/actions/prepare-image-base`.
+- Publish run 45243208834 built and published `i-zhirov/hello-dos:1.0.0`,
+  generated and deployed the site, and a client `pull` verified
+  `sha256:9e818d96d3982b36533ced11fb58db4d3b0f1a063728a45739a71b6fe5a20c86`.
+- GitHub replaces `:` in release asset names. The site generator and the
+  takedown helper resolve the tar by its digest, so the sanitized
+  `sha256.<hex>.tar` name is accepted.
+- The `validate.yml` workflow has not run on a pull request. Its local checks
+  and the shared base action are in place.
+
 ## Deviations
 
 - **`latest` is not required per image.** FR-021 makes tags unique across the whole registry, so only one image can own `latest`. The catalog `latest` now names the `registry.toml` current version. Task 6's `a_missing_latest_fails` became `an_image_without_tags_fails`.
@@ -191,4 +214,4 @@
 - **No static `tests/fixtures/releases-good.json`.** The fixture inventory is generated with the assets, so the asset digests and sizes stay in sync.
 - **Local Python is 3.14.7.** The code needs 3.11 or newer. CI pins 3.12.
 - **The registry checkout is a sibling directory.** The local checkout is `<worktree>/dosker-registry`, initialized with `git init`. Nothing is committed or pushed.
-- **The plan is `Implemented`; the roadmap slice stays `In Progress`.** All tasks and local checks are complete, and `scripts/e2e.sh` passes locally. The roadmap `Done when` needs the manual prerequisites: the final domain and `$id`, the GitHub repository with Pages, the license wording, the agent-binary path, and the `0.1.3` DOSker release.
+- **The plan is `Implemented`; the roadmap slice is `Implemented` after the deployment.** The real publish, site, and client pull are recorded under `## Deployment`.

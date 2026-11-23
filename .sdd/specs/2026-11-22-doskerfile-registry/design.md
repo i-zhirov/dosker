@@ -499,11 +499,11 @@ Compatibility:
 
 | Question | Owner | Resolution Path |
 | --- | --- | --- |
-| Final registry domain and schema `$id` | User | Pick a domain before the first publish, then update the schemas and the client default |
+| Final registry domain and schema `$id` | User | Resolved: `https://i-zhirov.github.io/dosker-registry`; the schemas and the client default use it |
 | The DOS agent's true license, including the OpenWatcom runtime question | User and maintainer | Settle the runtime terms before the first publish |
-| Final wording of the GPL source offer in `POLICY.md` | User and maintainer | Decide before the first publish. The `SOURCE_URL` field is now defined. |
+| Final wording of the GPL source offer in `POLICY.md` | User and maintainer | Resolved: `POLICY.md` names the `SOURCE_URL` offer. |
 | Resume for partial downloads | Maintainer | Defer. Restart from zero in the first version |
-| Signing and attestation | Maintainer | Defer to a later phase |
+| Signing and attestation | Maintainer | Resolved for the first version: deferred and recorded in `POLICY.md`. |
 
 ## Success Criteria
 

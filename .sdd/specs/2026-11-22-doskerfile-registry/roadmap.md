@@ -17,9 +17,10 @@
   policy, and one real published image. Slice 4 adds the client distribution
   path against that site: pull, search, remote inspect, digest-keyed
   acceptance, and auto-pull. Slice 5 closes takedown and hardening across both
-  repositories. Slices 3 to 5 depend on manual prerequisites (the registry
-  domain, the Pages setup, the agent license terms, the source-offer wording,
-  the agent binaries in CI, a takedown contact, and the signing decision).
+  repositories. The manual prerequisites that gated Slices 3 to 5 are
+  resolved: the registry host and Pages, the agent license terms, the
+  source-offer wording, the agent binaries in CI, the takedown contact, and the
+  signing decision.
   Each slice is verified on its own before the next starts. The design is too
   large for one plan, so each slice gets a plan just in time.
 
@@ -113,15 +114,14 @@ coverage check on publish; and the rule that a license correction becomes a new
 version. Out of scope: the client commands and the takedown workflow. The slice
 verifies on its own against fixtures and one real image.
 
-- **Status:** In Progress
+- **Status:** Implemented
 - **Depends on:** Slices 1 and 2
 - **Requirements:** FR-010, FR-011, FR-012, FR-013, FR-014, FR-015, FR-022,
   FR-026 (publish part), FR-030
-- **Manual prerequisites:** choose the final registry domain and schema `$id`;
-  create the `dosker-registry` repository with Pages deployed by a custom
-  Actions workflow; settle the DOS agent/OpenWatcom license terms; decide the
-  GPL source-offer wording; decide how registry CI obtains the DOSKER agent
-  binaries (the DOSker release does not include `DOSKER.EXE` today).
+- **Manual prerequisites:** resolved. The final host is
+  `https://i-zhirov.github.io/dosker-registry`; the repository and Pages are
+  live; `POLICY.md` records the license wording; CI builds the agent and the
+  FreeDOS base from the pinned DOSKer source; the `0.1.4` release is pinned.
 - **Plan:** [`plan-static-registry-repository.md`](plan-static-registry-repository.md)
 - **Done when:** `validate.yml` passes on a good fixture and fails on each bad
   fixture; `publish.yml` publishes the example image idempotently; the
