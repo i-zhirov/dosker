@@ -340,31 +340,39 @@ rm -rf "$DOSKER_ROOT"
 
 [`examples/openwatcom-dos-bundled`](examples/openwatcom-dos-bundled) is a
 separate, self-contained workflow. Its setup builds a 256 MiB FreeDOS
-disk, installs OpenWatcom in `C:\WATCOM`, and puts `HELLO.C` and
-`BUILD.BAT` in `C:\APP`. It imports the disk as
-`openwatcom-bundled-base:1.3` and builds `openwatcom-bundled:latest`.
+base disk and imports it as `openwatcom-bundled-base:1.3`. The
+`Doskerfile` then copies OpenWatcom to `C:\WATCOM`, copies `HELLO.C` and
+`BUILD.BAT` to `C:\APP`, and runs `BUILD.BAT` during the image build. The
+final image tree contains the compiler, the source, and the built
+`HELLO.EXE`.
 
-The image contains the compiler. It needs no `watcom-tools` volume and no
-source bind. The setup needs `curl`, `unzip`, `mtools`, and QEMU.
+The image needs no `watcom-tools` volume and no source bind. The setup
+uses the workspace `target/debug/dosker` or `target/release/dosker` when
+present, builds the workspace binary if Rust is available, and otherwise
+falls back to an installed `dosker`. It also needs `curl`, `unzip`,
+`mtools`, and QEMU.
 
 ```sh
 . examples/openwatcom-dos-bundled/setup.sh
 ```
 
-Run the printed command, then build and run:
+Run the printed command, then verify the build-time compiler run and the
+image:
 
 ```sh
-dosker exec openwatcom-bundled-demo 'C:\APP\BUILD.BAT'
 dosker exec openwatcom-bundled-demo 'C:\APP\HELLO.EXE'
+dosker exec openwatcom-bundled-demo 'DIR C:\WATCOM\BINW\WCC.EXE'
+dosker exec openwatcom-bundled-demo 'DIR C:\APP'
 ```
 
 The quoted paths are required in POSIX shells because the backslashes are
-otherwise consumed by the shell. The build writes `HELLO.OBJ`,
-`HELLO.MAP`, and `HELLO.EXE` to `C:\APP`.
+otherwise consumed by the shell. `BUILD.BAT` already ran during
+`dosker build`; `C:\APP` contains `HELLO.OBJ`, `HELLO.MAP`, and
+`HELLO.EXE`.
 
 The source is baked into the image. To change `HELLO.C` or `BUILD.BAT`,
-rebuild the disk and image by sourcing the setup again. This example does
-not use QEMU vvfat or a host bind.
+rebuild the base and the `COPY`/`RUN` image by sourcing the setup again.
+This example does not use QEMU vvfat or a host bind.
 
 The image can be saved and loaded without the base tag:
 
@@ -376,9 +384,9 @@ dosker load "$DOSKER_ROOT/openwatcom-bundled.tar"
 dosker run -d --name openwatcom-bundled-loaded --boot-timeout 120 openwatcom-bundled:latest
 ```
 
-The save archive is about 375 MiB. It contains the 256 MiB raw disk and
-the toolchain. Loading it restores only `openwatcom-bundled:latest`; the
-base tag is not needed.
+The save archive is about 375 MiB. It contains the 256 MiB base raw disk
+and the image tree with the toolchain, source, and build outputs. Loading
+it restores only `openwatcom-bundled:latest`; the base tag is not needed.
 
 The OpenWatcom package is about 122 MiB and is not committed. Publishing
 a saved image redistributes OpenWatcom; check the OpenWatcom license

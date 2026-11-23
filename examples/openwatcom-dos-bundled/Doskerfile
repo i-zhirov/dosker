@@ -2,5 +2,8 @@ FROM openwatcom-bundled-base:1.3
 
 MACHINE memory=16M
 ENGINE qemu
+COPY toolchain C:/WATCOM
+COPY src C:/APP
+RUN C:\APP\BUILD.BAT
 REQUIRES boot,serial,headless
 CMD ECHO OPENWATCOM BUNDLED READY

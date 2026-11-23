@@ -1,5 +1,10 @@
 # Bundled OpenWatcom FreeDOS Example Implementation Plan
 
+> **Historical plan.** The example was converted on 2026-11-23 to the
+> plain `COPY`/`RUN` flow after runtime tree projection landed. The
+> current implementation and checks are in `README.md` and `VERIFY.md`;
+> this document describes the earlier imported-disk variant.
+
 > Execute this plan with the `executing-plans` skill. Each task is a
 > checkbox; mark it done when its changes are implemented and its
 > Verify command passes.
@@ -21,7 +26,8 @@ image alone does not contain the compiler.
 This plan predates runtime tree projection. At the time, `COPY` and
 `RUN` changed build tree layers only. `create` copied the base raw disk
 and did not project those layers, so the example used an imported disk.
-Runtime projection now exists; this example remains the prebuilt-disk
+Runtime projection now exists, and the example has been converted to the
+plain `COPY`/`RUN` flow. This plan describes the earlier prebuilt-disk
 variant.
 
 The example uses the existing normal DOS disk import path:

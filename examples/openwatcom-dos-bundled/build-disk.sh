@@ -11,8 +11,6 @@ done
 export PATH
 
 OUTPUT="${1:-}"
-TOOLCHAIN="${2:-}"
-SOURCE_DIR="${3:-}"
 SOURCE="${DOSKER_FREEDOS_SOURCE:-}"
 QEMU="${DOSKER_QEMU:-qemu-system-i386}"
 BOOT_TIMEOUT_SECONDS="${DOSKER_BUNDLED_BOOT_TIMEOUT_SECONDS:-120}"
@@ -28,20 +26,14 @@ need() {
     command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"
 }
 
-[ -n "$OUTPUT" ] || die "usage: build-disk.sh <output.img> <toolchain-dir> <source-dir>"
-[ -n "$TOOLCHAIN" ] || die "usage: build-disk.sh <output.img> <toolchain-dir> <source-dir>"
-[ -n "$SOURCE_DIR" ] || die "usage: build-disk.sh <output.img> <toolchain-dir> <source-dir>"
-[ -d "$TOOLCHAIN" ] || die "toolchain directory does not exist: $TOOLCHAIN"
-[ -d "$SOURCE_DIR" ] || die "source directory does not exist: $SOURCE_DIR"
-[ -f "$SOURCE_DIR/HELLO.C" ] || die "source directory lacks HELLO.C: $SOURCE_DIR"
-[ -f "$SOURCE_DIR/BUILD.BAT" ] || die "source directory lacks BUILD.BAT: $SOURCE_DIR"
+[ -n "$OUTPUT" ] || die "usage: build-disk.sh <output.img>"
 [ -n "$SOURCE" ] || die "DOSKER_FREEDOS_SOURCE is not set"
 [ -f "$SOURCE" ] || die "DOSKER_FREEDOS_SOURCE is not a file: $SOURCE"
 [ -n "$QEMU" ] || die "DOSKER_QEMU is empty"
 command -v "$QEMU" >/dev/null 2>&1 || die "missing QEMU executable: $QEMU"
 command -v dosker >/dev/null 2>&1 || die "dosker is not on PATH"
 
-for tool in mcopy mdir mmd dd; do
+for tool in mcopy mdir dd; do
     need "$tool"
 done
 
@@ -97,11 +89,6 @@ mtools_disk_mdir() {
 mtools_disk_mcopy() {
     MTOOLS_SKIP_CHECK=1 MTOOLS_NO_VFAT=1 mcopy -o \
         -i "$DISK_IMG@@$PARTITION_OFFSET" "$@"
-}
-
-mtools_disk_mmd() {
-    MTOOLS_SKIP_CHECK=1 MTOOLS_NO_VFAT=1 mmd \
-        -i "$DISK_IMG@@$PARTITION_OFFSET" "$1"
 }
 
 source_file_present() {
@@ -238,30 +225,6 @@ printf 'build-disk: booting the disk alone\n'
 wait_for_marker 'OPENWATCOM DISK READY' \
     -drive "file=$DISK_IMG,format=raw,if=ide,index=0" \
     -boot c
-
-for dir in binw h rh lib286 lib386; do
-    [ -d "$TOOLCHAIN/$dir" ] \
-        || die "toolchain directory lacks $dir: $TOOLCHAIN"
-done
-
-printf 'build-disk: installing OpenWatcom into C:\\WATCOM\n'
-mtools_disk_mmd "::/WATCOM" >/dev/null 2>&1 || true
-mtools_disk_mmd "::/APP" >/dev/null 2>&1 || true
-for dir in binw h rh lib286 lib386; do
-    mtools_disk_mcopy -s -m "$TOOLCHAIN/$dir" "::/WATCOM"
-done
-mtools_disk_mcopy "$SOURCE_DIR/HELLO.C" "::/APP/HELLO.C"
-mtools_disk_mcopy "$SOURCE_DIR/BUILD.BAT" "::/APP/BUILD.BAT"
-
-for file in \
-    WATCOM/BINW/WCC.EXE \
-    WATCOM/BINW/WLINK.EXE \
-    WATCOM/BINW/DOS4GW.EXE \
-    APP/HELLO.C \
-    APP/BUILD.BAT; do
-    mtools_disk_mdir "::$file" >/dev/null 2>&1 \
-        || die "generated disk lacks $file"
-done
 
 mkdir -p "$(dirname "$OUTPUT")"
 cp "$DISK_IMG" "$OUTPUT"

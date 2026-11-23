@@ -10,10 +10,12 @@ git clone https://github.com/i-zhirov/dosker.git dosker-clean
 cd dosker-clean
 ```
 
-The setup builds a 256 MiB FreeDOS disk, installs OpenWatcom and the
-source on it, imports the disk as a base image, and builds the bundled
-image. It needs QEMU, `curl`, `unzip`, `mtools`, and a FreeDOS 1.3
-source image.
+The setup builds a 256 MiB FreeDOS base disk, imports it, and builds the
+bundled image from a `Doskerfile` that copies OpenWatcom and the source
+and runs `BUILD.BAT` during the build. It uses the workspace binary from
+`target/debug` or `target/release`, builds it if necessary, and falls back
+to an installed `dosker`. It needs QEMU, `curl`, `unzip`, `mtools`, a
+FreeDOS 1.3 source image, and Rust if no binary is built.
 
 The setup downloads the OpenWatcom package to
 `${XDG_CACHE_HOME:-$HOME/.cache}/dosker-openwatcom-dos`. The package is
@@ -29,8 +31,11 @@ Start a new shell, or unset `DOSKER_ROOT`, `DOSKER_AGENT_EXE`,
 ```
 
 The script builds `openwatcom-bundled-base:1.3` from the raw disk and
-then builds `openwatcom-bundled:latest`. It removes the temporary disk
-and volume. The image has no toolchain volume and no source bind.
+then builds `openwatcom-bundled:latest` from the `COPY`/`RUN`
+`Doskerfile`. The `RUN` step executes `C:\APP\BUILD.BAT` under QEMU. The
+script removes the temporary base disk and the copied toolchain/source
+build context. The image tree contains OpenWatcom, the source, and the
+build outputs; there is no toolchain volume and no source bind.
 
 ## Steps
 
@@ -47,18 +52,19 @@ and volume. The image has no toolchain volume and no source bind.
 - [ ] Run:
 
   ```sh
-  dosker exec openwatcom-bundled-demo 'C:\APP\BUILD.BAT'
-  ```
-
-  Confirm exit status 0. The DOS4GW banner appears. The guest creates
-  `C:\APP\HELLO.EXE`.
-- [ ] Run:
-
-  ```sh
   dosker exec openwatcom-bundled-demo 'C:\APP\HELLO.EXE'
   ```
 
-  Confirm `HELLO FROM BUNDLED OPENWATCOM`.
+  Confirm `HELLO FROM BUNDLED OPENWATCOM`. The executable was built
+  during `dosker build`, not at run time.
+- [ ] Run:
+
+  ```sh
+  dosker exec openwatcom-bundled-demo 'DIR C:\APP'
+  ```
+
+  Confirm `HELLO.EXE`, `HELLO.OBJ`, `HELLO.MAP`, `HELLO.C`, and
+  `BUILD.BAT` are present.
 - [ ] Run:
 
   ```sh
@@ -106,12 +112,11 @@ and volume. The image has no toolchain volume and no source bind.
 - [ ] Run:
 
   ```sh
-  dosker exec openwatcom-bundled-loaded 'C:\APP\BUILD.BAT'
   dosker exec openwatcom-bundled-loaded 'C:\APP\HELLO.EXE'
   ```
 
-  Confirm the build exits 0 and the executable prints
-  `HELLO FROM BUNDLED OPENWATCOM`.
+  Confirm the executable prints `HELLO FROM BUNDLED OPENWATCOM` without
+  rebuilding.
 - [ ] Run `dosker volume ls` and confirm no volume is attached.
 - [ ] Run `dosker images` and confirm the base tag is still absent.
 - [ ] Stop and remove the loaded container:
@@ -126,25 +131,22 @@ and volume. The image has no toolchain volume and no source bind.
 
 ## Result
 
-Verified on 2026-11-22 on macOS arm64 (Darwin).
+Verified on 2026-11-23 on macOS arm64 (Darwin).
 
-- DOSker: 0.1.2 Homebrew binary.
+- DOSker: workspace `target/debug/dosker` 0.1.2.
 - QEMU: 11.1.3.
 - OpenWatcom: `2026-11-01-Build`.
 - Base image: `openwatcom-bundled-base:1.3`,
-  `sha256:e21f30ebd50de924b4bb4819e5c85a59040f01cda043b0e600cc7553e4252ab7`.
+  `sha256:c019204e576b5b36dcfa869423cdc680544072667e1417cd565cadc974988a61`.
 - Bundled image: `openwatcom-bundled:latest`,
-  `sha256:6fd219cfccc96d3cefcf225793b0e5765aae80cdcc29acb455d3e1c9394f1665`.
-- The image size is 268,435,456 bytes. It contains OpenWatcom and
-  `C:\APP` source.
-- The build exits 0 and creates `HELLO.OBJ`, `HELLO.MAP`, and
-  `HELLO.EXE`.
+  `sha256:93e8b3043ca91e6cbc205b522268be3c4bd71981d76b6a8abe7bb77d0d525527`.
+- The image size is 268,435,456 bytes. The image tree contains
+  OpenWatcom, `C:\APP` source, and the build outputs.
+- The `RUN C:\APP\BUILD.BAT` step during `dosker build` exits 0 and
+  creates `HELLO.OBJ`, `HELLO.MAP`, and `HELLO.EXE`.
 - `HELLO.EXE` prints `HELLO FROM BUNDLED OPENWATCOM`.
 - `C:\WATCOM\BINW\WCC.EXE` is present.
-- `dosker volume ls` is empty before and after save/load.
-- The save archive is 375 MiB, under the 500 MiB limit.
-- Both image tags were removed, leaving `dosker images` empty.
-- Loading the archive restored only `openwatcom-bundled:latest`.
-- The loaded image built and ran without the base tag and without a
-  volume or bind.
-- The loaded container was left running after this check.
+- `dosker volume ls` is empty.
+- The save/load steps above were verified for the earlier imported
+  variant. The current conversion was verified for setup, `COPY`/`RUN`,
+  and the QEMU boot.

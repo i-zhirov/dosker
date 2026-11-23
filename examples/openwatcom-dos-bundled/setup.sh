@@ -6,8 +6,8 @@
 #   . examples/openwatcom-dos-bundled/setup.sh
 #
 # The script downloads and extracts the DOS-hosted OpenWatcom v2 toolchain,
-# builds a 256 MiB FreeDOS disk containing the toolchain and source, imports
-# that disk as the base image, and builds openwatcom-bundled:latest.
+# builds a 256 MiB FreeDOS base disk, imports it, and builds the bundled
+# image from a COPY/RUN Doskerfile.
 
 setup_error() {
     printf 'setup: %s\n' "$*" >&2
@@ -61,7 +61,7 @@ repo_root=$(setup_repo_root) \
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/dosker-openwatcom-dos"
 mkdir -p "$cache_root" || setup_error "cannot create $cache_root" || return 1
 
-for tool in curl unzip mcopy mmd mdir dd; do
+for tool in curl unzip mcopy mdir dd; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         setup_error "$tool is required; install curl, unzip, and mtools" \
             || return 1
@@ -156,9 +156,7 @@ case "$DOSKER_ROOT" in
     *) export DOSKER_ROOT="$PWD/$DOSKER_ROOT" ;;
 esac
 
-if command -v dosker >/dev/null 2>&1; then
-    :
-elif [ -x "$repo_root/target/debug/dosker" ]; then
+if [ -x "$repo_root/target/debug/dosker" ]; then
     export PATH="$repo_root/target/debug:$PATH"
 elif [ -x "$repo_root/target/release/dosker" ]; then
     export PATH="$repo_root/target/release:$PATH"
@@ -174,8 +172,10 @@ elif command -v cargo >/dev/null 2>&1; then
             --features qemu-engine --bin dosker
     ) || setup_error "cannot build dosker" || return 1
     export PATH="$repo_root/target/debug:$PATH"
+elif command -v dosker >/dev/null 2>&1; then
+    :
 else
-    setup_error "dosker is not on PATH and cargo is not available; install dosker or Rust" \
+    setup_error "cannot find or build dosker; install Rust or dosker" \
         || return 1
 fi
 
@@ -217,9 +217,8 @@ done
 
 disk="$DOSKER_ROOT/openwatcom-bundled-base.img"
 printf 'setup: building the bundled FreeDOS disk\n'
-"$repo_root/examples/openwatcom-dos-bundled/build-disk.sh" \
-    "$disk" "$ow_dir" "$repo_root/examples/openwatcom-dos-bundled/src" \
-    || setup_error "cannot build the bundled FreeDOS disk" || return 1
+"$repo_root/examples/openwatcom-dos-bundled/build-disk.sh" "$disk" \
+    || setup_error "cannot build the bundled FreeDOS base disk" || return 1
 
 printf 'setup: importing the bundled base image\n'
 dosker rmi openwatcom-bundled-base:1.3 >/dev/null 2>&1 || true
@@ -230,14 +229,23 @@ rm -f "$disk"
 build_context="$DOSKER_ROOT/openwatcom-bundled"
 mkdir -p "$build_context" \
     || setup_error "cannot create $build_context" || return 1
+rm -rf "$build_context/toolchain" "$build_context/src" \
+    || setup_error "cannot clean the build context" || return 1
 cp "$repo_root/examples/openwatcom-dos-bundled/Doskerfile" \
     "$build_context/Doskerfile" \
     || setup_error "cannot copy the Doskerfile" || return 1
+cp -R "$repo_root/examples/openwatcom-dos-bundled/src" \
+    "$build_context/src" \
+    || setup_error "cannot copy the example source" || return 1
+cp -R "$ow_dir" "$build_context/toolchain" \
+    || setup_error "cannot copy the OpenWatcom toolchain into the build context" \
+    || return 1
 
-printf 'setup: building openwatcom-bundled:latest\n'
+printf 'setup: building openwatcom-bundled:latest with COPY and RUN\n'
 (cd "$repo_root" \
     && dosker build --update -t openwatcom-bundled:latest "$build_context") \
     || setup_error "cannot build openwatcom-bundled:latest" || return 1
+rm -rf "$build_context/toolchain" "$build_context/src"
 
 printf '\nsetup complete\n'
 printf '  DOSKER_ROOT=%s\n' "$DOSKER_ROOT"
@@ -251,7 +259,8 @@ printf '  Base image=openwatcom-bundled-base:1.3\n'
 printf '  Bundled image=openwatcom-bundled:latest\n'
 printf '\nReady to run:\n'
 printf '  dosker run -d --name openwatcom-bundled-demo --boot-timeout 120 openwatcom-bundled:latest\n'
-printf '\nBuild and run:\n'
-printf "  dosker exec openwatcom-bundled-demo 'C:\\\\APP\\\\BUILD.BAT'\n"
+printf '\nRun and inspect:\n'
 printf "  dosker exec openwatcom-bundled-demo 'C:\\\\APP\\\\HELLO.EXE'\n"
-printf '\nThe image contains OpenWatcom and the source. It needs no volume or bind.\n'
+printf "  dosker exec openwatcom-bundled-demo 'DIR C:\\\\WATCOM\\\\BINW\\\\WCC.EXE'\n"
+printf '\nThe image tree contains OpenWatcom, the source, and the built HELLO.EXE.\n'
+printf 'It needs no volume or bind.\n'
