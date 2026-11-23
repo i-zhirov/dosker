@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dosker.dev/schemas/registry.schema.json",
+  "$id": "https://i-zhirov.github.io/dosker-registry/schemas/registry.schema.json",
   "title": "DOSker registry image metadata",
   "description": "Schema for images/<owner>/<name>/registry.toml after TOML to JSON conversion. A version is immutable. Tags are movable labels.",
   "type": "object",

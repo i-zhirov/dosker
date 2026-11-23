@@ -31,7 +31,9 @@ A pulled or namespaced image is stored locally as `owner/name:tag`. `tag`,
 by default. `images` prints the full reference.
 
 `DOSKER_REGISTRY` sets the default registry base URL. The default is
-`https://i-zhirov.github.io/doskerfile-registry`.
+`https://i-zhirov.github.io/dosker-registry`. The released `dosker` 0.1.3
+still defaults to the old host; set `DOSKER_REGISTRY` to the new host until a
+release carries the new default.
 
 ## Pull, search, and inspect
 

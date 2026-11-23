@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dosker.dev/schemas/revoked.schema.json",
+  "$id": "https://i-zhirov.github.io/dosker-registry/schemas/revoked.schema.json",
   "title": "DOSker registry takedown records",
   "description": "Schema for revoked.toml after TOML to JSON conversion. A revoked version is removed from the catalog and refused by the client.",
   "type": "object",

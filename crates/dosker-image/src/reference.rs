@@ -11,7 +11,7 @@ const MAX_NAME_BYTES: usize = 63;
 const MAX_TAG_BYTES: usize = 128;
 
 /// The default registry base URL.
-pub const DEFAULT_REGISTRY: &str = "https://i-zhirov.github.io/doskerfile-registry";
+pub const DEFAULT_REGISTRY: &str = "https://i-zhirov.github.io/dosker-registry";
 
 /// The environment variable that overrides the default registry base URL.
 pub const REGISTRY_ENV: &str = "DOSKER_REGISTRY";

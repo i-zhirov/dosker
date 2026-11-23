@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dosker.dev/schemas/namespaces.schema.json",
+  "$id": "https://i-zhirov.github.io/dosker-registry/schemas/namespaces.schema.json",
   "title": "DOSker registry namespaces",
   "description": "Schema for namespaces.toml after TOML to JSON conversion. Each owner is a proven GitHub handle.",
   "type": "object",

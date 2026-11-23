@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dosker.dev/schemas/catalog.schema.json",
+  "$id": "https://i-zhirov.github.io/dosker-registry/schemas/catalog.schema.json",
   "title": "DOSker registry catalog",
   "description": "Schema for the generated /index.json search catalog on GitHub Pages.",
   "type": "object",

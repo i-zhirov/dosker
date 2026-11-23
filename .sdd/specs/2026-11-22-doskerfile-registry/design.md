@@ -399,7 +399,7 @@ The six JSON schemas are the machine-readable contracts. They validate the data 
 | Image index | [`contracts/image-index.schema.json`](contracts/image-index.schema.json) |
 | License record | [`contracts/licenses.schema.json`](contracts/licenses.schema.json) |
 
-The design stores the schemas under `contracts/`, following this project's design convention. The registry repository stores copies under `schemas/`, and `validate.yml` refers to that path. The schema `$id` uses a placeholder host until the final domain is chosen.
+The design stores the schemas under `contracts/`, following this project's design convention. The registry repository stores copies under `schemas/`, and `validate.yml` refers to that path. The schema `$id` host is `https://i-zhirov.github.io/dosker-registry/schemas/`.
 
 ## UI Design
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dosker.dev/schemas/image-index.schema.json",
+  "$id": "https://i-zhirov.github.io/dosker-registry/schemas/image-index.schema.json",
   "title": "DOSker registry per-image index",
   "description": "Schema for the generated /v1/<owner>/<name>/index.json on GitHub Pages.",
   "type": "object",
