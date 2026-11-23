@@ -179,12 +179,13 @@ behavior. Out of scope: automated signing when the decision defers it. The
 slice verifies on its own through the catalog, a pull through a revoked tag, and
 a local copy.
 
-- **Status:** Unplanned
+- **Status:** Implemented
 - **Depends on:** Slices 3 and 4
 - **Requirements:** FR-016, FR-029
-- **Manual prerequisites:** name a takedown contact and response window; decide
-  whether signing is in scope.
-- **Plan:** —
+- **Manual prerequisites:** resolved. The contact is the issue tracker
+  `https://github.com/i-zhirov/dosker-registry/issues`, the response window is
+  7 days, and signing is deferred and recorded in `POLICY.md`.
+- **Plan:** [`plan-takedown-and-hardening.md`](plan-takedown-and-hardening.md)
 - **Done when:** a takedown removes the version and its tags from the catalog; a
   pull through a revoked tag fails; a local copy is unchanged; the signing
   decision is recorded; docs match the behavior.
