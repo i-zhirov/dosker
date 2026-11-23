@@ -88,6 +88,24 @@ fn save_defaults_the_output_name_to_name_tag_tar() {
 }
 
 #[test]
+fn save_uses_a_safe_default_name_for_a_namespaced_reference() {
+    let root = CliRoot::new();
+    root.import_image_as("owner/name:tag");
+    let directory = tempfile::tempdir().unwrap();
+    let mut command = root.command();
+    command.current_dir(directory.path());
+    command.args(["save", "owner/name:tag"]);
+    let output = run_captured(&mut command, Duration::from_secs(45));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&output)
+    );
+    assert!(directory.path().join("owner-name-tag.tar").is_file());
+}
+
+#[test]
 fn save_rejects_an_unknown_image() {
     let root = CliRoot::new();
     let archive = root.path().join("missing.tar");

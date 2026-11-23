@@ -369,6 +369,110 @@ fn build_from_a_digest_reference_pins_the_digest() {
 }
 
 #[test]
+fn build_from_a_namespaced_local_tag_records_the_full_base_pin() {
+    let fixture = Fixture::new();
+    let _digest = store_tree_base(
+        fixture.root_path(),
+        "owner/name:tag",
+        &empty_tree(),
+        Some(b"DISK"),
+        None,
+    );
+    fixture.doskerfile("FROM owner/name:tag\nENV A=1\n");
+
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the build succeeds");
+
+    let lock = fixture.lock();
+    assert_eq!(lock.base.len(), 1);
+    assert_eq!(lock.base[0].name, "owner/name");
+    assert_eq!(lock.base[0].tag, "tag");
+}
+
+#[test]
+fn build_from_a_namespaced_local_digest_pins_an_empty_tag() {
+    let fixture = Fixture::new();
+    let digest = store_tree_base(
+        fixture.root_path(),
+        "owner/name:tag",
+        &empty_tree(),
+        Some(b"DISK"),
+        None,
+    );
+    fixture.doskerfile(&format!("FROM owner/name@{digest}\nENV A=1\n"));
+
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the build succeeds");
+
+    let lock = fixture.lock();
+    assert_eq!(lock.base[0].name, "owner/name");
+    assert_eq!(lock.base[0].tag, "");
+    assert_eq!(lock.base[0].digest, digest);
+}
+
+#[test]
+fn build_from_a_host_qualified_local_tag_pins_the_host_and_repository() {
+    let fixture = Fixture::new();
+    let _digest = store_tree_base(
+        fixture.root_path(),
+        "owner/name:tag",
+        &empty_tree(),
+        Some(b"DISK"),
+        None,
+    );
+    fixture.doskerfile("FROM example.com/owner/name:tag\nENV A=1\n");
+
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the build succeeds");
+
+    let lock = fixture.lock();
+    assert_eq!(lock.base[0].name, "example.com/owner/name");
+    assert_eq!(lock.base[0].tag, "tag");
+}
+
+#[test]
+fn build_from_a_bare_digest_keeps_an_empty_pin_name() {
+    let fixture = Fixture::new();
+    let digest = store_tree_base(
+        fixture.root_path(),
+        "base:latest",
+        &empty_tree(),
+        Some(b"DISK"),
+        None,
+    );
+    fixture.doskerfile(&format!("FROM {digest}\nENV A=1\n"));
+
+    fixture
+        .build(&options(Some("built:latest")))
+        .0
+        .expect("the build succeeds");
+
+    let lock = fixture.lock();
+    assert_eq!(lock.base[0].name, "");
+    assert_eq!(lock.base[0].tag, "");
+    assert_eq!(lock.base[0].digest, digest);
+}
+
+#[test]
+fn build_rejects_a_missing_namespaced_base_with_a_pull_hint() {
+    let fixture = Fixture::new();
+    fixture.doskerfile("FROM owner/missing:latest\nENV A=1\n");
+
+    match fixture.build(&options(Some("built:latest"))).0 {
+        Err(BuildError::RegistryBaseNotLocal { reference }) => {
+            assert_eq!(reference, "owner/missing:latest");
+        }
+        _ => panic!("expected a registry base error"),
+    }
+}
+
+#[test]
 fn build_from_a_booter_tag_changes_only_config() {
     let fixture = Fixture::new();
     store_booter_base(fixture.root_path(), "boot:latest", b"BOOTER");

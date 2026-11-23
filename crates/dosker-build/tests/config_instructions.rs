@@ -52,6 +52,7 @@ fn tree_config() -> ImageConfig {
             empty_layer: false,
             comment: None,
         }],
+        licenses: Vec::new(),
     }
 }
 
@@ -78,6 +79,7 @@ fn booter_config() -> ImageConfig {
             empty_layer: false,
             comment: None,
         }],
+        licenses: Vec::new(),
     }
 }
 
@@ -360,15 +362,102 @@ fn config_only_instructions_do_not_change_the_head_layer() {
     apply_text(&mut state, "REQUIRES headless", now).expect("REQUIRES applies");
     apply_text(&mut state, "EXPOSE 80", now).expect("EXPOSE applies");
     apply_text(&mut state, "VOLUME D:", now).expect("VOLUME applies");
+    apply_text(
+        &mut state,
+        "LICENSE NAME=APP SPDX=MIT STATUS=redistributable",
+        now,
+    )
+    .expect("LICENSE applies");
 
     assert_eq!(state.head_layer_digest.as_deref(), Some("sha256:head"));
     assert!(state.layers.is_empty());
-    assert_eq!(state.config.history.len(), base_history + 9);
+    assert_eq!(state.config.history.len(), base_history + 10);
     assert!(
         state.config.history[base_history..]
             .iter()
             .all(|entry| entry.empty_layer)
     );
+}
+
+#[test]
+fn license_appends_to_the_config_and_records_an_empty_layer() {
+    let mut state = tree_state();
+    let now = Utc::now();
+
+    apply_text(
+        &mut state,
+        "LICENSE NAME=APP SPDX=MIT STATUS=redistributable",
+        now,
+    )
+    .expect("LICENSE applies");
+
+    assert_eq!(state.config.licenses.len(), 1);
+    assert_eq!(state.config.licenses[0].name, "APP");
+    assert!(state.config.history.last().unwrap().empty_layer);
+}
+
+#[test]
+fn an_identical_license_is_deduplicated() {
+    let mut state = tree_state();
+    let now = Utc::now();
+
+    apply_text(
+        &mut state,
+        "LICENSE NAME=APP SPDX=MIT STATUS=redistributable",
+        now,
+    )
+    .expect("the first LICENSE applies");
+    apply_text(
+        &mut state,
+        "LICENSE NAME=APP SPDX=MIT STATUS=redistributable",
+        now,
+    )
+    .expect("the identical LICENSE applies");
+
+    assert_eq!(state.config.licenses.len(), 1);
+}
+
+#[test]
+fn a_conflicting_license_fails_without_changing_the_config() {
+    let mut state = tree_state();
+    let now = Utc::now();
+
+    apply_text(
+        &mut state,
+        "LICENSE NAME=APP SPDX=MIT STATUS=redistributable",
+        now,
+    )
+    .expect("the first LICENSE applies");
+
+    let error = apply_text(
+        &mut state,
+        "LICENSE NAME=APP SPDX=Apache-2.0 STATUS=redistributable",
+        now,
+    )
+    .expect_err("the conflicting LICENSE fails");
+
+    match error {
+        BuildError::Instruction { instruction, .. } => assert_eq!(instruction, "LICENSE"),
+        other => panic!("expected a LICENSE instruction error, got {other}"),
+    }
+    assert_eq!(state.config.licenses.len(), 1);
+    assert_eq!(state.config.licenses[0].spdx, "MIT");
+}
+
+#[test]
+fn a_booter_accepts_license() {
+    let mut state = booter_state();
+    let now = Utc::now();
+
+    apply_text(
+        &mut state,
+        "LICENSE NAME=GAME SPDX=NONE STATUS=abandonware BASIS=good-faith EVIDENCE=https://example.org/evidence",
+        now,
+    )
+    .expect("a booter accepts LICENSE");
+
+    assert_eq!(state.config.licenses.len(), 1);
+    assert!(state.config.history.last().unwrap().empty_layer);
 }
 
 #[test]

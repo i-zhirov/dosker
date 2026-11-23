@@ -3,6 +3,7 @@
 pub mod doskerfile;
 pub mod error;
 pub mod id;
+pub mod license;
 pub mod lockfile;
 pub mod name;
 pub mod status;
@@ -13,6 +14,10 @@ pub use doskerfile::{
 };
 pub use error::CoreError;
 pub use id::ContainerId;
+pub use license::{
+    LicenseBasis, LicenseEntry, LicenseError, LicenseStatus, LicenseSummary, license_summary,
+    merge_license_entry, validate_licenses,
+};
 pub use lockfile::{
     AgentPin, BasePin, EnginePin, LOCK_FILE_NAME, LOCK_VERSION, LockFile, LockFileError,
 };

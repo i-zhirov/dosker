@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
+use dosker_core::license::{LicenseEntry, validate_licenses};
 use serde::{Deserialize, Serialize};
 
 use crate::boot::{BootLayout, BootMetadata};
@@ -140,6 +141,8 @@ pub struct ImageConfig {
     pub agent_version: Option<String>,
     pub created_by: String,
     pub history: Vec<HistoryEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub licenses: Vec<LicenseEntry>,
 }
 
 impl ImageConfig {
@@ -197,6 +200,9 @@ impl ImageConfig {
                 return Err(invalid("volume drive must be one letter and a colon"));
             }
         }
+        validate_licenses(&self.licenses).map_err(|error| ImageError::InvalidImageConfig {
+            reason: error.to_string(),
+        })?;
         Ok(())
     }
 

@@ -39,7 +39,7 @@ Version 1. This document defines the grammar and the semantics of every instruct
 ```
 doskerfile   = instruction+
 instruction  = from | copy | run | env | workdir | cmd | machine
-             | engine | engine-config | requires | expose | volume
+             | engine | engine-config | requires | expose | volume | license
 
 from         = "FROM" (image_ref | import_ref | booter_ref)
 image_ref    = name [":" tag | "@sha256:" hex64]
@@ -63,6 +63,8 @@ engine-config = "ENGINE-CONFIG" engine_name raw
 requires     = "REQUIRES" capability ("," capability)*
 expose       = "EXPOSE" port ["/" protocol]
 volume       = "VOLUME" drive
+license      = "LICENSE" field+
+field        = key "=" value
 
 engine_name  = "qemu" | "dosbox-x" | "bochs"
 protocol     = "tcp"
@@ -79,17 +81,24 @@ Forms:
 - `FROM freedos:<version>` builds or reuses the built-in FreeDOS base.
 - `FROM <name>:<tag>` resolves a local image tag.
 - `FROM <name>@sha256:<digest>` resolves a local image digest.
+- `FROM sha256:<digest>` resolves a bare local image digest.
+- `FROM owner/name` resolves a namespaced image and defaults the tag to `latest`.
+- `FROM owner/name:tag` resolves a namespaced image.
+- `FROM host/owner/name:tag` resolves an image from an explicit registry host.
+- `FROM owner/name@sha256:<digest>` resolves a namespaced image digest.
 - `FROM ./path.img` imports a DOS image. DOSker reads the FAT tree and boot metadata. It fails if the image is not a readable DOS image.
 - `FROM booter:./path.img` imports an opaque booter image. No tree, no agent.
 
 Rules:
 
 - FROM must be the first instruction.
+- A namespaced or host-qualified base must be present in the local image store in this release. `build` reports a pull hint when it is missing. Automatic pulling and the remote `DOSKER_REGISTRY` fetch arrive with the network client.
+- `DOSKER_REGISTRY` sets the default registry base URL. The default is `https://i-zhirov.github.io/doskerfile-registry`.
 - The resolved image digest is recorded in the lock file.
 - A digest reference wins over a tag. A tag that moves is an error only when the lock file pins a different digest.
 - An imported image is copied into the local image store as a new image. Its boot metadata is preserved.
 - A booter image has `booter=true`. `COPY`, `RUN`, and in-image `exec` are rejected.
-- A booter image accepts only `MACHINE`, `ENGINE`, `ENGINE-CONFIG`, and `REQUIRES`. Any other instruction is an error.
+- A booter image accepts only `MACHINE`, `ENGINE`, `ENGINE-CONFIG`, `REQUIRES`, and `LICENSE`. Any other instruction is an error.
 - A DOS import receives a layer that installs the agent and edits `AUTOEXEC.BAT`.
 
 #### Agent Injection For Imported DOS Images
@@ -136,7 +145,8 @@ Rules:
 - Files get the archive attribute. Directories get no special attribute. Hidden, system, and read-only attributes cannot be set in version 1.
 - Timestamps are fixed to `1980-01-01T00:00:00Z`.
 - Existing files are replaced. Existing directories are merged.
-- The destination path must not be under `C:\DOSKER`. DOSker owns that directory for the agent, its configuration, and the wrapped `AUTOEXEC`.
+- The destination path must not be under `C:\DOSKER`, except for the exact `C:\DOSKER\NOTICE.TXT` notice file. DOSker owns that directory for the agent, its configuration, and the wrapped `AUTOEXEC`.
+- `RUN` and `RUN --host` still discard every change under `C:\DOSKER`; the notice exception is `COPY`-only.
 - The instruction creates a layer with the added or changed files.
 - The cache key includes the parent tree digest, build config digest, content hashes of the source files, and the context digest.
 
@@ -300,9 +310,44 @@ Rules:
 - A runtime `-v name:D:` overrides the declaration.
 - The declaration is recorded in the image config.
 
+### LICENSE
+
+Form: `LICENSE NAME=<token> SPDX=<expression|NONE> STATUS=<status> [key=value ...]`
+
+Repeatable. Each entry declares the terms of one bundled program.
+
+| Key | Required | Rule |
+| --- | --- | --- |
+| `NAME` | yes | Program token matching `[A-Za-z0-9][A-Za-z0-9_.+-]*`, 1 to 64 characters, unique in the file |
+| `SPDX` | yes | An SPDX expression, or `NONE` |
+| `STATUS` | yes | `redistributable` or `abandonware` |
+| `HOLDER` | no | Copyright holder |
+| `BASIS` | conditional | Required for `abandonware`, and for `redistributable` with `SPDX=NONE` |
+| `EVIDENCE` | conditional | URL, same condition as `BASIS` |
+| `LICENSE_URL` | no | URL to the license text |
+| `COVERS` | no | Comma-separated DOS path globs, unquoted |
+| `SOURCE_URL` | no | URL to the corresponding source |
+| `NOTICE` | no | Short notice shown to users |
+
+`BASIS` values are `open-source-license`, `freeware-release`, `public-domain`, `rights-holder-statement`, and `good-faith`.
+
+Rules:
+
+- `abandonware` requires `SPDX=NONE`, `BASIS=good-faith`, and `EVIDENCE`.
+- `BASIS=open-source-license` requires a real SPDX expression.
+- `BASIS=good-faith` is valid only with `abandonware`.
+- `redistributable` with `SPDX=NONE` requires a freeware, public-domain, or rights-holder basis and `EVIDENCE`.
+- A copyleft SPDX expression requires `SOURCE_URL`.
+- SPDX identifiers are checked against the SPDX license list. A `LicenseRef-*` expression requires `LICENSE_URL`.
+- `COVERS` is one unquoted token. Quoting is not allowed because the tokenizer treats a backslash inside quotes as an escape. A glob cannot contain a comma.
+- The build starts from the base image entries and appends the Doskerfile entries. An identical duplicate `NAME` is kept once. A conflicting duplicate is an error.
+- The image summary is `redistributable` when every entry is redistributable, `abandonware` when every entry is abandonware, and `mixed` otherwise.
+- A local build without any entry succeeds and prints `warning: the image has no license entries`. The registry requires at least one entry.
+- The instruction is allowed on a booter image.
+
 ## Normalization And Cache Keys
 
-Config-only instructions are `ENV`, `WORKDIR`, `CMD`, `MACHINE`, `ENGINE`, `ENGINE-CONFIG`, `REQUIRES`, `EXPOSE`, and `VOLUME`. They update the build config and add a history entry. They do not create a filesystem layer.
+Config-only instructions are `ENV`, `WORKDIR`, `CMD`, `MACHINE`, `ENGINE`, `ENGINE-CONFIG`, `REQUIRES`, `EXPOSE`, `VOLUME`, and `LICENSE`. They update the build config and add a history entry. They do not create a filesystem layer.
 
 The parser produces a normalized instruction:
 
@@ -312,9 +357,10 @@ The parser produces a normalized instruction:
 - Paths normalized to uppercase 8.3 where they refer to the image tree.
 - `MACHINE` keys sorted.
 - `REQUIRES` capabilities sorted and deduplicated.
+- `LICENSE` fields in the order `NAME`, `SPDX`, `STATUS`, `HOLDER`, `BASIS`, `EVIDENCE`, `LICENSE_URL`, `COVERS`, `SOURCE_URL`, `NOTICE`. Absent fields are omitted. `COVERS` globs are joined with commas.
 - Trailing whitespace removed.
 
-The cache key is `sha256(parent_tree_digest || "\n" || build_config_digest || "\n" || normalized_instruction || "\n" || input_hashes)`. `build_config_digest` covers the effective ENV, WORKDIR, MACHINE, ENGINE, REQUIRES, EXPOSE, VOLUME, and CMD values seen so far. `input_hashes` is empty for config-only instructions, the source file hashes for `COPY`, the staged tree digest for `RUN --host`, and the parent tree digest plus engine and agent versions for `RUN`. The config digest makes an `ENV`, `WORKDIR`, or `MACHINE` change invalidate later steps.
+The cache key is `sha256(parent_tree_digest || "\n" || build_config_digest || "\n" || normalized_instruction || "\n" || input_hashes)`. `build_config_digest` covers the effective ENV, WORKDIR, MACHINE, ENGINE, REQUIRES, EXPOSE, VOLUME, and CMD values seen so far. `input_hashes` is empty for config-only instructions, the source file hashes for `COPY`, the staged tree digest for `RUN --host`, and the parent tree digest plus engine and agent versions for `RUN`. The config digest makes an `ENV`, `WORKDIR`, or `MACHINE` change invalidate later steps. `LICENSE` is not part of `build_config_digest`. It changes the image config digest and the manifest digest, not the cache key of a later filesystem step.
 
 ## Errors
 

@@ -1,6 +1,8 @@
 //! Doskerfile scanning and instruction grammar.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+use crate::license::{LicenseBasis, LicenseEntry, LicenseStatus};
 
 /// The conventional file name of a Doskerfile.
 pub const DOSKERFILE_NAME: &str = "Doskerfile";
@@ -115,6 +117,7 @@ pub enum InstructionKind {
     Volume {
         drive: String,
     },
+    License(LicenseEntry),
 }
 
 impl InstructionKind {
@@ -133,6 +136,7 @@ impl InstructionKind {
             Self::Requires { .. } => "REQUIRES",
             Self::Expose { .. } => "EXPOSE",
             Self::Volume { .. } => "VOLUME",
+            Self::License(_) => "LICENSE",
         }
     }
 }
@@ -189,6 +193,19 @@ const MACHINE_KEYS: [&str; 9] = [
     "baud",
 ];
 
+const LICENSE_KEYS: [&str; 10] = [
+    "NAME",
+    "SPDX",
+    "STATUS",
+    "HOLDER",
+    "BASIS",
+    "EVIDENCE",
+    "LICENSE_URL",
+    "COVERS",
+    "SOURCE_URL",
+    "NOTICE",
+];
+
 /// Capabilities sort in the adapter declaration order so that a normalized
 /// `REQUIRES` list stays stable across engines.
 const CAPABILITY_ORDER: [&str; 11] = [
@@ -208,6 +225,7 @@ const CAPABILITY_ORDER: [&str; 11] = [
 #[derive(Default)]
 struct Parser {
     env: BTreeMap<String, String>,
+    license_names: BTreeSet<String>,
 }
 
 struct LogicalLine {
@@ -253,6 +271,7 @@ impl Parser {
             "REQUIRES" => self.parse_requires(raw_args, line.line)?,
             "EXPOSE" => self.parse_expose(raw_args, line.line)?,
             "VOLUME" => self.parse_volume(raw_args, line.line)?,
+            "LICENSE" => self.parse_license(raw_args, line.line)?,
             _ => {
                 return Err(line_error(line.line, format!("unknown instruction {name}")));
             }
@@ -504,6 +523,73 @@ impl Parser {
         Ok(InstructionKind::Volume { drive })
     }
 
+    fn parse_license(
+        &mut self,
+        raw_args: &str,
+        line: usize,
+    ) -> Result<InstructionKind, DoskerfileError> {
+        let expanded = self.expand(raw_args, line)?;
+        let tokens = tokenize(&expanded, line)?;
+        let mut values: BTreeMap<String, &str> = BTreeMap::new();
+        for token in &tokens {
+            let (key, value) = token.split_once('=').ok_or_else(|| {
+                line_error(line, format!("LICENSE field {token} must be key=value"))
+            })?;
+            if !LICENSE_KEYS.contains(&key) {
+                return Err(line_error(line, format!("unknown LICENSE key {key}")));
+            }
+            if values.insert(key.to_owned(), value).is_some() {
+                return Err(line_error(line, format!("duplicate LICENSE key {key}")));
+            }
+        }
+
+        let name = values
+            .remove("NAME")
+            .ok_or_else(|| line_error(line, "LICENSE requires NAME"))?
+            .to_owned();
+        let spdx = values
+            .remove("SPDX")
+            .ok_or_else(|| line_error(line, "LICENSE requires SPDX"))?
+            .to_owned();
+        let status_value = values
+            .remove("STATUS")
+            .ok_or_else(|| line_error(line, "LICENSE requires STATUS"))?;
+        let status = LicenseStatus::parse(status_value)
+            .ok_or_else(|| line_error(line, format!("unknown LICENSE STATUS {status_value}")))?;
+        let basis = match values.remove("BASIS") {
+            Some(value) => Some(
+                LicenseBasis::parse(value)
+                    .ok_or_else(|| line_error(line, format!("unknown LICENSE BASIS {value}")))?,
+            ),
+            None => None,
+        };
+        let covers = match values.remove("COVERS") {
+            Some(value) => split_covers(value, line)?,
+            None => Vec::new(),
+        };
+
+        let entry = LicenseEntry {
+            name: name.clone(),
+            spdx,
+            holder: values.remove("HOLDER").map(str::to_owned),
+            status,
+            basis,
+            evidence: values.remove("EVIDENCE").map(str::to_owned),
+            license_url: values.remove("LICENSE_URL").map(str::to_owned),
+            covers,
+            source_url: values.remove("SOURCE_URL").map(str::to_owned),
+            notice: values.remove("NOTICE").map(str::to_owned),
+        };
+        entry
+            .validate()
+            .map_err(|error| line_error(line, error.to_string()))?;
+        if !self.license_names.insert(name.clone()) {
+            return Err(line_error(line, format!("duplicate LICENSE name {name}")));
+        }
+
+        Ok(InstructionKind::License(entry))
+    }
+
     fn expand(&self, raw: &str, line: usize) -> Result<String, DoskerfileError> {
         let mut output = String::with_capacity(raw.len());
         let mut chars = raw.chars().peekable();
@@ -538,6 +624,18 @@ fn split_name(text: &str) -> (&str, &str) {
         Some(index) => (&text[..index], text[index..].trim_start()),
         None => (text, ""),
     }
+}
+
+fn split_covers(value: &str, line: usize) -> Result<Vec<String>, DoskerfileError> {
+    let mut covers = Vec::new();
+    for item in value.split(',') {
+        let item = item.trim();
+        if item.is_empty() {
+            return Err(line_error(line, "COVERS must not contain an empty glob"));
+        }
+        covers.push(item.to_owned());
+    }
+    Ok(covers)
 }
 
 fn classify_from(value: &str, line: usize) -> Result<FromSource, DoskerfileError> {

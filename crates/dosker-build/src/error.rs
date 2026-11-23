@@ -46,6 +46,10 @@ pub enum BuildError {
     #[error("unsupported base: {reason}")]
     UnsupportedBase { reason: String },
 
+    /// The base image is not in the local store.
+    #[error("base image {reference} is not available locally; pull it first")]
+    RegistryBaseNotLocal { reference: String },
+
     /// The selected engine cannot be used.
     #[error("engine {engine}: {reason}")]
     Engine { engine: String, reason: String },

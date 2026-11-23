@@ -55,6 +55,13 @@ dosker tag SOURCE TARGET
 `images` lists local tags. `tag` adds or replaces a target tag without copying
 blobs.
 
+## Namespaced tags
+
+A namespaced reference such as `owner/name:tag` is a valid local tag. `tag`,
+`rmi`, `save`, and `load` accept it, and `images` prints the full reference.
+`save` uses `owner-name-tag.tar` as the default output name, replacing each
+`/` with `-`.
+
 ## Remove
 
 `rmi` has two distinct operations:

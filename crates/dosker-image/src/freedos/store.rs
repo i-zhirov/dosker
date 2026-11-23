@@ -9,6 +9,7 @@ use crate::freedos::AGENT_VERSION;
 use crate::freedos::build::{BaseImage, build_base_image, validate_base_boot};
 use crate::freedos::inputs::{BaseInputs, FreedosVersion, load_freedos_binaries};
 use crate::layer::{Layer, fixed_timestamp};
+use crate::licenses::freedos_base_licenses;
 use crate::manifest::{ANNOTATION_RAW_DISK_DIGEST, Manifest};
 use crate::oci::{CommittedImage, Image, OciStore};
 use crate::reference::{ImageRef, ImageReference};
@@ -37,6 +38,7 @@ pub(crate) fn expected_base_config(boot: &BootMetadata, agent_version: &str) -> 
             empty_layer: false,
             comment: None,
         }],
+        licenses: freedos_base_licenses(),
     }
 }
 

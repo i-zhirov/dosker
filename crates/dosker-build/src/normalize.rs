@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use dosker_core::{Instruction, InstructionKind};
+use dosker_core::{Instruction, InstructionKind, LicenseEntry};
 use dosker_image::{
     DosPath, ImageConfig, MachineProfile, PortDeclaration, VolumeDeclaration, canonical_digest,
 };
@@ -148,9 +148,40 @@ pub fn normalize_instruction(
         }
         InstructionKind::Expose { port, protocol } => format!("EXPOSE {port}/{protocol}"),
         InstructionKind::Volume { drive } => format!("VOLUME {drive}"),
+        InstructionKind::License(entry) => format!("LICENSE {}", render_license(entry)),
     };
 
     Ok(normalized.trim_end().to_owned())
+}
+
+fn render_license(entry: &LicenseEntry) -> String {
+    let mut tokens = vec![
+        format!("NAME={}", entry.name),
+        format!("SPDX={}", entry.spdx),
+        format!("STATUS={}", entry.status.as_str()),
+    ];
+    if let Some(holder) = &entry.holder {
+        tokens.push(format!("HOLDER={holder}"));
+    }
+    if let Some(basis) = entry.basis {
+        tokens.push(format!("BASIS={}", basis.as_str()));
+    }
+    if let Some(evidence) = &entry.evidence {
+        tokens.push(format!("EVIDENCE={evidence}"));
+    }
+    if let Some(license_url) = &entry.license_url {
+        tokens.push(format!("LICENSE_URL={license_url}"));
+    }
+    if !entry.covers.is_empty() {
+        tokens.push(format!("COVERS={}", entry.covers.join(",")));
+    }
+    if let Some(source_url) = &entry.source_url {
+        tokens.push(format!("SOURCE_URL={source_url}"));
+    }
+    if let Some(notice) = &entry.notice {
+        tokens.push(format!("NOTICE={notice}"));
+    }
+    render_tokens(&tokens)
 }
 
 /// Returns the canonical digest of the effective build config fields.

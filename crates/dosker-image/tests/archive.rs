@@ -382,3 +382,17 @@ fn archive_constants_are_fixed() {
     assert_eq!(dosker_image::ARCHIVE_MTIME_SECONDS, 0);
     assert_eq!(OCI_LAYOUT_VERSION, "1.0.0");
 }
+
+#[test]
+fn namespaced_tag_round_trips_through_an_archive() {
+    let dir = tempfile::tempdir().unwrap();
+    let (store, _digest) = tree_image(dir.path(), "owner/name:tag", b"hello");
+    let archive = dir.path().join("image.tar");
+    save_image(&store, &reference("owner/name:tag"), &archive).unwrap();
+
+    let target_dir = tempfile::tempdir().unwrap();
+    let target = open_store(target_dir.path());
+    let report = load_image(&target, &archive).unwrap();
+
+    assert_eq!(report.references, vec!["owner/name:tag"]);
+}

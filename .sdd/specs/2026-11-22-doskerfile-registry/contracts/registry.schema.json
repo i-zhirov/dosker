@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dosker.dev/schemas/registry.schema.json",
+  "title": "DOSker registry image metadata",
+  "description": "Schema for images/<owner>/<name>/registry.toml after TOML to JSON conversion. A version is immutable. Tags are movable labels.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "tags", "description"],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "version": {
+      "$ref": "#/$defs/tag"
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/tag"
+      }
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 280
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri"
+    },
+    "deprecated": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 280
+    }
+  },
+  "$defs": {
+    "tag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    }
+  }
+}

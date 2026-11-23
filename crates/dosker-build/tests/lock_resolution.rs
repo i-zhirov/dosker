@@ -54,6 +54,19 @@ fn read_lock(context: &Path) -> LockFile {
 }
 
 #[test]
+fn a_hand_built_namespaced_pin_round_trips() {
+    let context = tempfile::tempdir().unwrap();
+    let digest = format!("sha256:{}", "a".repeat(64));
+    let pin = base("owner/name", "tag", &digest);
+    let lock = existing_lock(base("owner/name", "tag", &digest), None);
+    write_existing(context.path(), &lock);
+
+    let parsed = read_lock(context.path());
+
+    assert_eq!(parsed.base, vec![pin]);
+}
+
+#[test]
 fn record_engine_pin_adds_a_second_engine() {
     let mut lock = LockFile::new();
 

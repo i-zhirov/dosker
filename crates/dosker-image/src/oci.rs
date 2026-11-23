@@ -20,6 +20,7 @@ use crate::fat::{read_boot_metadata, read_tree};
 use crate::image::ImageMedia;
 use crate::inject::{apply_agent_injection, plan_agent_injection};
 use crate::layer::{Layer, effective_boot};
+use crate::licenses::agent_license;
 use crate::manifest::{
     ANNOTATION_RAW_DISK_DIGEST, ANNOTATION_REF_NAME, ANNOTATION_SOURCE_DISK_DIGEST, Descriptor,
     Index, MEDIA_TYPE_BOOTER, MEDIA_TYPE_CONFIG, MEDIA_TYPE_LAYER, MEDIA_TYPE_MANIFEST, Manifest,
@@ -568,10 +569,7 @@ impl OciStore {
         let (descriptor, manifest, config) = self.resolve(reference)?;
         let index = self.load_index()?;
         let (name, tag) = match reference {
-            ImageRef::Tag(tag) => (
-                tag.name().as_str().to_owned(),
-                tag.tag().as_str().to_owned(),
-            ),
+            ImageRef::Tag(tag) => (tag.repository().to_string(), tag.tag().as_str().to_owned()),
             ImageRef::Digest(digest) => index
                 .find_digest(digest.as_str())
                 .into_iter()
@@ -582,7 +580,10 @@ impl OciStore {
                         .and_then(|annotations| annotations.get(ANNOTATION_REF_NAME))
                         .and_then(|value| ImageReference::parse(value).ok())
                         .map(|reference| {
-                            (reference.name().to_string(), reference.tag().to_string())
+                            (
+                                reference.repository().to_string(),
+                                reference.tag().to_string(),
+                            )
                         })
                 })
                 .unwrap_or_default(),
@@ -936,6 +937,11 @@ fn import_config(source: &Path, media: ImageMedia, size: u64, now: DateTime<Utc>
             empty_layer: false,
             comment: Some(source.display().to_string()),
         }],
+        licenses: if media == ImageMedia::Booter {
+            Vec::new()
+        } else {
+            vec![agent_license()]
+        },
     }
 }
 

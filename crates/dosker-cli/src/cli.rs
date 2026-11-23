@@ -54,6 +54,7 @@ pub enum Command {
     Save(SaveArgs),
     Load(LoadArgs),
     System(SystemArgs),
+    Registry(RegistryArgs),
     Engines(EnginesArgs),
     Doctor(DoctorArgs),
     #[command(name = "__supervise", hide = true)]
@@ -273,6 +274,31 @@ pub enum SystemCommand {
 /// Remove unused data.
 #[derive(Debug, Args)]
 pub struct PruneArgs {}
+
+/// Validate registry image metadata and licenses.
+#[derive(Debug, Args)]
+pub struct RegistryArgs {
+    #[command(subcommand)]
+    pub command: RegistryCommand,
+}
+
+/// The registry subcommands.
+#[derive(Debug, Subcommand)]
+pub enum RegistryCommand {
+    /// Validate one image directory or a registry root.
+    Validate(RegistryValidateArgs),
+}
+
+/// Arguments for `registry validate`.
+#[derive(Debug, Args)]
+pub struct RegistryValidateArgs {
+    /// An image directory or the registry root.
+    pub path: PathBuf,
+
+    /// Override the discovered registry root.
+    #[arg(long)]
+    pub registry_root: Option<PathBuf>,
+}
 
 /// List and inspect engines.
 #[derive(Debug, Args)]
@@ -522,6 +548,10 @@ fn dispatch(command: Command) -> Result<u8, CliError> {
             let mut context = Context::load()?;
             commands::system::execute(args, &mut context, &SystemProbe::new(), Utc::now())
         }
+        Command::Registry(args) => {
+            let mut context = Context::load()?;
+            commands::registry::execute(args, &mut context)
+        }
         Command::Engines(args) => {
             let mut context = Context::load()?;
             commands::engines::execute(args, &mut context)
@@ -549,6 +579,7 @@ mod tests {
             "Create, start, and attach to a container",
             "Manage volumes",
             "Check the data root and installed engines",
+            "Validate registry image metadata and licenses",
         ] {
             assert!(help.contains(description), "missing {description}: {help}");
         }
@@ -559,5 +590,12 @@ mod tests {
             .expect("find the image subcommand");
         let help = image.render_help().to_string();
         assert!(help.contains("Import a disk image"), "{help}");
+
+        let mut command = Cli::command();
+        let registry = command
+            .find_subcommand_mut("registry")
+            .expect("find the registry subcommand");
+        let help = registry.render_help().to_string();
+        assert!(help.contains("validate"), "{help}");
     }
 }

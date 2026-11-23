@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dosker.dev/schemas/revoked.schema.json",
+  "title": "DOSker registry takedown records",
+  "description": "Schema for revoked.toml after TOML to JSON conversion. A revoked version is removed from the catalog and refused by the client.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "revoked"],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "revoked": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/record"
+      }
+    }
+  },
+  "$defs": {
+    "handle": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,62}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "name", "digest", "reason", "decided_at"],
+      "properties": {
+        "namespace": {
+          "$ref": "#/$defs/handle"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "decided_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "issue": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    }
+  }
+}

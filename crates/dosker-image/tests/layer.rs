@@ -369,6 +369,7 @@ fn effective_boot_uses_the_last_non_null_layer_override() {
         agent_version: None,
         created_by: "test".to_owned(),
         history: Vec::new(),
+        licenses: Vec::new(),
     };
     let mut first = layer(LayerDelta::new());
     first.meta.boot = Some(BootMetadata::opaque(2));

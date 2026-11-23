@@ -11,7 +11,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use dosker_core::ContainerId;
-use dosker_image::{ImageRef, ImageReference, OciStore, VolumeDeclaration};
+use dosker_image::{
+    BlobRef, BootLayout, BootMetadata, DosFlavour, FatType as ImageFatType, Geometry, HistoryEntry,
+    ImageConfig, ImageRef, ImageReference, Layer, MachineProfile, OciStore, Tree,
+    VolumeDeclaration, fixed_timestamp,
+};
 use dosker_platform::process::{ProcessSupervisor, system};
 use dosker_runtime::StateStore;
 use dosker_test_support::fixtures::{
@@ -113,6 +117,47 @@ impl CliRoot {
 
     pub fn store(&self) -> StateStore {
         StateStore::new(self.path().to_path_buf())
+    }
+
+    /// Writes a registry checkout and stores an empty, unlicensed base image.
+    pub fn registry_fixture(
+        &self,
+        image_owner: &str,
+        registered_owner: &str,
+    ) -> (PathBuf, PathBuf) {
+        let registry = self.path().join("registry");
+        let image = registry.join("images").join(image_owner).join("demo");
+        write_file(
+            &image.join("Doskerfile"),
+            "FROM base:latest\nCOPY APP C:\\APP\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable BASIS=open-source-license COVERS=C:\\APP\\*\n",
+        );
+        write_file(&image.join("APP/FOO.TXT"), "x");
+        write_file(
+            &image.join("registry.toml"),
+            "schema = 1\nversion = \"1.0.0\"\ntags = [\"latest\"]\ndescription = \"Demo\"\n",
+        );
+        write_file(
+            &registry.join("namespaces.toml"),
+            &format!(
+                "schema = 1\n\n[owners.{registered_owner}]\ngithub = \"{registered_owner}\"\nproof = \"https://github.com/{registered_owner}\"\n"
+            ),
+        );
+
+        let store = OciStore::new(self.path().to_path_buf());
+        let layer = Layer::from_delta(&Tree::new().to_delta(), "base", None, None)
+            .expect("the base layer builds");
+        let descriptor = store.put_layer(&layer).expect("the base layer stores");
+        let reference = ImageReference::parse("base:latest").expect("the base reference parses");
+        store
+            .commit_image(
+                Some(&reference),
+                &sample_config(sample_boot(), None),
+                vec![descriptor],
+                BTreeMap::new(),
+            )
+            .expect("the base image commits");
+
+        (registry, image)
     }
 
     /// Builds a command with only `DOSKER_ROOT` set.
@@ -714,5 +759,76 @@ impl Seek for Region {
         };
         self.position = target.clamp(0, self.length as i128) as u64;
         Ok(self.position)
+    }
+}
+
+fn write_file(path: &Path, text: &str) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("create a directory");
+    }
+    fs::write(path, text).expect("write a file");
+}
+
+fn sample_boot() -> BootMetadata {
+    BootMetadata {
+        layout: BootLayout::MbrPartitioned,
+        disk_size: 16 * 1024 * 1024,
+        geometry: Geometry {
+            cylinders: 16,
+            heads: 4,
+            sectors: 32,
+            sector_size: 512,
+        },
+        partition_start: Some(1),
+        partition_sectors: Some(32_768),
+        mbr: Some(BlobRef::from_bytes(&[0u8; 512])),
+        boot_sector: Some(BlobRef::from_bytes(&[0u8; 512])),
+        fat_type: Some(ImageFatType::Fat16),
+        volume_label: Some("DOSKER".to_owned()),
+        media_descriptor: Some(0xf8),
+    }
+}
+
+fn sample_config(boot: BootMetadata, agent_version: Option<&str>) -> ImageConfig {
+    let booter = boot.layout == BootLayout::Opaque;
+    let mut machine = MachineProfile::default();
+    if !booter {
+        machine.disk_interface = match boot.layout {
+            BootLayout::MbrPartitioned => "ide".to_owned(),
+            BootLayout::Superfloppy => "floppy".to_owned(),
+            BootLayout::Opaque => unreachable!("opaque is a booter"),
+        };
+    }
+    ImageConfig {
+        schema_version: 1,
+        dos_flavour: if booter {
+            DosFlavour::None
+        } else {
+            DosFlavour::Other
+        },
+        booter,
+        boot,
+        machine,
+        env: BTreeMap::new(),
+        workdir: if booter {
+            String::new()
+        } else {
+            r"C:\".to_owned()
+        },
+        cmd: None,
+        exposed_ports: Vec::new(),
+        volumes: Vec::new(),
+        engine_pin: None,
+        engine_config: BTreeMap::new(),
+        requires: Vec::new(),
+        agent_version: agent_version.map(str::to_owned),
+        created_by: "base".to_owned(),
+        history: vec![HistoryEntry {
+            created_by: "base".to_owned(),
+            created_at: fixed_timestamp(),
+            empty_layer: false,
+            comment: Some("base".to_owned()),
+        }],
+        licenses: Vec::new(),
     }
 }

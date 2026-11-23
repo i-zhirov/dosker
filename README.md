@@ -107,6 +107,14 @@ in the image configuration. `MACHINE` sets 16 MiB of guest memory. `ENGINE`
 pins QEMU. `REQUIRES` checks the QEMU capabilities. `EXPOSE` records a TCP
 port. `VOLUME` declares a data drive. `CMD` runs when a container starts.
 
+A Doskerfile can also declare the licensing of the software it bundles with
+the repeatable `LICENSE` instruction. `NAME`, `SPDX`, and `STATUS` are
+required. `STATUS` is `redistributable` or `abandonware`. An abandonware
+entry needs `BASIS=good-faith` and an `EVIDENCE` URL. A local build without
+any entry still succeeds but prints
+`warning: the image has no license entries`. The registry requires at least
+one entry.
+
 ### Prepare the first build
 
 The first build needs QEMU, the DOS agent, and a FreeDOS 1.3 boot floppy.
@@ -352,7 +360,9 @@ DOSker stores images in the local OCI layout and provides `image import`,
 to an OCI image-layout tar and `dosker load` restores its tags.
 `dosker system prune` removes stopped containers, untagged images, and stale
 cache entries. See [Images](docs/images.md) for the store layout, the media
-types, and the untag-only `rmi` behavior.
+types, and the untag-only `rmi` behavior. The registry declaration, the
+namespaced reference forms, and `dosker registry validate` are covered in
+[Registry](docs/registry.md).
 
 ### Engines
 
@@ -476,5 +486,6 @@ DOSker is dual-licensed under the MIT License or the Apache License 2.0
 - [DOS agent plan](.sdd/specs/2026-11-01-dosker/plan-dos-agent-serial.md)
 - [Builds](docs/builds.md)
 - [FreeDOS base images](docs/base-images.md)
+- [Registry](docs/registry.md)
 - [Volumes and network](docs/volumes-and-network.md)
 - [Windows runtime](docs/windows.md)

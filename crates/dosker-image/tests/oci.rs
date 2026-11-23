@@ -1404,6 +1404,35 @@ fn commit_image_rejects_a_booter_with_tree_layers() {
     ));
 }
 
+#[test]
+fn namespaced_tag_round_trips_through_the_store() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = disk(dir.path(), "source.img");
+    let store = store(dir.path());
+    let image = store
+        .import(
+            &source,
+            &reference("owner/name:tag"),
+            ImageMedia::Disk,
+            Some(agent().as_slice()),
+            now(1),
+        )
+        .unwrap();
+
+    assert_eq!(image.reference, "owner/name:tag");
+    assert_eq!(image.name, "owner/name");
+    assert_eq!(image.tag, "tag");
+
+    let by_tag = store
+        .load(&ImageRef::Tag(reference("owner/name:tag")))
+        .unwrap();
+    assert_eq!(by_tag.name, "owner/name");
+
+    let by_digest = store.load(&digest_ref(&image)).unwrap();
+    assert_eq!(by_digest.name, "owner/name");
+    assert_eq!(by_digest.tag, "tag");
+}
+
 #[allow(clippy::permissions_set_readonly_false)]
 fn make_writable(path: &Path) {
     let mut permissions = fs::metadata(path).unwrap().permissions();

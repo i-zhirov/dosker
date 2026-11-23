@@ -255,6 +255,7 @@ pub fn sample_config(boot: BootMetadata) -> ImageConfig {
             empty_layer: false,
             comment: Some("sample".to_owned()),
         }],
+        licenses: Vec::new(),
     }
 }
 

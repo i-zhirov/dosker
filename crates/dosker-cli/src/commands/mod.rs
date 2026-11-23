@@ -15,6 +15,7 @@ pub mod load;
 pub mod logs;
 pub mod port;
 pub mod ps;
+pub mod registry;
 pub mod restart;
 pub mod rm;
 pub mod rmi;

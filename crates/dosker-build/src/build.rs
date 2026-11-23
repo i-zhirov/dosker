@@ -11,8 +11,9 @@ use chrono::{DateTime, Utc};
 use dosker_core::{BasePin, Doskerfile, EngineName, FromSource, Instruction, InstructionKind};
 use dosker_image::freedos::{BaseInputs, FreedosVersion, ensure_freedos_base};
 use dosker_image::{
-    BootMetadata, CacheKeyInput, CacheStore, Descriptor, DosPath, ImageConfig, ImageError,
-    ImageMedia, ImageRef, ImageReference, Layer, OciStore, Tree, cache_key, fixed_timestamp,
+    BootMetadata, CacheKeyInput, CacheStore, Descriptor, DosPath, ImageConfig, ImageDigest,
+    ImageError, ImageMedia, ImageRef, ImageReference, Layer, OciStore, ReferenceSelector,
+    RegistryReference, Tree, cache_key, fixed_timestamp,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -32,6 +33,9 @@ use crate::run_in_dos::{
     RUN_TRUNCATED_NOTE, build_delta,
 };
 use crate::state::BuildState;
+
+/// The warning printed when a build produces an image with no license entries.
+pub const LICENSE_MISSING_WARNING: &str = "warning: the image has no license entries";
 
 /// Options that control one build.
 #[derive(Clone, Debug)]
@@ -220,6 +224,12 @@ impl Builder {
             let status = if cached { "cached" } else { "built" };
             reporter
                 .line(&format!("Step {step}/{total}: {status}"))
+                .map_err(BuildError::Reporter)?;
+        }
+
+        if state.config.licenses.is_empty() {
+            reporter
+                .line(LICENSE_MISSING_WARNING)
                 .map_err(BuildError::Reporter)?;
         }
 
@@ -430,7 +440,7 @@ impl Builder {
                 ensure_freedos_base(&self.store, self.freedos_inputs.as_ref(), &version)?;
                 self.load_stored_base(&format!("freedos:{}", version.as_str()))
             }
-            FromSource::Image(value) => self.load_stored_base(value),
+            FromSource::Image(value) => self.resolve_image_base(value),
             FromSource::LocalPath(path) => self.import_base(context.root(), path, ImageMedia::Disk),
             FromSource::BooterPath(path) => {
                 self.import_base(context.root(), path, ImageMedia::Booter)
@@ -438,19 +448,58 @@ impl Builder {
         }
     }
 
+    fn resolve_image_base(&self, value: &str) -> Result<ResolvedBase, BuildError> {
+        if ImageDigest::parse(value).is_ok() {
+            return self.load_stored_base(value);
+        }
+
+        let registry = RegistryReference::parse(value)?;
+        let (reference, tag) = match registry.selector() {
+            ReferenceSelector::Tag(tag) => {
+                let local = registry
+                    .local_reference()
+                    .expect("a tag selector has a local reference");
+                (ImageRef::Tag(local), tag.as_str().to_owned())
+            }
+            ReferenceSelector::Digest(digest) => (ImageRef::Digest(digest.clone()), String::new()),
+        };
+        let name = registry.identity();
+
+        match self.load_base(&reference, name, tag) {
+            Ok(base) => Ok(base),
+            Err(BuildError::Image(ImageError::NotFound(_)))
+                if registry.host().is_some() || registry.repository().is_namespaced() =>
+            {
+                Err(BuildError::RegistryBaseNotLocal {
+                    reference: value.to_owned(),
+                })
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn load_stored_base(&self, value: &str) -> Result<ResolvedBase, BuildError> {
         let reference = ImageRef::parse(value)?;
-        let image = self.store.load(&reference)?;
-        let manifest = self.store.load_manifest(&reference)?;
-        let config = self.store.load_config(&reference)?;
+        let (name, tag) = base_identity(value, &reference);
+        self.load_base(&reference, name, tag)
+    }
+
+    fn load_base(
+        &self,
+        reference: &ImageRef,
+        name: String,
+        tag: String,
+    ) -> Result<ResolvedBase, BuildError> {
+        let image = self.store.load(reference)?;
+        let manifest = self.store.load_manifest(reference)?;
+        let config = self.store.load_config(reference)?;
         let tree = if config.booter {
             None
         } else {
-            Some(self.store.load_tree(&reference)?)
+            Some(self.store.load_tree(reference)?)
         };
-        let boot = self.store.load_effective_boot(&reference)?;
+        let boot = self.store.load_effective_boot(reference)?;
         let disk_digest = manifest.raw_disk_digest().map(str::to_owned);
-        let (name, tag) = base_identity(value, &reference);
         let annotations = manifest.annotations.clone().unwrap_or_default();
         Ok(ResolvedBase {
             config,
@@ -573,6 +622,7 @@ impl Builder {
         };
         Ok(manifest.source_disk_digest() == Some(source_digest)
             && config.agent_version.as_deref() == Some(dosker_image::freedos::AGENT_VERSION)
+            && config.licenses == vec![dosker_image::agent_license()]
             && raw_path.exists())
     }
 }
@@ -790,10 +840,7 @@ fn base_identity(value: &str, reference: &ImageRef) -> (String, String) {
         return (name.to_owned(), String::new());
     }
     match reference {
-        ImageRef::Tag(tag) => (
-            tag.name().as_str().to_owned(),
-            tag.tag().as_str().to_owned(),
-        ),
+        ImageRef::Tag(tag) => (tag.repository().to_string(), tag.tag().as_str().to_owned()),
         ImageRef::Digest(_) => (String::new(), String::new()),
     }
 }

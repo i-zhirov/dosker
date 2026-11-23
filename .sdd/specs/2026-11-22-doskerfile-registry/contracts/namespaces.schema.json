@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dosker.dev/schemas/namespaces.schema.json",
+  "title": "DOSker registry namespaces",
+  "description": "Schema for namespaces.toml after TOML to JSON conversion. Each owner is a proven GitHub handle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "owners"],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "owners": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/handle"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/owner"
+      }
+    }
+  },
+  "$defs": {
+    "handle": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$"
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["github", "proof"],
+      "properties": {
+        "github": {
+          "$ref": "#/$defs/handle"
+        },
+        "proof": {
+          "type": "string",
+          "format": "uri"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 280
+        }
+      }
+    }
+  }
+}

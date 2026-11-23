@@ -12,7 +12,7 @@ use dosker_image::freedos::{
 };
 use dosker_image::{
     ANNOTATION_RAW_DISK_DIGEST, BlobRef, DosFlavour, ImageError, ImageRef, ImageReference, Layer,
-    OciStore, fixed_timestamp, sha256_digest,
+    OciStore, fixed_timestamp, freedos_base_licenses, sha256_digest,
 };
 use support::{make_fat16_image, write_fat_file};
 
@@ -126,6 +126,24 @@ fn store_commits_a_freedos_config() {
     assert_eq!(config.history[0].created_by, "freedos-base");
     assert_eq!(config.history[0].created_at, fixed_timestamp());
     assert!(!config.history[0].empty_layer);
+    assert_eq!(config.licenses, freedos_base_licenses());
+    for entry in &config.licenses {
+        entry.validate().unwrap();
+    }
+}
+
+#[test]
+fn freedos_base_entries_are_valid_and_redistributable() {
+    let entries = freedos_base_licenses();
+    let names: Vec<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
+    assert_eq!(names, vec!["FreeDOS", "DOSKER"]);
+    for entry in &entries {
+        entry.validate().unwrap();
+    }
+    assert_eq!(
+        dosker_core::license::license_summary(&entries),
+        Some(dosker_core::license::LicenseSummary::Redistributable)
+    );
 }
 
 #[test]

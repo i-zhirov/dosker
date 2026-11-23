@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
-use dosker_core::{EngineName, Instruction, InstructionKind};
+use dosker_core::{EngineName, Instruction, InstructionKind, merge_license_entry};
 use dosker_engine::Capability;
 use dosker_image::{
     Attributes, BootMetadata, Descriptor, DosPath, HistoryEntry, ImageConfig, Layer, LayerDelta,
@@ -115,7 +115,8 @@ impl BuildState {
                 InstructionKind::Machine { .. }
                 | InstructionKind::Engine { .. }
                 | InstructionKind::EngineConfig { .. }
-                | InstructionKind::Requires { .. } => {}
+                | InstructionKind::Requires { .. }
+                | InstructionKind::License(_) => {}
                 _ => {
                     return Err(instruction_error(
                         instruction,
@@ -218,6 +219,10 @@ impl BuildState {
                 self.config
                     .volumes
                     .sort_by(|left, right| left.drive.cmp(&right.drive));
+            }
+            InstructionKind::License(entry) => {
+                merge_license_entry(&mut self.config.licenses, entry.clone())
+                    .map_err(|error| instruction_error(instruction, error.to_string()))?;
             }
             _ => {
                 return Err(instruction_error(

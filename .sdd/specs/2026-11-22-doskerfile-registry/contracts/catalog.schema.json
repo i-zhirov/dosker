@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dosker.dev/schemas/catalog.schema.json",
+  "title": "DOSker registry catalog",
+  "description": "Schema for the generated /index.json search catalog on GitHub Pages.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "registry", "images"],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "registry": {
+      "type": "string",
+      "format": "uri"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/image"
+      }
+    }
+  },
+  "$defs": {
+    "handle": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,62}$"
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "license_summary": {
+      "enum": ["redistributable", "abandonware", "mixed"]
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "name", "description", "tags", "license_summary", "requires_acceptance"],
+      "properties": {
+        "namespace": {
+          "$ref": "#/$defs/handle"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "homepage": {
+          "type": "string",
+          "format": "uri"
+        },
+        "deprecated": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "tags": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/tag"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "license_summary": {
+          "$ref": "#/$defs/license_summary"
+        },
+        "requires_acceptance": {
+          "type": "boolean"
+        },
+        "latest": {
+          "$ref": "#/$defs/latest"
+        }
+      }
+    },
+    "latest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "digest"],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/tag"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  }
+}

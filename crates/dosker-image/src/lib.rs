@@ -12,6 +12,7 @@ pub mod host;
 pub mod image;
 pub mod inject;
 pub mod layer;
+pub mod licenses;
 pub mod manifest;
 pub mod oci;
 pub mod path;
@@ -52,6 +53,7 @@ pub use layer::{
     FIXED_TIMESTAMP_SECONDS, LAYER_META_FILE, LAYER_SCHEMA_VERSION, Layer, LayerEntry, LayerMeta,
     effective_boot, fixed_timestamp,
 };
+pub use licenses::{agent_license, freedos_base_licenses, freedos_license};
 pub use manifest::{
     ANNOTATION_RAW_DISK_DIGEST, ANNOTATION_REF_NAME, ANNOTATION_SOURCE_DISK_DIGEST, Descriptor,
     Index, MEDIA_TYPE_BOOTER, MEDIA_TYPE_CONFIG, MEDIA_TYPE_INDEX, MEDIA_TYPE_LAYER,
@@ -60,7 +62,11 @@ pub use manifest::{
 pub use oci::{Blob, CommittedImage, Image, IndexLock, OciStore, RemoveOutcome};
 pub use path::{DosName, DosPath, normalize_tree_member};
 pub use project::{apply_boot_metadata, project_tree};
-pub use reference::{ImageDigest, ImageName, ImageRef, ImageReference, ImageTag};
+pub use reference::{
+    DEFAULT_REGISTRY, ImageDigest, ImageName, ImageRef, ImageReference, ImageTag, Namespace,
+    REGISTRY_ENV, ReferenceSelector, RegistryHost, RegistryReference, Repository,
+    default_registry_url,
+};
 pub use tree::{Attributes, LayerDelta, Tree, TreeDir, TreeFile, TreeKind, TreeNode};
 pub use volume::{
     DEFAULT_VOLUME_SIZE, FLOPPY_1440_SIZE, FLOPPY_2880_SIZE, MAX_PARTITIONED_VOLUME_SIZE,

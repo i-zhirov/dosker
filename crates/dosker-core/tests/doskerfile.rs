@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use dosker_core::{Doskerfile, DoskerfileError, EngineName, FromSource, InstructionKind};
+use dosker_core::{
+    Doskerfile, DoskerfileError, EngineName, FromSource, InstructionKind, LicenseBasis,
+    LicenseEntry, LicenseStatus,
+};
 
 const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -28,6 +31,21 @@ fn only_from(text: &str) -> FromSource {
     match &file.instructions[0].kind {
         InstructionKind::From(source) => source.clone(),
         other => panic!("expected FROM, got {}", other.name()),
+    }
+}
+
+fn last_license(text: &str) -> LicenseEntry {
+    let file = parse(text);
+    match &file.instructions.last().expect("an instruction").kind {
+        InstructionKind::License(entry) => entry.clone(),
+        other => panic!("expected LICENSE, got {}", other.name()),
+    }
+}
+
+fn reason_of(error: &DoskerfileError) -> &str {
+    match error {
+        DoskerfileError::Line { reason, .. } => reason,
+        other => panic!("expected a line error, got {other}"),
     }
 }
 
@@ -321,7 +339,8 @@ fn parse_accepts_every_config_instruction() {
          ENGINE-CONFIG qemu -m 32\n\
          REQUIRES headless,gdbstub\n\
          EXPOSE 80\n\
-         VOLUME D:\n",
+         VOLUME D:\n\
+         LICENSE NAME=APP SPDX=MIT STATUS=redistributable\n",
     );
 
     let names: Vec<&str> = file
@@ -341,7 +360,8 @@ fn parse_accepts_every_config_instruction() {
             "ENGINE-CONFIG",
             "REQUIRES",
             "EXPOSE",
-            "VOLUME"
+            "VOLUME",
+            "LICENSE"
         ]
     );
 }
@@ -574,4 +594,159 @@ fn undefined_placeholder_reports_the_line() {
 
     assert_eq!(line_of(&error), 3);
     assert!(error.to_string().contains("MISSING"), "{error}");
+}
+
+#[test]
+fn license_parses_every_key() {
+    let entry = last_license(
+        "FROM demo:latest\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable HOLDER=\"Id Software\" BASIS=open-source-license EVIDENCE=https://example.org/evidence LICENSE_URL=https://example.org/license COVERS=C:\\APP\\*,C:\\APP.EXE SOURCE_URL=https://example.org/source NOTICE=\"A notice\"\n",
+    );
+
+    assert_eq!(entry.name, "APP");
+    assert_eq!(entry.spdx, "MIT");
+    assert_eq!(entry.status, LicenseStatus::Redistributable);
+    assert_eq!(entry.basis, Some(LicenseBasis::OpenSourceLicense));
+    assert_eq!(entry.holder.as_deref(), Some("Id Software"));
+    assert_eq!(
+        entry.evidence.as_deref(),
+        Some("https://example.org/evidence")
+    );
+    assert_eq!(
+        entry.license_url.as_deref(),
+        Some("https://example.org/license")
+    );
+    assert_eq!(
+        entry.covers,
+        vec!["C:\\APP\\*".to_owned(), "C:\\APP.EXE".to_owned()]
+    );
+    assert_eq!(
+        entry.source_url.as_deref(),
+        Some("https://example.org/source")
+    );
+    assert_eq!(entry.notice.as_deref(), Some("A notice"));
+}
+
+#[test]
+fn license_keeps_unquoted_dos_backslashes_in_covers() {
+    let entry = last_license(
+        "FROM demo:latest\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable COVERS=C:\\APP\\*,C:\\APP.EXE\n",
+    );
+
+    assert_eq!(
+        entry.covers,
+        vec!["C:\\APP\\*".to_owned(), "C:\\APP.EXE".to_owned()]
+    );
+}
+
+#[test]
+fn license_rejects_a_quoted_cover_glob() {
+    let error = Doskerfile::parse_str(
+        "FROM demo:latest\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable COVERS=\"C:\\APP\\*\"\n",
+    )
+    .unwrap_err();
+
+    assert_eq!(line_of(&error), 2);
+}
+
+#[test]
+fn license_accepts_only_the_required_keys() {
+    let entry =
+        last_license("FROM demo:latest\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable\n");
+
+    assert_eq!(entry.name, "APP");
+    assert_eq!(entry.spdx, "MIT");
+    assert_eq!(entry.status, LicenseStatus::Redistributable);
+    assert_eq!(entry.holder, None);
+    assert_eq!(entry.basis, None);
+    assert_eq!(entry.evidence, None);
+    assert_eq!(entry.license_url, None);
+    assert!(entry.covers.is_empty());
+    assert_eq!(entry.source_url, None);
+    assert_eq!(entry.notice, None);
+}
+
+#[test]
+fn license_requires_name_spdx_and_status() {
+    for text in [
+        "FROM demo:latest\nLICENSE SPDX=MIT STATUS=redistributable\n",
+        "FROM demo:latest\nLICENSE NAME=APP STATUS=redistributable\n",
+        "FROM demo:latest\nLICENSE NAME=APP SPDX=MIT\n",
+    ] {
+        let error = Doskerfile::parse_str(text).unwrap_err();
+        assert_eq!(line_of(&error), 2);
+    }
+}
+
+#[test]
+fn license_rejects_an_unknown_key() {
+    let error = Doskerfile::parse_str(
+        "FROM demo:latest\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable BOGUS=x\n",
+    )
+    .unwrap_err();
+
+    assert_eq!(line_of(&error), 2);
+}
+
+#[test]
+fn license_rejects_a_duplicate_key() {
+    let error = Doskerfile::parse_str(
+        "FROM demo:latest\nLICENSE NAME=APP SPDX=MIT SPDX=Apache-2.0 STATUS=redistributable\n",
+    )
+    .unwrap_err();
+
+    assert_eq!(line_of(&error), 2);
+}
+
+#[test]
+fn license_rejects_a_duplicate_name_in_the_file() {
+    let error = Doskerfile::parse_str(
+        "FROM demo:latest\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable\nLICENSE NAME=APP SPDX=Apache-2.0 STATUS=redistributable\n",
+    )
+    .unwrap_err();
+
+    assert_eq!(line_of(&error), 3);
+}
+
+#[test]
+fn license_rejects_a_missing_conditional_field() {
+    let error = Doskerfile::parse_str(
+        "FROM demo:latest\nLICENSE NAME=GAME SPDX=NONE STATUS=abandonware BASIS=good-faith\n",
+    )
+    .unwrap_err();
+
+    assert_eq!(line_of(&error), 2);
+}
+
+#[test]
+fn license_rejects_an_empty_key_value() {
+    let error =
+        Doskerfile::parse_str("FROM demo:latest\nLICENSE NAME= SPDX=MIT STATUS=redistributable\n")
+            .unwrap_err();
+
+    assert_eq!(line_of(&error), 2);
+}
+
+#[test]
+fn license_rejects_an_unknown_status_or_basis() {
+    let status =
+        Doskerfile::parse_str("FROM demo:latest\nLICENSE NAME=APP SPDX=MIT STATUS=bogus\n")
+            .unwrap_err();
+    assert_eq!(line_of(&status), 2);
+    assert!(reason_of(&status).contains("bogus"));
+
+    let basis = Doskerfile::parse_str(
+        "FROM demo:latest\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable BASIS=bogus\n",
+    )
+    .unwrap_err();
+    assert_eq!(line_of(&basis), 2);
+    assert!(reason_of(&basis).contains("bogus"));
+}
+
+#[test]
+fn license_expands_placeholders() {
+    let entry = last_license(
+        "FROM demo:latest\nENV HOLDER_NAME=Id Software\nLICENSE NAME=APP SPDX=MIT STATUS=redistributable HOLDER=\"$HOLDER_NAME\"\n",
+    );
+
+    assert_eq!(entry.holder.as_deref(), Some("Id Software"));
 }

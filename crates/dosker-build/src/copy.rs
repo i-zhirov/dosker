@@ -54,7 +54,11 @@ pub fn plan_copy(
         resolve_copy_destination(workdir, destination).map_err(|error| {
             instruction_error(line, format!("destination {destination}: {error}"))
         })?;
-    if is_reserved_path(&destination_path) {
+    let notice_destination = !destination_has_separator
+        && resolved_sources.len() == 1
+        && matches!(resolved_sources[0].1.kind, SourceKind::File)
+        && is_notice_path(&destination_path);
+    if is_reserved_path(&destination_path) && !notice_destination {
         return Err(instruction_error(
             line,
             format!(
@@ -168,8 +172,12 @@ pub fn plan_copy(
             ),
         ));
     }
+    let only_notice_files = planned_files.keys().all(is_notice_path);
     for target in planned_files.keys().chain(planned_dirs.iter()) {
-        if is_reserved_path(target) {
+        if is_reserved_path(target)
+            && !(only_notice_files && is_notice_path(target))
+            && !(only_notice_files && is_notice_dir(target))
+        {
             return Err(instruction_error(
                 line,
                 format!(
@@ -300,6 +308,15 @@ fn insert_dir(
     }
     planned_dirs.insert(target);
     Ok(())
+}
+
+fn is_notice_path(path: &DosPath) -> bool {
+    path.to_dos_string()
+        .eq_ignore_ascii_case(crate::registry::NOTICE_PATH)
+}
+
+fn is_notice_dir(path: &DosPath) -> bool {
+    path.to_dos_string().eq_ignore_ascii_case(r"C:\DOSKER")
 }
 
 fn add_ancestor_dirs(path: &DosPath, planned_dirs: &mut BTreeSet<DosPath>) {

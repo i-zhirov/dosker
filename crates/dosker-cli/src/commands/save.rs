@@ -20,7 +20,7 @@ pub fn execute(args: SaveArgs, context: &mut Context) -> Result<u8, CliError> {
     let destination = args.output.unwrap_or_else(|| {
         PathBuf::from(format!(
             "{}-{}.tar",
-            reference.name().as_str(),
+            reference.repository().to_string().replace('/', "-"),
             reference.tag().as_str()
         ))
     });

@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use dosker_build::{
     BuildError, build_config_digest, normalize_instruction, render_tokens, resolve_copy_destination,
 };
-use dosker_core::{Doskerfile, Instruction, InstructionKind};
+use dosker_core::{
+    Doskerfile, Instruction, InstructionKind, LicenseBasis, LicenseEntry, LicenseStatus,
+};
 use dosker_image::{
     BlobRef, BootLayout, BootMetadata, DosFlavour, FatType, Geometry, HistoryEntry, ImageConfig,
     MachineProfile, PortDeclaration, PortProtocol, VolumeDeclaration, fixed_timestamp,
@@ -48,6 +50,7 @@ fn sample_config() -> ImageConfig {
         agent_version: None,
         created_by: "test".to_owned(),
         history: Vec::new(),
+        licenses: Vec::new(),
     }
 }
 
@@ -117,6 +120,18 @@ fn normalize_cmd_keeps_the_raw_text() {
     assert_eq!(
         normalize_instruction(&instruction, &workdir()).expect("the instruction renders"),
         r"CMD C:\APP\BIN\APP.EXE /FAST"
+    );
+}
+
+#[test]
+fn normalize_license_uses_a_fixed_key_order() {
+    let instruction = after_from(
+        "LICENSE NAME=APP SPDX=MIT STATUS=redistributable HOLDER=\"Id Software\" BASIS=open-source-license EVIDENCE=https://example.org/e LICENSE_URL=https://example.org/l COVERS=C:\\APP\\* SOURCE_URL=https://example.org/s NOTICE=\"A notice\"",
+    );
+
+    assert_eq!(
+        normalize_instruction(&instruction, &workdir()).expect("the instruction renders"),
+        r#"LICENSE NAME=APP SPDX=MIT STATUS=redistributable "HOLDER=Id Software" BASIS=open-source-license EVIDENCE=https://example.org/e LICENSE_URL=https://example.org/l "COVERS=C:\\APP\\*" SOURCE_URL=https://example.org/s "NOTICE=A notice""#,
     );
 }
 
@@ -271,7 +286,7 @@ fn build_config_digest_changes_for_each_effective_field() {
 }
 
 #[test]
-fn build_config_digest_ignores_history_and_boot() {
+fn build_config_digest_ignores_history_boot_and_licenses() {
     let config = sample_config();
     let before = build_config_digest(&config).expect("the digest computes");
 
@@ -287,6 +302,18 @@ fn build_config_digest_ignores_history_and_boot() {
         created_at: fixed_timestamp(),
         empty_layer: true,
         comment: None,
+    });
+    changed.licenses.push(LicenseEntry {
+        name: "APP".to_owned(),
+        spdx: "MIT".to_owned(),
+        holder: None,
+        status: LicenseStatus::Redistributable,
+        basis: Some(LicenseBasis::OpenSourceLicense),
+        evidence: None,
+        license_url: None,
+        covers: Vec::new(),
+        source_url: None,
+        notice: None,
     });
 
     assert_eq!(

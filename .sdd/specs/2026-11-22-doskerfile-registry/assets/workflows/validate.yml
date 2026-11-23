@@ -1,0 +1,154 @@
+# Design asset for the central dosker-registry repository.
+# This workflow validates a pull request. It has read-only permissions and never publishes.
+# Image builds that execute Doskerfile RUN steps belong to publish.yml on main, because a
+# pull request from a fork is untrusted.
+name: validate
+
+on:
+  pull_request:
+    paths:
+      - "images/**"
+      - "namespaces.toml"
+      - "revoked.toml"
+      - "schemas/**"
+      - ".github/workflows/validate.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Must be a release that contains `dosker registry validate`.
+  DOSKER_VERSION: "0.1.3"
+  DOSKER_RELEASE: "https://github.com/i-zhirov/dosker/releases/download/v0.1.3"
+
+jobs:
+  guard:
+    name: Guard protected files
+    if: >-
+      github.event.pull_request.author_association != 'OWNER' &&
+      github.event.pull_request.author_association != 'MEMBER' &&
+      github.event.pull_request.author_association != 'COLLABORATOR'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject protected-file changes from non-maintainers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "${{ github.base_ref }}" --depth=1
+          base="origin/${{ github.base_ref }}"
+          changed="$(git diff --name-only "$base"...HEAD -- namespaces.toml revoked.toml)"
+          if [ -n "$changed" ]; then
+            echo "::error::Only maintainers may change namespaces.toml or revoked.toml."
+            printf '%s\n' "$changed"
+            exit 1
+          fi
+
+  lint:
+    name: Lint registry metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install schema validator
+        run: pip install --disable-pip-version-check check-jsonschema
+
+      - name: Convert TOML metadata to JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/registry-json"
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import tomllib
+
+          out_dir = pathlib.Path(os.environ["RUNNER_TEMP"]) / "registry-json"
+          for path in pathlib.Path(".").rglob("*.toml"):
+              if ".git" in path.parts:
+                  continue
+              data = tomllib.loads(path.read_text(encoding="utf-8"))
+              name = path.as_posix().replace("/", "__") + ".json"
+              (out_dir / name).write_text(json.dumps(data), encoding="utf-8")
+          PY
+
+      - name: Validate namespaces.toml
+        shell: bash
+        run: |
+          set -euo pipefail
+          check-jsonschema \
+            --schemafile schemas/namespaces.schema.json \
+            "$RUNNER_TEMP/registry-json/namespaces.toml.json"
+
+      - name: Validate revoked.toml
+        shell: bash
+        run: |
+          set -euo pipefail
+          check-jsonschema \
+            --schemafile schemas/revoked.schema.json \
+            "$RUNNER_TEMP/registry-json/revoked.toml.json"
+
+      - name: Validate every registry.toml
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=("$RUNNER_TEMP"/registry-json/images__*__registry.toml.json)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No images/<owner>/<name>/registry.toml files were found."
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            check-jsonschema --schemafile schemas/registry.schema.json "$file"
+          done
+
+      - name: Download the pinned DOSker release
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="dosker-${DOSKER_VERSION}-linux-x86_64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "$DOSKER_RELEASE/$archive"
+          curl -fsSL -o "$RUNNER_TEMP/SHA256SUMS" "$DOSKER_RELEASE/SHA256SUMS"
+          (cd "$RUNNER_TEMP" && grep " ${archive}$" SHA256SUMS | sha256sum -c -)
+          mkdir -p "$RUNNER_TEMP/dosker-bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/dosker-bin"
+          binary="$(find "$RUNNER_TEMP/dosker-bin" -type f -name dosker -perm -u+x | head -n 1)"
+          if [ -z "$binary" ]; then
+            echo "::error::The DOSker release archive does not contain the dosker binary."
+            exit 1
+          fi
+          install -m 0755 "$binary" /usr/local/bin/dosker
+          dosker --version
+
+      - name: Validate Doskerfiles, LICENSE entries, and tag uniqueness
+        shell: bash
+        env:
+          # The validator resolves the base from the local image store in this
+          # release. The base must be present locally until the network client
+          # lands. It does not build the image.
+          DOSKER_REGISTRY: https://i-zhirov.github.io/doskerfile-registry
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for dir in images/*/*/; do
+            echo "::group::$dir"
+            dosker registry validate "$dir"
+            echo "::endgroup::"
+          done

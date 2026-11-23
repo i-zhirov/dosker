@@ -9,7 +9,8 @@ use dosker_image::inject::{
 };
 use dosker_image::{
     Attributes, DosFlavour, DosPath, ImageError, ImageMedia, ImageRef, ImageReference, OciStore,
-    Tree, TreeFile, TreeNode, fixed_timestamp, read_boot_metadata, read_tree, sha256_digest,
+    Tree, TreeFile, TreeNode, agent_license, fixed_timestamp, read_boot_metadata, read_tree,
+    sha256_digest,
 };
 use support::{make_fat16_image, set_fat_attribute, write_fat_file};
 
@@ -112,6 +113,7 @@ fn import_injects_the_agent_into_a_dos_image() {
     let config = store.load_config(&tag("dos:latest")).unwrap();
     assert_eq!(config.dos_flavour, DosFlavour::Other);
     assert_eq!(config.agent_version.as_deref(), Some("1.0.0"));
+    assert_eq!(config.licenses, vec![agent_license()]);
     assert_eq!(image.layer_digests.len(), 2, "source and injection layers");
 
     let manifest = store.load_manifest(&tag("dos:latest")).unwrap();
@@ -325,6 +327,26 @@ fn import_booter_stays_opaque() {
         store.load_tree(&tag("boot:latest")),
         Err(ImageError::NoTreeImage(_))
     ));
+}
+
+#[test]
+fn import_booter_has_no_agent_entry() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("boot.bin");
+    fs::write(&source, b"opaque booter").unwrap();
+    let store = store(dir.path());
+    store
+        .import(
+            &source,
+            &reference("boot:latest"),
+            ImageMedia::Booter,
+            None,
+            now(1),
+        )
+        .unwrap();
+
+    let config = store.load_config(&tag("boot:latest")).unwrap();
+    assert!(config.licenses.is_empty());
 }
 
 #[test]

@@ -125,6 +125,80 @@ fn copy_file_to_a_file_destination() {
 }
 
 #[test]
+fn copy_accepts_the_notice_path() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "notice.txt", b"notice");
+    let plan = plan(
+        &open(dir.path()),
+        &Tree::new(),
+        &[source("notice.txt")],
+        r"C:\DOSKER\NOTICE.TXT",
+    )
+    .expect("the notice copy plans");
+
+    assert_eq!(plan.delta.files.len(), 1);
+    assert_eq!(plan.delta.files[0].path, dos(r"C:\DOSKER\NOTICE.TXT"));
+    assert!(
+        plan.delta
+            .dirs
+            .iter()
+            .any(|dir| dir.path == dos(r"C:\DOSKER"))
+    );
+}
+
+#[test]
+fn copy_rejects_a_dosker_directory_destination() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "notice.txt", b"notice");
+    let error = match plan(
+        &open(dir.path()),
+        &Tree::new(),
+        &[source("notice.txt")],
+        r"C:\DOSKER\",
+    ) {
+        Ok(_) => panic!("the copy should be rejected"),
+        Err(error) => error,
+    };
+
+    assert_copy_error(error, "reserved DOSKER");
+}
+
+#[test]
+fn copy_rejects_a_dosker_multi_source_destination() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "a.txt", b"a");
+    write(dir.path(), "b.txt", b"b");
+    let error = match plan(
+        &open(dir.path()),
+        &Tree::new(),
+        &[source("a.txt"), source("b.txt")],
+        r"C:\DOSKER\",
+    ) {
+        Ok(_) => panic!("the copy should be rejected"),
+        Err(error) => error,
+    };
+
+    assert_copy_error(error, "reserved DOSKER");
+}
+
+#[test]
+fn copy_rejects_another_dosker_file() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "notice.txt", b"notice");
+    let error = match plan(
+        &open(dir.path()),
+        &Tree::new(),
+        &[source("notice.txt")],
+        r"C:\DOSKER\OTHER.TXT",
+    ) {
+        Ok(_) => panic!("the copy should be rejected"),
+        Err(error) => error,
+    };
+
+    assert_copy_error(error, "reserved DOSKER");
+}
+
+#[test]
 fn copy_file_to_a_directory_destination_uses_the_file_name() {
     let dir = tempfile::tempdir().unwrap();
     write(dir.path(), "hello.txt", b"hello");

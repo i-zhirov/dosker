@@ -13,7 +13,7 @@ use dosker_build::{
     BuildError, BuildOptions, BuildOutcome, BuildReporter, Builder, EngineResolver,
     InDosRunOutcome, InDosRunRequest, InDosRunner, ResolvedEngine,
 };
-use dosker_core::EngineName;
+use dosker_core::{EngineName, LicenseBasis, LicenseEntry, LicenseStatus};
 use dosker_image::{
     ANNOTATION_RAW_DISK_DIGEST, Attributes, BaseInputs, BlobRef, BootLayout, BootMetadata,
     DosFlavour, DosPath, FatType as ImageFatType, FreedosPins, Geometry, HistoryEntry, ImageConfig,
@@ -143,6 +143,7 @@ pub fn sample_config(boot: BootMetadata, agent_version: Option<&str>) -> ImageCo
             empty_layer: false,
             comment: Some("base".to_owned()),
         }],
+        licenses: Vec::new(),
     }
 }
 
@@ -171,6 +172,42 @@ pub fn store_tree_base(
             vec![descriptor],
             annotations,
         )
+        .expect("the base image commits");
+    committed.manifest_digest
+}
+
+/// Builds a valid redistributable `MIT` license entry.
+pub fn sample_license(name: &str) -> LicenseEntry {
+    LicenseEntry {
+        name: name.to_owned(),
+        spdx: "MIT".to_owned(),
+        holder: None,
+        status: LicenseStatus::Redistributable,
+        basis: Some(LicenseBasis::OpenSourceLicense),
+        evidence: None,
+        license_url: None,
+        covers: Vec::new(),
+        source_url: None,
+        notice: None,
+    }
+}
+
+/// Stores one licensed empty-tree base and returns its manifest digest.
+pub fn store_licensed_tree_base(
+    root: &Path,
+    reference: &str,
+    licenses: Vec<LicenseEntry>,
+) -> String {
+    let store = OciStore::new(root.to_path_buf());
+    let tree = empty_tree();
+    let layer =
+        Layer::from_delta(&tree.to_delta(), "base", None, None).expect("the base layer builds");
+    let descriptor = store.put_layer(&layer).expect("the base layer stores");
+    let mut config = sample_config(sample_boot(), Some("1.2.3"));
+    config.licenses = licenses;
+    let reference = ImageReference::parse(reference).expect("the base reference parses");
+    let committed = store
+        .commit_image(Some(&reference), &config, vec![descriptor], BTreeMap::new())
         .expect("the base image commits");
     committed.manifest_digest
 }

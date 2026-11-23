@@ -1,4 +1,5 @@
 use chrono::{TimeZone, Utc};
+use dosker_core::license::{LicenseBasis, LicenseEntry, LicenseStatus};
 use dosker_image::{
     BootMetadata, DosFlavour, ImageConfig, MachineProfile, PortDeclaration, PortProtocol,
     VolumeDeclaration, canonical_json,
@@ -33,6 +34,22 @@ fn config(boot: BootMetadata) -> ImageConfig {
             empty_layer: false,
             comment: None,
         }],
+        licenses: Vec::new(),
+    }
+}
+
+fn license(name: &str, spdx: &str) -> LicenseEntry {
+    LicenseEntry {
+        name: name.to_owned(),
+        spdx: spdx.to_owned(),
+        holder: None,
+        status: LicenseStatus::Redistributable,
+        basis: Some(LicenseBasis::OpenSourceLicense),
+        evidence: None,
+        license_url: None,
+        covers: Vec::new(),
+        source_url: None,
+        notice: None,
     }
 }
 
@@ -244,4 +261,76 @@ fn volume_declaration_requires_a_drive_shape() {
     assert!(value.validate().is_ok());
     value.volumes[0].drive = "D".to_owned();
     assert!(value.validate().is_err());
+}
+
+#[test]
+fn licenses_round_trip_through_json() {
+    let mut value = config(disk());
+    value.licenses.push(license("APP", "MIT"));
+    let json = serde_json::to_string(&value).unwrap();
+    assert_eq!(serde_json::from_str::<ImageConfig>(&json).unwrap(), value);
+}
+
+#[test]
+fn empty_licenses_are_omitted_from_canonical_json() {
+    let json = canonical_json(&config(disk())).unwrap();
+    let text = String::from_utf8(json).unwrap();
+    assert!(!text.contains("licenses"), "{text}");
+}
+
+#[test]
+fn config_without_licenses_keeps_its_previous_top_level_keys() {
+    let json = canonical_json(&config(disk())).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&json).unwrap();
+    let keys: std::collections::BTreeSet<&str> = value
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        keys,
+        std::collections::BTreeSet::from([
+            "agent_version",
+            "boot",
+            "booter",
+            "cmd",
+            "created_by",
+            "dos_flavour",
+            "engine_pin",
+            "env",
+            "exposed_ports",
+            "history",
+            "machine",
+            "requires",
+            "schema_version",
+            "volumes",
+            "workdir",
+        ])
+    );
+    assert_eq!(value["schema_version"].as_u64(), Some(1));
+}
+
+#[test]
+fn config_validate_rejects_an_invalid_license_entry() {
+    let mut value = config(disk());
+    let mut bad = license("APP", "MIT");
+    bad.spdx = "BOGUS-1.0".to_owned();
+    value.licenses.push(bad);
+    assert!(value.validate().is_err());
+}
+
+#[test]
+fn config_validate_rejects_a_duplicate_license_name() {
+    let mut value = config(disk());
+    value.licenses.push(license("APP", "MIT"));
+    value.licenses.push(license("APP", "MIT"));
+    assert!(value.validate().is_err());
+}
+
+#[test]
+fn config_validate_accepts_a_valid_license_entry() {
+    let mut value = config(disk());
+    value.licenses.push(license("APP", "MIT"));
+    value.validate().unwrap();
 }
