@@ -282,6 +282,57 @@ entries. It does not remove named volumes. Remove `hello-data` first.
 - The example uses a POSIX shell. Windows users can run the same commands in
   PowerShell with Windows paths and `$env:NAME` variables.
 
+## Example: a self-contained DOS environment
+
+[`examples/hello-dos-bundled`](examples/hello-dos-bundled) is the bundled
+variant of the small example. It bakes three host text files into the
+image with `COPY`, creates `DATA.TXT` with `RUN`, and records a start
+command. It has no volume and needs no runtime `dosker cp`.
+
+```doskerfile
+FROM freedos:1.3
+
+ENV APP_NAME=HELLO_BUNDLED
+MACHINE memory=16M
+ENGINE qemu
+COPY HELLO.TXT C:/APP/HELLO.TXT
+COPY NOTES.TXT C:/APP/NOTES.TXT
+COPY UPLOAD.TXT C:/UPLOAD.TXT
+RUN COPY C:\UPLOAD.TXT C:\APP\DATA.TXT
+REQUIRES boot,serial,headless
+CMD ECHO HELLO FROM BUNDLED DOSKER
+```
+
+The setup reuses the hello-dos environment preparation. It builds
+`hello-bundled:latest` from the `COPY`/`RUN` Doskerfile and creates no
+volume. It needs the same prerequisites as the hello-dos example.
+
+```sh
+. examples/hello-dos-bundled/setup.sh
+```
+
+Run the printed command, then inspect the image tree:
+
+```sh
+dosker exec hello-bundled-demo 'TYPE C:\APP\HELLO.TXT'
+dosker exec hello-bundled-demo 'TYPE C:\APP\NOTES.TXT'
+dosker exec hello-bundled-demo 'TYPE C:\APP\DATA.TXT'
+dosker exec hello-bundled-demo 'DIR C:\APP'
+```
+
+The `COPY` steps create `HELLO.TXT` and `NOTES.TXT` in `C:\APP`. The
+`RUN COPY` step creates `DATA.TXT` during the image build. The runtime
+container has no volume, and `dosker cp` is not used.
+
+The start command is in the image config. For this projected image,
+`dosker logs` did not show the start command, so use `dosker exec` to
+inspect the files.
+
+The image can be saved and loaded without a volume. The archive is about
+32 MiB.
+
+[Manual verification](examples/hello-dos-bundled/VERIFY.md).
+
 ## Example: OpenWatcom C/C++ on FreeDOS with a toolchain volume
 
 [`examples/openwatcom-dos`](examples/openwatcom-dos) runs the DOS-hosted
@@ -581,6 +632,8 @@ DOSker is dual-licensed under the MIT License or the Apache License 2.0
 - [Install](docs/install.md)
 - [Example environment](examples/hello-dos)
 - [Example verification](examples/hello-dos/VERIFY.md)
+- [Bundled hello-dos example](examples/hello-dos-bundled)
+- [Bundled hello-dos verification](examples/hello-dos-bundled/VERIFY.md)
 - [OpenWatcom volume example](examples/openwatcom-dos)
 - [OpenWatcom volume verification](examples/openwatcom-dos/VERIFY.md)
 - [Bundled OpenWatcom example](examples/openwatcom-dos-bundled)

@@ -7,6 +7,8 @@
 #
 # The script prepares the DOS agent, FreeDOS source, QEMU path, data root,
 # and dosker binary. It does not run the example.
+#
+# Set DOSKER_HELLO_SETUP_ONLY=1 to stop after the shared environment.
 
 setup_error() {
     printf 'setup: %s\n' "$*" >&2
@@ -127,9 +129,7 @@ else
         || setup_error "cannot create a temporary data root" || return 1
 fi
 
-if command -v dosker >/dev/null 2>&1; then
-    :
-elif [ -x "$repo_root/target/debug/dosker" ]; then
+if [ -x "$repo_root/target/debug/dosker" ]; then
     export PATH="$repo_root/target/debug:$PATH"
 elif [ -x "$repo_root/target/release/dosker" ]; then
     export PATH="$repo_root/target/release:$PATH"
@@ -145,8 +145,14 @@ elif command -v cargo >/dev/null 2>&1; then
             --features qemu-engine --bin dosker
     ) || setup_error "cannot build dosker" || return 1
     export PATH="$repo_root/target/debug:$PATH"
+elif command -v dosker >/dev/null 2>&1; then
+    :
 else
-    setup_error "dosker is not on PATH and cargo is not available; install dosker or Rust" || return 1
+    setup_error "cannot find or build dosker; install Rust or dosker" || return 1
+fi
+
+if [ "${DOSKER_HELLO_SETUP_ONLY:-0}" = 1 ]; then
+    return 0
 fi
 
 build_context="$DOSKER_ROOT/hello-dos"
