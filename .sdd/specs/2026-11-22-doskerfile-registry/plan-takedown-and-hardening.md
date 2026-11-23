@@ -123,6 +123,7 @@
 - 2026-11-23: Approved.
 - 2026-11-23: All tasks implemented; registry 57 tests, DOSker suites, clippy, fmt, actionlint, and `validate.sh images` are green.
 - 2026-11-23: Slice 3 is deployed and verified, so its status is `Implemented`. The design and roadmap overall stay `Approved` for the design's remaining OpenWatcom license review; the resume and signing questions are deferred.
+- 2026-11-23: The takedown workflow was exercised against `i-zhirov/takedown-test`. The takedown deleted the tar, omitted the image, and a fresh pull failed while the local copy stayed. The exercise also found that an empty CI release directory skipped the version-immutability check; the publish workflow now downloads the existing sidecars before publishing.
 
 ## Deviations
 

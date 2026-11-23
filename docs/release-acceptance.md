@@ -141,6 +141,28 @@ published `SHA256SUMS` covers all three archives.
 - The `validate.yml` workflow was not run on a pull request.
 - The `takedown` workflow is deployed; no revocation has been exercised.
 
+## Takedown exercise (2026-11-23)
+
+- Test image `i-zhirov/takedown-test:0.1.0`, digest
+  `sha256:7766235096ac413c0564458d19e124c2dc768543d30fbd28c1ed4420c4490341`.
+- Publish run 45245988511 built and published it; a client `pull` on this macOS
+  arm64 host verified the image and asset.
+- The revocation was recorded in `revoked.toml`; publish run 45246219919
+  omitted the image from the catalog and its index. Takedown run 45246343466
+  deleted the tar asset (the sidecar stayed) and redeployed Pages.
+- A fresh `dosker pull i-zhirov/takedown-test:takedown-test` failed with
+  `image not found`. The local tag from before the takedown stayed in the local
+  store.
+- The exercise found a re-publish gap. Publish dispatch 45246649797 rebuilt the
+  same version to a new digest, and the site listed the image again, because
+  the CI release directory started empty and skipped the version-immutability
+  check. The publish workflow now downloads the existing sidecars before
+  `scripts/publish.py`; a same-version rebuild fails with "bump the version".
+  The `test_a_different_digest_fails` test covers the script behavior.
+- The test image, its revocation record, and its Release were removed after the
+  exercise. The site lists only `i-zhirov/hello-dos`, and its pull still
+  verifies the digest.
+
 ## Release 0.1.2
 
 - Workflow run 45027052360 published `v0.1.2` from commit `c3e64d0`.
