@@ -210,7 +210,7 @@ dosker exec openwatcom-bundled-demo C:\APP\HELLO.EXE
       - `dosker exec openwatcom-bundled-demo 'DIR C:\WATCOM\BINW\WCC.EXE'` succeeds (the compiler is in the image).
       - `dosker volume ls` shows no volume attached.
 
-- [ ] **Task 5: Prove save/load is self-contained**
+- [x] **Task 5: Prove save/load is self-contained**
     - **Implements:** Design §Image and build loop; Goal
     - **Create `examples/openwatcom-dos-bundled/VERIFY.md`**
         - Clean-checkout preparation, run, build, run, save/load, base-tag removal, and cleanup steps.
