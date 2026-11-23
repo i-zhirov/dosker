@@ -65,6 +65,9 @@ at `<data-root>/cache/registry/assets/<hex>.tar` and re-hashed on every pull.
 `run`, `create`, and `build` pull a missing remote reference. Pass `--no-pull`
 to keep the local-only behavior.
 
+A takedown removes a version from the registry. It never deletes a local copy:
+a local tag still starts offline, while the next pull of a revoked tag fails.
+
 ## Search and remote inspect
 
 ```sh

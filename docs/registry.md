@@ -126,3 +126,18 @@ after the build and before it uploads the tar.
 
 It exits `0` on success, `1` on a check failure, and `2` on a usage error. A
 missing image reports a build hint. A booter image uses the booter rule.
+
+## Takedown and unsigned assets
+
+A maintainer records a revoked digest in `revoked.toml`. The site deploy omits
+the version from every tag and version list, so a pull fails. A maintainer then
+runs the `takedown` workflow: it checks the record, deletes the image tar, keeps
+the version sidecar, and redeploys Pages. A later publish skips a revoked
+current digest.
+
+A local copy is never deleted. A local tag still starts with `dosker run`; the
+next pull of a revoked tag fails.
+
+Registry release assets are unsigned in the first version. The client verifies
+the SHA-256 digest of the manifest, config, and tar, so a tampered asset fails.
+Automated signing and attestation are deferred.
