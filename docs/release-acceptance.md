@@ -141,6 +141,27 @@ published `SHA256SUMS` covers all three archives.
 - The `validate.yml` workflow was not run on a pull request.
 - The `takedown` workflow is deployed; no revocation has been exercised.
 
+## Release 0.1.5
+
+- Workflow run 45386136777 published `v0.1.5` from commit `46dbc39`.
+- The run published `dosker-0.1.5-linux-x86_64.tar.gz`,
+  `dosker-0.1.5-macos-arm64.tar.gz`, `dosker-0.1.5-windows-x86_64.zip`, and
+  `SHA256SUMS`.
+- `shasum -a 256 -c SHA256SUMS` passed for all three archives on the macOS
+  arm64 host.
+- The macOS binary printed `dosker 0.1.5`.
+- The release decodes zstd registry assets. The binary pulled
+  `i-zhirov/hello-dos:latest` from the live registry:
+  `sha256:b71916203650a4879f313c0d4b0ec01470a59b2337958f955347d9240896910b`,
+  asset `sha256:78e084ee5cd1cd69747a13907313f0ceee644b6eb4687dd3f4846c3cd219ec35`,
+  247,743 bytes.
+- The Homebrew tap formula was updated in commit `2009110`.
+- `brew reinstall dosker` installed `0.1.5` from the tap. The installed binary
+  printed `dosker 0.1.5` and pulled the live image.
+- The Linux and Windows archives were checksum-verified but not executed on
+  this host.
+- The release is unsigned.
+
 ## Takedown exercise (2026-11-23)
 
 - Test image `i-zhirov/takedown-test:0.1.0`, digest
