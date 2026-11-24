@@ -20,7 +20,7 @@
           pkgs = nixpkgs.legacyPackages.${system};
           dosker = pkgs.rustPlatform.buildRustPackage {
             pname = "dosker";
-            version = "0.1.4";
+            version = "0.1.5";
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
             cargoBuildFlags = [

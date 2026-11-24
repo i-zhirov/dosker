@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-agent-proto"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "getrandom 0.3.4",
  "serde",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-build"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "chrono",
  "dosker-core",
@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "chrono",
  "clap",
@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "getrandom 0.3.4",
  "serde",
@@ -342,7 +342,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-engine"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "dosker-core",
  "serde",
@@ -352,7 +352,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-engine-bochs"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "dosker-agent-proto",
  "dosker-core",
@@ -366,7 +366,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-engine-dosbox-x"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "dosker-agent-proto",
  "dosker-core",
@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-engine-qemu"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "dosker-agent-proto",
  "dosker-core",
@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-image"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "base64",
  "chrono",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-platform"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "dosker-core",
  "libc",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-runtime"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "chrono",
  "dosker-core",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "dosker-test-support"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "dosker-core",
  "dosker-engine",
