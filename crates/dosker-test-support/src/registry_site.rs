@@ -43,6 +43,10 @@ fn hex(bytes: &[u8]) -> String {
     text
 }
 
+fn asset_file_name(digest: &str) -> String {
+    format!("{}.tar.zst", digest.replace(':', "."))
+}
+
 fn write_json(path: &Path, value: &Value) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -51,7 +55,7 @@ fn write_json(path: &Path, value: &Value) -> io::Result<()> {
     fs::write(path, text + "\n")
 }
 
-/// Writes a catalog, the per-image indexes, the version documents, and the asset tars.
+/// Writes a catalog, the per-image indexes, the version documents, and the compressed assets.
 pub fn build_site(
     destination: &Path,
     base_url: &str,
@@ -64,12 +68,14 @@ pub fn build_site(
     for image in images {
         let manifest_digest = sha256_digest(&image.manifest_bytes);
         let config_digest = sha256_digest(&image.config_bytes);
-        let asset_digest = sha256_digest(&image.asset_tar);
+        let compressed = zstd::bulk::compress(&image.asset_tar, 19).map_err(io::Error::other)?;
+        let asset_digest = sha256_digest(&compressed);
+        let asset_name = asset_file_name(&asset_digest);
         let hex_digest = manifest_digest.trim_start_matches("sha256:").to_owned();
 
         let assets = destination.join("assets");
         fs::create_dir_all(&assets)?;
-        fs::write(assets.join(format!("{asset_digest}.tar")), &image.asset_tar)?;
+        fs::write(assets.join(&asset_name), &compressed)?;
 
         let version_dir = destination
             .join("v1")
@@ -91,9 +97,10 @@ pub fn build_site(
             "config_digest": config_digest,
             "manifest_url": format!("{prefix}/manifest.json"),
             "config_url": format!("{prefix}/config.json"),
-            "asset_url": format!("{base}/assets/{asset_digest}.tar"),
+            "asset_url": format!("{base}/assets/{asset_name}"),
             "asset_digest": asset_digest,
-            "asset_size": image.asset_tar.len() as u64,
+            "asset_size": compressed.len() as u64,
+            "asset_compression": "zstd",
             "published_at": image.published_at,
             "license_summary": image.license_summary,
             "licenses_url": format!("{prefix}/licenses.json"),
@@ -302,7 +309,7 @@ fn handle(
     } else {
         "application/octet-stream"
     };
-    let is_asset = file.extension().and_then(|value| value.to_str()) == Some("tar");
+    let is_asset = file.extension().and_then(|value| value.to_str()) == Some("zst");
     if is_asset {
         let limit = fail_next_asset
             .lock()

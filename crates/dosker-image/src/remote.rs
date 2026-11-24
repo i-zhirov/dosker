@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::acceptance::{ACCEPTANCE_SCHEMA_VERSION, AcceptanceStore, AcceptedImage};
-use crate::archive::load_image_as;
+use crate::archive::{AssetCompression, load_image_as};
 use crate::canonical::sha256_digest;
 use crate::config::ImageConfig;
 use crate::error::ImageError;
@@ -84,6 +84,7 @@ pub struct VersionRecord {
     pub asset_url: String,
     pub asset_digest: String,
     pub asset_size: u64,
+    pub asset_compression: AssetCompression,
     pub published_at: String,
     pub license_summary: LicenseSummary,
     pub licenses_url: String,
@@ -110,7 +111,7 @@ impl RemoteCache {
             .as_str()
             .strip_prefix("sha256:")
             .expect("a sha256 digest");
-        Ok(self.root.join(format!("{hex}.tar")))
+        Ok(self.root.join(format!("{hex}.tar.zst")))
     }
 
     /// Returns the partial path for one asset path.
@@ -367,6 +368,7 @@ pub fn pull(
         &local,
         &version.digest,
         &version.config_digest,
+        version.asset_compression,
     )?;
 
     if summary != LicenseSummary::Redistributable && !already_accepted {

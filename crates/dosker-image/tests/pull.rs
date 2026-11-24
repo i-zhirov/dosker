@@ -9,8 +9,8 @@ use dosker_image::remote::{
     PullError, PullRequest, RegistryClient, RemoteCache, RemoteError, pull,
 };
 use dosker_image::{
-    ImageDigest, ImageRef, ImageReference, OciStore, ReferenceSelector, RegistryReference,
-    Repository,
+    ImageDigest, ImageError, ImageRef, ImageReference, OciStore, ReferenceSelector,
+    RegistryReference, Repository, sha256_digest,
 };
 use dosker_test_support::registry_site::StaticServer;
 use support::site::{SiteSpec, abandonware, fixture_site, redistributable};
@@ -169,7 +169,7 @@ fn a_gate_refuses_an_abandonware_image() {
         !server
             .requests()
             .iter()
-            .any(|request| request.ends_with(".tar"))
+            .any(|request| request.ends_with(".tar.zst"))
     );
 }
 
@@ -327,6 +327,42 @@ fn an_asset_with_a_different_manifest_fails() {
 }
 
 #[test]
+fn a_corrupt_compressed_asset_fails() {
+    let (_fixture_store, site_dir, server) = fixture();
+    let client = RegistryClient::new(&server.url()).expect("a client");
+    let index_path = site_dir.path().join("v1/i-zhirov/hello-dos/index.json");
+    let mut index: serde_json::Value =
+        serde_json::from_slice(&fs::read(&index_path).unwrap()).unwrap();
+    let asset_url = index["versions"][0]["asset_url"]
+        .as_str()
+        .expect("an asset URL")
+        .to_owned();
+    let asset_name = asset_url.rsplit('/').next().expect("an asset name");
+    let asset_path = site_dir.path().join("assets").join(asset_name);
+    let garbage = b"not a zstd frame";
+    fs::write(&asset_path, garbage).expect("tamper the asset");
+    index["versions"][0]["asset_digest"] = serde_json::json!(sha256_digest(garbage));
+    index["versions"][0]["asset_size"] = serde_json::json!(garbage.len());
+    fs::write(&index_path, serde_json::to_vec(&index).unwrap()).unwrap();
+    let (_target, store, cache, acceptance) = target();
+
+    let error = pull(
+        &client,
+        &store,
+        &cache,
+        &acceptance,
+        &request("i-zhirov/hello-dos:latest", None),
+        now(),
+    )
+    .expect_err("a corrupt zstd asset");
+
+    assert!(matches!(
+        error,
+        PullError::Store(ImageError::Archive { .. })
+    ));
+}
+
+#[test]
 fn a_moved_tag_replaces_the_local_tag() {
     let (_first_store, _first_site, first_server) = fixture();
     let first_client = RegistryClient::new(&first_server.url()).expect("a client");
@@ -385,7 +421,7 @@ fn a_digest_resolves_from_the_index() {
 fn an_interrupted_pull_resumes_the_asset() {
     let (_fixture_store, _site, server) = fixture();
     server.reset_requests();
-    server.fail_next_asset(512);
+    server.fail_next_asset(64);
     let client = RegistryClient::new(&server.url()).expect("a client");
     let (_target, store, cache, acceptance) = target();
     let request = request("i-zhirov/hello-dos:latest", None);
@@ -402,5 +438,5 @@ fn an_interrupted_pull_resumes_the_asset() {
     assert!(report.resumed);
     let local = ImageReference::parse("i-zhirov/hello-dos:latest").expect("a local reference");
     assert!(store.load(&ImageRef::Tag(local)).is_ok());
-    assert!(server.ranges().contains(&Some("bytes=512-".to_owned())));
+    assert!(server.ranges().contains(&Some("bytes=64-".to_owned())));
 }

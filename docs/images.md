@@ -59,12 +59,13 @@ the config, the asset, and every blob, and stores the image. A tag pull stores
 
 An image whose verified config license summary is not `redistributable`
 refuses with exit code `3` and prints the exact digest to accept. Acceptance is
-stored by digest under `<data-root>/accepted/`. The downloaded asset is cached
-at `<data-root>/cache/registry/assets/<hex>.tar` and re-hashed on every pull.
+stored by digest under `<data-root>/accepted/`. The downloaded asset is a zstd
+frame, cached at `<data-root>/cache/registry/assets/<hex>.tar.zst` and re-hashed
+on every pull. The client decodes it with a 2 GiB decoded-size limit.
 
-An interrupted download stays at `<hex>.tar.part`. The next pull sends a Range
-request and appends the missing bytes. A complete partial file is verified and
-renamed. A corrupt partial file is deleted, and the pull fails.
+An interrupted download stays at `<hex>.tar.zst.part`. The next pull sends a
+Range request and appends the missing bytes. A complete partial file is
+verified and renamed. A corrupt partial file is deleted, and the pull fails.
 
 `run`, `create`, and `build` pull a missing remote reference. Pass `--no-pull`
 to keep the local-only behavior.

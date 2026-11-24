@@ -54,12 +54,13 @@ fn a_second_pull_reuses_the_cached_asset() {
     assert!(second_cached);
     assert!(!second_resumed);
     assert!(second_path.is_file());
-    let tar_requests = server
+    assert!(second_path.to_string_lossy().ends_with(".tar.zst"));
+    let asset_requests = server
         .requests()
         .into_iter()
-        .filter(|path| path.ends_with(".tar"))
+        .filter(|path| path.ends_with(".tar.zst"))
         .count();
-    assert_eq!(tar_requests, 1);
+    assert_eq!(asset_requests, 1);
 }
 
 #[test]
@@ -77,17 +78,15 @@ fn a_tampered_cached_asset_is_downloaded_again() {
         server
             .requests()
             .iter()
-            .any(|request| request.ends_with(".tar"))
+            .any(|request| request.ends_with(".tar.zst"))
     );
 }
 
 #[test]
 fn a_tampered_server_asset_fails() {
     let (_store, site_dir, _server, client, version, cache) = fixture();
-    let asset = site_dir
-        .path()
-        .join("assets")
-        .join(format!("{}.tar", version.asset_digest));
+    let name = version.asset_url.rsplit('/').next().expect("an asset name");
+    let asset = site_dir.path().join("assets").join(name);
     fs::write(&asset, b"tampered").expect("tamper the asset");
 
     let error = cache
@@ -149,7 +148,7 @@ fn an_abandonware_site_asset_is_available() {
 fn an_interrupted_download_is_resumed() {
     let (_store, _site, server, client, version, cache) = fixture();
     server.reset_requests();
-    server.fail_next_asset(512);
+    server.fail_next_asset(64);
     let path = cache
         .asset_path(&version.asset_digest)
         .expect("the asset path");
@@ -160,7 +159,7 @@ fn an_interrupted_download_is_resumed() {
         .expect_err("a truncated asset");
 
     assert!(matches!(error, RemoteError::Http(_)));
-    assert_eq!(fs::metadata(&part).expect("the partial file").len(), 512);
+    assert_eq!(fs::metadata(&part).expect("the partial file").len(), 64);
     assert!(!path.exists());
 
     let (final_path, cached, resumed) = cache
@@ -172,7 +171,7 @@ fn an_interrupted_download_is_resumed() {
     assert!(resumed);
     assert!(path.is_file());
     assert!(!part.exists());
-    assert_eq!(server.ranges(), vec![None, Some("bytes=512-".to_owned())]);
+    assert_eq!(server.ranges(), vec![None, Some("bytes=64-".to_owned())]);
 }
 
 #[test]
@@ -210,7 +209,7 @@ fn a_partial_with_a_corrupt_prefix_fails() {
         .expect("the asset path");
     let part = PathBuf::from(format!("{}.part", path.display()));
     fs::create_dir_all(part.parent().expect("the cache directory")).expect("the cache directory");
-    fs::write(&part, vec![0u8; 512]).expect("the partial file");
+    fs::write(&part, vec![0u8; 64]).expect("the partial file");
 
     let error = cache
         .get_or_download(&client, &version)

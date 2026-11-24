@@ -6,8 +6,8 @@ use std::fs;
 use dosker_core::{LicenseBasis, LicenseEntry, LicenseStatus};
 use dosker_image::remote::{RegistryClient, RemoteError};
 use dosker_image::{
-    ImageDigest, ImageReference, ImageTag, Layer, OciStore, ReferenceSelector, RegistryReference,
-    Repository, Tree,
+    AssetCompression, ImageDigest, ImageReference, ImageTag, Layer, OciStore, ReferenceSelector,
+    RegistryReference, Repository, Tree,
 };
 use dosker_test_support::registry_site::{StaticServer, build_site};
 use support::{sample_boot, sample_config, site::site_image};
@@ -91,6 +91,7 @@ fn an_image_index_resolves_a_tag() {
 
     assert_eq!(version.version, "1.0.0");
     assert_eq!(version.license_summary.as_str(), "redistributable");
+    assert_eq!(version.asset_compression, AssetCompression::Zstd);
 }
 
 #[test]
@@ -106,6 +107,25 @@ fn a_digest_selects_the_version() {
         .expect("the digest");
 
     assert_eq!(version.version, "1.0.0");
+}
+
+#[test]
+fn a_missing_asset_compression_fails() {
+    let (_store, site_dir, server) = site();
+    let client = RegistryClient::new(&server.url()).expect("a client");
+    let path = site_dir.path().join("v1/i-zhirov/hello-dos/index.json");
+    let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    value["versions"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("asset_compression");
+    fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+
+    let error = client
+        .image_index(&Repository::parse("i-zhirov/hello-dos").unwrap())
+        .expect_err("a missing compression");
+
+    assert!(matches!(error, RemoteError::InvalidDocument(_, _)));
 }
 
 #[test]

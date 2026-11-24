@@ -2,9 +2,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use ruzstd::decoding::StreamingDecoder;
+use serde::{Deserialize, Serialize};
 
 use crate::canonical::{canonical_json, sha256_digest};
 use crate::error::ImageError;
@@ -19,6 +22,16 @@ use crate::reference::{ImageRef, ImageReference};
 pub const ARCHIVE_MTIME_SECONDS: u64 = 0;
 /// The fixed mode of every archive member.
 pub const ARCHIVE_MODE: u32 = 0o644;
+/// The maximum decoded size of one registry asset.
+pub const MAX_DECODED_ASSET_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The compression of one registry asset.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AssetCompression {
+    /// One zstd frame.
+    Zstd,
+}
 
 const BLOB_PREFIX: &str = "blobs/sha256/";
 const LAYOUT_MEMBER: &str = "oci-layout";
@@ -144,22 +157,24 @@ pub fn save_image(
 
 /// Loads every tag from an OCI image-layout tar and replaces existing tags.
 pub fn load_image(store: &OciStore, source: &Path) -> Result<LoadReport, ImageError> {
-    load_image_inner(store, source, None, None)
+    load_image_inner(store, source, None, None, None)
 }
 
-/// Loads one archive and commits only the given reference.
+/// Loads one compressed registry archive and commits only the given reference.
 pub fn load_image_as(
     store: &OciStore,
     source: &Path,
     reference: &ImageReference,
     expected_manifest: &str,
     expected_config: &str,
+    compression: AssetCompression,
 ) -> Result<LoadReport, ImageError> {
     load_image_inner(
         store,
         source,
         Some(reference),
         Some((expected_manifest, expected_config)),
+        Some(compression),
     )
 }
 
@@ -168,9 +183,11 @@ fn load_image_inner(
     source: &Path,
     target: Option<&ImageReference>,
     expected: Option<(&str, &str)>,
+    compression: Option<AssetCompression>,
 ) -> Result<LoadReport, ImageError> {
-    let first = scan_archive(source)?;
-    let layout: OciLayout = parse_member(source, &first, LAYOUT_MEMBER, "layout marker")?;
+    let first = scan_archive(source, compression)?;
+    let layout: OciLayout =
+        parse_member(source, &first, LAYOUT_MEMBER, "layout marker", compression)?;
     if layout.image_layout_version != OCI_LAYOUT_VERSION {
         return Err(archive_error(
             source,
@@ -181,7 +198,7 @@ fn load_image_inner(
         ));
     }
 
-    let index: Index = parse_member(source, &first, INDEX_MEMBER, "index")?;
+    let index: Index = parse_member(source, &first, INDEX_MEMBER, "index", compression)?;
     index
         .validate()
         .map_err(|error| archive_error(source, error.to_string()))?;
@@ -205,14 +222,24 @@ fn load_image_inner(
 
     let mut manifests = BTreeMap::new();
     for descriptor in &index.manifests {
-        let bytes = read_member(source, &first, &blob_member(&descriptor.digest)?)?;
+        let bytes = read_member(
+            source,
+            &first,
+            &blob_member(&descriptor.digest)?,
+            compression,
+        )?;
         verify_digest(source, &descriptor.digest, &bytes)?;
         let manifest: Manifest =
             serde_json::from_slice(&bytes).map_err(|error| ImageError::Archive {
                 path: source.to_path_buf(),
                 message: format!("invalid manifest {}: {error}", descriptor.digest),
             })?;
-        let config_bytes = read_member(source, &first, &blob_member(&manifest.config.digest)?)?;
+        let config_bytes = read_member(
+            source,
+            &first,
+            &blob_member(&manifest.config.digest)?,
+            compression,
+        )?;
         verify_digest(source, &manifest.config.digest, &config_bytes)?;
         let config: crate::config::ImageConfig =
             serde_json::from_slice(&config_bytes).map_err(|error| ImageError::Archive {
@@ -263,7 +290,7 @@ fn load_image_inner(
     let mut written = 0;
     let mut skipped = 0;
     let mut found = BTreeSet::new();
-    let mut archive = open_archive(source)?;
+    let mut archive = open_archive(source, compression)?;
     for entry in archive
         .entries()
         .map_err(|error| archive_error(source, error.to_string()))?
@@ -368,17 +395,66 @@ fn write_member<W: Write>(
         })
 }
 
-fn open_archive(source: &Path) -> Result<tar::Archive<File>, ImageError> {
+fn open_archive(
+    source: &Path,
+    compression: Option<AssetCompression>,
+) -> Result<tar::Archive<Box<dyn Read>>, ImageError> {
     let file = File::open(source).map_err(|error| ImageError::Io {
         path: source.to_path_buf(),
         source: error,
     })?;
-    Ok(tar::Archive::new(file))
+    let reader: Box<dyn Read> = match compression {
+        None => Box::new(BufReader::new(file)),
+        Some(AssetCompression::Zstd) => {
+            let decoder = StreamingDecoder::new(BufReader::new(file))
+                .map_err(|error| archive_error(source, format!("invalid zstd stream: {error}")))?;
+            Box::new(CappedReader::new(decoder, MAX_DECODED_ASSET_BYTES))
+        }
+    };
+    Ok(tar::Archive::new(reader))
 }
 
-fn scan_archive(source: &Path) -> Result<BTreeMap<String, u64>, ImageError> {
+struct CappedReader<R> {
+    inner: R,
+    remaining: u64,
+    limit: u64,
+}
+
+impl<R: Read> CappedReader<R> {
+    fn new(inner: R, limit: u64) -> Self {
+        Self {
+            inner,
+            remaining: limit,
+            limit,
+        }
+    }
+}
+
+impl<R: Read> Read for CappedReader<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.remaining == 0 {
+            let mut probe = [0u8; 1];
+            return match self.inner.read(&mut probe)? {
+                0 => Ok(0),
+                _ => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("the decoded asset exceeds the {} byte limit", self.limit),
+                )),
+            };
+        }
+        let limit = (buffer.len() as u64).min(self.remaining) as usize;
+        let read = self.inner.read(&mut buffer[..limit])?;
+        self.remaining -= read as u64;
+        Ok(read)
+    }
+}
+
+fn scan_archive(
+    source: &Path,
+    compression: Option<AssetCompression>,
+) -> Result<BTreeMap<String, u64>, ImageError> {
     let mut names = BTreeMap::new();
-    let mut archive = open_archive(source)?;
+    let mut archive = open_archive(source, compression)?;
     for entry in archive
         .entries()
         .map_err(|error| archive_error(source, error.to_string()))?
@@ -394,7 +470,10 @@ fn scan_archive(source: &Path) -> Result<BTreeMap<String, u64>, ImageError> {
     Ok(names)
 }
 
-fn entry_name(source: &Path, entry: &tar::Entry<'_, File>) -> Result<Option<String>, ImageError> {
+fn entry_name<R: Read>(
+    source: &Path,
+    entry: &tar::Entry<'_, R>,
+) -> Result<Option<String>, ImageError> {
     let path = entry
         .path()
         .map_err(|error| archive_error(source, error.to_string()))?
@@ -429,8 +508,9 @@ fn parse_member<T: serde::de::DeserializeOwned>(
     entries: &BTreeMap<String, u64>,
     member: &str,
     label: &str,
+    compression: Option<AssetCompression>,
 ) -> Result<T, ImageError> {
-    let bytes = read_member(source, entries, member)?;
+    let bytes = read_member(source, entries, member, compression)?;
     serde_json::from_slice(&bytes).map_err(|error| ImageError::Archive {
         path: source.to_path_buf(),
         message: format!("invalid {label} {member}: {error}"),
@@ -441,11 +521,12 @@ fn read_member(
     source: &Path,
     entries: &BTreeMap<String, u64>,
     member: &str,
+    compression: Option<AssetCompression>,
 ) -> Result<Vec<u8>, ImageError> {
     if !entries.contains_key(member) {
         return Err(archive_error(source, format!("missing {member}")));
     }
-    let mut archive = open_archive(source)?;
+    let mut archive = open_archive(source, compression)?;
     for entry in archive
         .entries()
         .map_err(|error| archive_error(source, error.to_string()))?

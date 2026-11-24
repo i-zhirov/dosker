@@ -97,7 +97,7 @@ fn pull_requires_acceptance_for_an_abandonware_image() {
         !server
             .requests()
             .iter()
-            .any(|request| request.ends_with(".tar"))
+            .any(|request| request.ends_with(".tar.zst"))
     );
 }
 
@@ -193,7 +193,7 @@ fn a_resumed_pull_reports_the_resume() {
     let root = CliRoot::new();
     let (_directory, server, _hello, _old) = site(&root);
     server.reset_requests();
-    server.fail_next_asset(512);
+    server.fail_next_asset(64);
 
     let first = run(&root, &server.url(), &["pull", "i-zhirov/hello-dos:latest"]);
     assert!(!first.status.success(), "stdout: {}", stdout_text(&first));

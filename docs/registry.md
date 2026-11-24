@@ -65,13 +65,15 @@ tag or digest, version, digests, asset URL and size, license summary, and the
 license entries.
 
 The client uses HTTPS. Plain HTTP is accepted only for `localhost` and
-`127.0.0.1`. A redirect from HTTPS to a non-HTTPS URL is refused. An asset is
-capped at 2 GiB.
+`127.0.0.1`. A redirect from HTTPS to a non-HTTPS URL is refused. A compressed
+asset is capped at 2 GiB, and the decoded tar is capped at 2 GiB.
 
-The asset is cached at `<data-root>/cache/registry/assets/<hex>.tar`. Every
-pull re-hashes the cached bytes. Site documents are fetched on every pull.
+The asset is one zstd frame, cached at
+`<data-root>/cache/registry/assets/<hex>.tar.zst`. Every pull re-hashes the
+compressed bytes and decodes them after the digest and size match. Site
+documents are fetched on every pull.
 
-An interrupted download stays at `<hex>.tar.part`. The next pull resumes it
+An interrupted download stays at `<hex>.tar.zst.part`. The next pull resumes it
 with a Range request. A `.part.lock` file serializes concurrent pulls of one
 asset.
 
