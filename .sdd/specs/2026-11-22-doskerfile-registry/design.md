@@ -421,7 +421,7 @@ Accessibility: semantic headings, a visible focus outline, and text that does no
 | Manifest digest mismatch | Reject the loaded image and keep the store unchanged. |
 | Revoked digest | Omitted from the index, so `pull` fails closed. `--offline` cannot see a new takedown. |
 | Tag moved | Fetch the new index and download the new digest. Replace the local tag only after success. |
-| Partial download | Restart from zero in the first version. |
+| Partial download | Keep a `.part` file, resume it with a Range request, and restart from zero once on a `200`, `416`, or inconsistent `206`. |
 | Disk full | Fail before the tag commit and clean the staging directory. |
 | Version collision | Publish fails. Bump `version`. |
 | Rebuild yields a new digest | Publish fails. Fix the pin or bump `version`. |
@@ -502,7 +502,7 @@ Compatibility:
 | Final registry domain and schema `$id` | User | Resolved: `https://i-zhirov.github.io/dosker-registry`; the schemas and the client default use it |
 | The DOS agent's true license, including the OpenWatcom runtime question | User and maintainer | Resolved: the source is `MIT OR Apache-2.0`; the compiled binary includes the Open Watcom runtime under the Sybase Open Watcom Public License. `POLICY.md` records both. |
 | Final wording of the GPL source offer in `POLICY.md` | User and maintainer | Resolved: `POLICY.md` names the `SOURCE_URL` offer. |
-| Resume for partial downloads | Maintainer | Defer. Restart from zero in the first version |
+| Resume for partial downloads | Maintainer | Resolved: the client keeps a `.part` file and resumes it with a Range request |
 | Signing and attestation | Maintainer | Resolved for the first version: deferred and recorded in `POLICY.md`. |
 
 ## Success Criteria

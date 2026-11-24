@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use dosker_core::{LicenseEntry, LicenseSummary, license_summary, validate_licenses};
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -112,12 +113,43 @@ impl RemoteCache {
         Ok(self.root.join(format!("{hex}.tar")))
     }
 
-    /// Returns a verified cached asset, or downloads it.
+    /// Returns the partial path for one asset path.
+    fn part_path(&self, path: &Path) -> PathBuf {
+        PathBuf::from(format!("{}.part", path.display()))
+    }
+
+    /// Takes the exclusive lock for one partial asset.
+    fn lock_part(&self, part: &Path, digest: &str) -> Result<PartLock, RemoteError> {
+        let path = PathBuf::from(format!("{}.lock", part.display()));
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&path)
+            .map_err(|source| RemoteError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        match file.try_lock_exclusive() {
+            Ok(()) => Ok(PartLock { file }),
+            Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
+                Err(RemoteError::DownloadInProgress(digest.to_owned()))
+            }
+            Err(source) => Err(RemoteError::Io { path, source }),
+        }
+    }
+
+    /// Returns a verified cached asset, or resumes or downloads it.
+    ///
+    /// The returned flags are `(cached, resumed)`. `cached` means the completed
+    /// asset was already verified; `resumed` means a partial file supplied the
+    /// asset, either by a Range transfer or by completing it locally.
     pub fn get_or_download(
         &self,
         client: &RegistryClient,
         version: &VersionRecord,
-    ) -> Result<(PathBuf, bool), RemoteError> {
+    ) -> Result<(PathBuf, bool, bool), RemoteError> {
         let path = self.asset_path(&version.asset_digest)?;
         if path.is_file() {
             let (bytes, digest) = hash_file(&path).map_err(|source| RemoteError::Io {
@@ -125,7 +157,7 @@ impl RemoteCache {
                 source,
             })?;
             if digest == version.asset_digest && bytes == version.asset_size {
-                return Ok((path, true));
+                return Ok((path, true, false));
             }
             let _ = fs::remove_file(&path);
         }
@@ -133,8 +165,53 @@ impl RemoteCache {
             path: self.root.clone(),
             source,
         })?;
-        client.download_asset(version, &path)?;
-        Ok((path, false))
+        let part = self.part_path(&path);
+        let _lock = self.lock_part(&part, &version.asset_digest)?;
+        let mut offset = match fs::metadata(&part) {
+            Ok(metadata) => metadata.len(),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => 0,
+            Err(source) => {
+                return Err(RemoteError::Io {
+                    path: part.clone(),
+                    source,
+                });
+            }
+        };
+        if offset > version.asset_size {
+            let _ = fs::remove_file(&part);
+            offset = 0;
+        }
+        if offset == version.asset_size {
+            let (bytes, digest) = hash_file(&part).map_err(|source| RemoteError::Io {
+                path: part.clone(),
+                source,
+            })?;
+            if digest == version.asset_digest && bytes == version.asset_size {
+                fs::rename(&part, &path).map_err(|source| RemoteError::Io {
+                    path: path.clone(),
+                    source,
+                })?;
+                return Ok((path, false, true));
+            }
+            let _ = fs::remove_file(&part);
+            return Err(RemoteError::DigestMismatch {
+                expected: version.asset_digest.clone(),
+                actual: digest,
+            });
+        }
+        let report = client.download_asset(version, &part, offset, &path)?;
+        Ok((path, false, report.resumed))
+    }
+}
+
+/// An exclusive lock on one partial asset.
+struct PartLock {
+    file: fs::File,
+}
+
+impl Drop for PartLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
     }
 }
 
@@ -202,6 +279,7 @@ pub struct PullReport {
     pub license_summary: LicenseSummary,
     pub asset_bytes: u64,
     pub cached: bool,
+    pub resumed: bool,
 }
 
 /// A pull failure.
@@ -281,7 +359,7 @@ pub fn pull(
         })));
     }
 
-    let (asset, cached) = cache.get_or_download(client, &version)?;
+    let (asset, cached, resumed) = cache.get_or_download(client, &version)?;
     let local = local_reference(repository, namespace, request, &version)?;
     load_image_as(
         store,
@@ -310,6 +388,7 @@ pub fn pull(
         license_summary: summary,
         asset_bytes: version.asset_size,
         cached,
+        resumed,
     })
 }
 
@@ -364,6 +443,10 @@ pub enum RemoteError {
     /// A local file operation failed.
     #[error("i/o error at {path}: {source}")]
     Io { path: PathBuf, source: io::Error },
+
+    /// Another pull is downloading the same asset.
+    #[error("another pull is downloading {0}")]
+    DownloadInProgress(String),
 
     /// The local image store failed.
     #[error(transparent)]
@@ -491,27 +574,39 @@ impl RegistryClient {
         Ok(config)
     }
 
-    /// Downloads and verifies the asset.
+    /// Resumes or downloads and verifies the asset, then installs it.
     pub fn download_asset(
         &self,
         version: &VersionRecord,
+        part: &Path,
+        offset: u64,
         destination: &Path,
     ) -> Result<http::DownloadReport, RemoteError> {
-        let report = http::download(&version.asset_url, http::MAX_ASSET_BYTES, destination)?;
+        let report = http::download_part(
+            &version.asset_url,
+            http::MAX_ASSET_BYTES,
+            part,
+            offset,
+            version.asset_size,
+        )?;
         if report.digest != version.asset_digest {
-            let _ = fs::remove_file(destination);
+            let _ = fs::remove_file(part);
             return Err(RemoteError::DigestMismatch {
                 expected: version.asset_digest.clone(),
                 actual: report.digest,
             });
         }
         if report.bytes != version.asset_size {
-            let _ = fs::remove_file(destination);
+            let _ = fs::remove_file(part);
             return Err(RemoteError::DigestMismatch {
                 expected: format!("{} bytes", version.asset_size),
                 actual: format!("{} bytes", report.bytes),
             });
         }
+        fs::rename(part, destination).map_err(|source| RemoteError::Io {
+            path: destination.to_path_buf(),
+            source,
+        })?;
         Ok(report)
     }
 

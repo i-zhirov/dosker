@@ -187,3 +187,32 @@ fn search_json_returns_the_catalog_entries() {
     assert_eq!(images.len(), 1);
     assert_eq!(images[0]["name"], "hello-dos");
 }
+
+#[test]
+fn a_resumed_pull_reports_the_resume() {
+    let root = CliRoot::new();
+    let (_directory, server, _hello, _old) = site(&root);
+    server.reset_requests();
+    server.fail_next_asset(512);
+
+    let first = run(&root, &server.url(), &["pull", "i-zhirov/hello-dos:latest"]);
+    assert!(!first.status.success(), "stdout: {}", stdout_text(&first));
+    assert!(
+        stderr_text(&first).contains("truncated response"),
+        "stderr: {}",
+        stderr_text(&first)
+    );
+
+    let second = run(&root, &server.url(), &["pull", "i-zhirov/hello-dos:latest"]);
+    assert_eq!(
+        second.status.code(),
+        Some(0),
+        "stderr: {}",
+        stderr_text(&second)
+    );
+    assert!(
+        stdout_text(&second).contains(", resumed"),
+        "stdout: {}",
+        stdout_text(&second)
+    );
+}

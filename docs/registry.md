@@ -71,6 +71,10 @@ capped at 2 GiB.
 The asset is cached at `<data-root>/cache/registry/assets/<hex>.tar`. Every
 pull re-hashes the cached bytes. Site documents are fetched on every pull.
 
+An interrupted download stays at `<hex>.tar.part`. The next pull resumes it
+with a Range request. A `.part.lock` file serializes concurrent pulls of one
+asset.
+
 `run`, `create`, and `build` pull a missing namespaced or host-qualified
 reference. `run --no-pull`, `create --no-pull`, and `build --no-pull` keep the
 local-only behavior.

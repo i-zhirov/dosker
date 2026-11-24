@@ -31,10 +31,16 @@ pub fn execute(args: PullArgs, context: &mut Context, now: DateTime<Utc>) -> Res
         now,
     )?;
     let tag = report.tag.as_deref().unwrap_or("");
-    let cached = if report.cached { ", cached" } else { "" };
+    let suffix = if report.cached {
+        ", cached"
+    } else if report.resumed {
+        ", resumed"
+    } else {
+        ""
+    };
     context.console.line(&format!(
         "pulled {}:{} {} ({} bytes{})",
-        report.image, tag, report.digest, report.asset_bytes, cached
+        report.image, tag, report.digest, report.asset_bytes, suffix
     ))?;
     Ok(EXIT_OK)
 }

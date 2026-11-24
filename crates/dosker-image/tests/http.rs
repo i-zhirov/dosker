@@ -105,4 +105,114 @@ fn a_download_streams_to_a_file() {
     assert_eq!(report.bytes, 10);
     assert_eq!(std::fs::read(&path).expect("read"), b"0123456789");
     assert_eq!(report.digest, dosker_image::sha256_digest(b"0123456789"));
+    assert!(!report.resumed);
+}
+
+#[test]
+fn a_resumed_download_appends_the_missing_bytes() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let part = directory.path().join("asset.tar.part");
+    std::fs::write(&part, b"abc").expect("the partial file");
+    let (url, handle) = respond(vec![response(
+        "206 Partial Content",
+        "Content-Range: bytes 3-5/6\r\nAccept-Ranges: bytes\r\n",
+        b"def",
+    )]);
+
+    let report = http::download_part(&format!("{url}/asset"), http::MAX_ASSET_BYTES, &part, 3, 6)
+        .expect("download");
+
+    handle.join().expect("server");
+    assert_eq!(report.bytes, 6);
+    assert_eq!(report.digest, dosker_image::sha256_digest(b"abcdef"));
+    assert!(report.resumed);
+    assert_eq!(std::fs::read(&part).expect("read"), b"abcdef");
+}
+
+#[test]
+fn a_server_that_ignores_the_range_restarts() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let part = directory.path().join("asset.tar.part");
+    std::fs::write(&part, b"abc").expect("the partial file");
+    let (url, handle) = respond(vec![response("200 OK", "", b"abcdef")]);
+
+    let report = http::download_part(&format!("{url}/asset"), http::MAX_ASSET_BYTES, &part, 3, 6)
+        .expect("download");
+
+    handle.join().expect("server");
+    assert_eq!(report.bytes, 6);
+    assert!(!report.resumed);
+    assert_eq!(std::fs::read(&part).expect("read"), b"abcdef");
+}
+
+#[test]
+fn a_range_error_restarts_from_zero() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let part = directory.path().join("asset.tar.part");
+    std::fs::write(&part, b"abc").expect("the partial file");
+    let (url, handle) = respond(vec![
+        response(
+            "416 Range Not Satisfiable",
+            "Content-Range: bytes */6\r\n",
+            b"",
+        ),
+        response("200 OK", "", b"abcdef"),
+    ]);
+
+    let report = http::download_part(&format!("{url}/asset"), http::MAX_ASSET_BYTES, &part, 3, 6)
+        .expect("download");
+
+    handle.join().expect("server");
+    assert_eq!(report.bytes, 6);
+    assert!(!report.resumed);
+    assert_eq!(std::fs::read(&part).expect("read"), b"abcdef");
+}
+
+#[test]
+fn a_truncated_response_keeps_the_partial_file() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let part = directory.path().join("asset.tar.part");
+    let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nabc".to_vec();
+    let (url, handle) = respond(vec![raw]);
+
+    let error = http::download_part(&format!("{url}/asset"), http::MAX_ASSET_BYTES, &part, 0, 6)
+        .expect_err("a truncated response");
+
+    handle.join().expect("server");
+    assert!(matches!(error, HttpError::Protocol(_)));
+    assert_eq!(std::fs::read(&part).expect("read"), b"abc");
+}
+
+#[test]
+fn an_asset_over_the_cap_is_refused_before_the_request() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let part = directory.path().join("asset.tar.part");
+
+    let error =
+        http::download_part("http://127.0.0.1:1/asset", 4, &part, 0, 6).expect_err("too large");
+
+    assert!(matches!(error, HttpError::TooLarge(4)));
+}
+
+#[test]
+fn an_inconsistent_content_range_restarts() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let part = directory.path().join("asset.tar.part");
+    std::fs::write(&part, b"abc").expect("the partial file");
+    let (url, handle) = respond(vec![
+        response(
+            "206 Partial Content",
+            "Content-Range: bytes 2-5/6\r\n",
+            b"cdef",
+        ),
+        response("200 OK", "", b"abcdef"),
+    ]);
+
+    let report = http::download_part(&format!("{url}/asset"), http::MAX_ASSET_BYTES, &part, 3, 6)
+        .expect("download");
+
+    handle.join().expect("server");
+    assert_eq!(report.bytes, 6);
+    assert!(!report.resumed);
+    assert_eq!(std::fs::read(&part).expect("read"), b"abcdef");
 }

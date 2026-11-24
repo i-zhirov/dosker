@@ -38,8 +38,10 @@ impl<T: Read + Write> ReadWrite for T {}
 pub struct DownloadReport {
     /// The number of bytes written.
     pub bytes: u64,
-    /// The `sha256:` digest of the bytes.
+    /// The `sha256:` digest of the full file.
     pub digest: String,
+    /// True when the transfer appended to an existing partial file.
+    pub resumed: bool,
 }
 
 /// An HTTP client failure.
@@ -122,12 +124,116 @@ pub fn download(
         Ok(DownloadReport {
             bytes,
             digest: format!("sha256:{}", hex(&hasher.finalize())),
+            resumed: false,
         })
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temp);
     }
     result
+}
+
+/// Resumes an asset download into a persistent partial file.
+///
+/// The partial file is appended through a Range request. A `200` response, a
+/// `416`, or a `206` with an unexpected offset or total restarts the transfer
+/// from zero once. The file is left in place after an error so the next call
+/// can resume it.
+pub fn download_part(
+    url: &str,
+    max_bytes: u64,
+    part: &Path,
+    offset: u64,
+    expected_size: u64,
+) -> Result<DownloadReport, HttpError> {
+    if expected_size > max_bytes {
+        return Err(HttpError::TooLarge(max_bytes));
+    }
+    if offset == expected_size {
+        return Err(HttpError::Protocol(
+            "the partial asset is complete".to_owned(),
+        ));
+    }
+    let parent = part
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+
+    let mut offset = offset;
+    if offset > expected_size {
+        offset = 0;
+    }
+    let mut restarted = false;
+    loop {
+        let range = (offset > 0).then(|| ("Range".to_owned(), format!("bytes={offset}-")));
+        let range = range
+            .as_ref()
+            .map(|(name, value)| (name.as_str(), value.as_str()));
+        let (status, headers, reader) = request_follow(url, range)?;
+        match status {
+            200 => {
+                let mut file = fs::File::create(part)?;
+                let mut hasher = Sha256::new();
+                let bytes = read_body(reader, &headers, expected_size, &mut |chunk| {
+                    file.write_all(chunk).map_err(HttpError::Io)?;
+                    hasher.update(chunk);
+                    Ok(())
+                })?;
+                file.flush()?;
+                return Ok(DownloadReport {
+                    bytes,
+                    digest: format!("sha256:{}", hex(&hasher.finalize())),
+                    resumed: false,
+                });
+            }
+            206 => {
+                let (start, end, total) = parse_content_range(&headers)?;
+                if start != offset || total != expected_size || end.checked_add(1) != Some(total) {
+                    if restarted {
+                        return Err(HttpError::Protocol("inconsistent Content-Range".to_owned()));
+                    }
+                    restarted = true;
+                    offset = 0;
+                    fs::write(part, [])?;
+                    continue;
+                }
+                let mut file = fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(part)?;
+                let mut hasher = Sha256::new();
+                hash_prefix(part, offset, &mut hasher)?;
+                let appended = read_body(reader, &headers, expected_size - offset, &mut |chunk| {
+                    file.write_all(chunk).map_err(HttpError::Io)?;
+                    hasher.update(chunk);
+                    Ok(())
+                })?;
+                file.flush()?;
+                let bytes = offset + appended;
+                if bytes != expected_size {
+                    return Err(HttpError::Protocol(format!(
+                        "the resumed asset has {bytes} of {expected_size} bytes"
+                    )));
+                }
+                return Ok(DownloadReport {
+                    bytes,
+                    digest: format!("sha256:{}", hex(&hasher.finalize())),
+                    resumed: offset > 0,
+                });
+            }
+            416 => {
+                if restarted {
+                    return Err(HttpError::Status(416));
+                }
+                restarted = true;
+                offset = 0;
+                fs::write(part, [])?;
+                continue;
+            }
+            status => return Err(HttpError::Status(status)),
+        }
+    }
 }
 
 /// Resolves one redirect and applies the scheme rule to the target.
@@ -152,10 +258,18 @@ fn fetch(
     max_bytes: u64,
     sink: &mut dyn FnMut(&[u8]) -> Result<(), HttpError>,
 ) -> Result<u64, HttpError> {
+    let (status, headers, reader) = request_follow(url, None)?;
+    if status != 200 {
+        return Err(HttpError::Status(status));
+    }
+    read_body(reader, &headers, max_bytes, sink)
+}
+
+fn request_follow(url: &str, extra: Option<(&str, &str)>) -> Result<ResponseHead, HttpError> {
     let mut current = Url::parse(url).map_err(|_| HttpError::InvalidUrl(url.to_owned()))?;
     for _ in 0..=MAX_REDIRECTS {
         ensure_scheme(&current)?;
-        let (status, headers, reader) = request(&current)?;
+        let (status, headers, reader) = request(&current, extra)?;
         if is_redirect(status) {
             let location = headers
                 .get("location")
@@ -163,10 +277,7 @@ fn fetch(
             current = redirect_target(&current, location)?;
             continue;
         }
-        if status != 200 {
-            return Err(HttpError::Status(status));
-        }
-        return read_body(reader, &headers, max_bytes, sink);
+        return Ok((status, headers, reader));
     }
     Err(HttpError::Redirect)
 }
@@ -192,7 +303,7 @@ fn is_redirect(status: u16) -> bool {
     matches!(status, 301 | 302 | 303 | 307 | 308)
 }
 
-fn request(url: &Url) -> Result<ResponseHead, HttpError> {
+fn request(url: &Url, extra: Option<(&str, &str)>) -> Result<ResponseHead, HttpError> {
     let mut stream = connect(url)?;
     let host = url
         .host_str()
@@ -210,9 +321,13 @@ fn request(url: &Url) -> Result<ResponseHead, HttpError> {
         path.push('?');
         path.push_str(query);
     }
-    let request = format!(
-        "GET {path} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: {USER_AGENT}\r\nAccept: application/json, application/octet-stream\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n"
+    let mut request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: {USER_AGENT}\r\nAccept: application/json, application/octet-stream\r\nAccept-Encoding: identity\r\nConnection: close\r\n"
     );
+    if let Some((name, value)) = extra {
+        request.push_str(&format!("{name}: {value}\r\n"));
+    }
+    request.push_str("\r\n");
     stream.write_all(request.as_bytes()).map_err(map_io)?;
     stream.flush().map_err(map_io)?;
 
@@ -294,13 +409,18 @@ fn read_body(
     max_bytes: u64,
     sink: &mut dyn FnMut(&[u8]) -> Result<(), HttpError>,
 ) -> Result<u64, HttpError> {
-    if let Some(value) = headers.get("content-length") {
-        let length: u64 = value
-            .parse()
-            .map_err(|_| HttpError::Protocol("invalid Content-Length".to_owned()))?;
-        if length > max_bytes {
-            return Err(HttpError::TooLarge(max_bytes));
-        }
+    let expected = match headers.get("content-length") {
+        Some(value) => Some(
+            value
+                .parse::<u64>()
+                .map_err(|_| HttpError::Protocol("invalid Content-Length".to_owned()))?,
+        ),
+        None => None,
+    };
+    if let Some(length) = expected
+        && length > max_bytes
+    {
+        return Err(HttpError::TooLarge(max_bytes));
     }
     let chunked = headers.get("transfer-encoding").is_some_and(|value| {
         value
@@ -353,6 +473,13 @@ fn read_body(
             sink(&buffer[..read])?;
         }
     }
+    if let Some(length) = expected
+        && total != length
+    {
+        return Err(HttpError::Protocol(format!(
+            "truncated response: {total} of {length} bytes"
+        )));
+    }
     Ok(total)
 }
 
@@ -367,6 +494,52 @@ fn read_chunk_size(reader: &mut BufReader<Box<dyn ReadWrite>>) -> Result<u64, Ht
         .trim();
     u64::from_str_radix(size_text, 16)
         .map_err(|_| HttpError::Protocol("invalid chunk size".to_owned()))
+}
+
+fn parse_content_range(headers: &BTreeMap<String, String>) -> Result<(u64, u64, u64), HttpError> {
+    let value = headers
+        .get("content-range")
+        .ok_or_else(|| HttpError::Protocol("a 206 response has no Content-Range".to_owned()))?;
+    let rest = value
+        .strip_prefix("bytes ")
+        .ok_or_else(|| HttpError::Protocol("invalid Content-Range".to_owned()))?;
+    let (range, total) = rest
+        .split_once('/')
+        .ok_or_else(|| HttpError::Protocol("invalid Content-Range".to_owned()))?;
+    let (start, end) = range
+        .split_once('-')
+        .ok_or_else(|| HttpError::Protocol("invalid Content-Range".to_owned()))?;
+    let start: u64 = start
+        .parse()
+        .map_err(|_| HttpError::Protocol("invalid Content-Range".to_owned()))?;
+    let end: u64 = end
+        .parse()
+        .map_err(|_| HttpError::Protocol("invalid Content-Range".to_owned()))?;
+    let total: u64 = total
+        .parse()
+        .map_err(|_| HttpError::Protocol("invalid Content-Range".to_owned()))?;
+    if start > end {
+        return Err(HttpError::Protocol("invalid Content-Range".to_owned()));
+    }
+    Ok((start, end, total))
+}
+
+fn hash_prefix(path: &Path, length: u64, hasher: &mut Sha256) -> Result<(), HttpError> {
+    let mut file = fs::File::open(path)?;
+    let mut remaining = length;
+    let mut buffer = [0u8; 64 * 1024];
+    while remaining > 0 {
+        let limit = buffer.len().min(remaining as usize);
+        let read = file.read(&mut buffer[..limit])?;
+        if read == 0 {
+            return Err(HttpError::Protocol(
+                "the partial asset is shorter than its offset".to_owned(),
+            ));
+        }
+        hasher.update(&buffer[..read]);
+        remaining -= read as u64;
+    }
+    Ok(())
 }
 
 fn map_io(error: io::Error) -> HttpError {

@@ -126,6 +126,7 @@
 - 2026-11-23: The takedown workflow was exercised against `i-zhirov/takedown-test`. The takedown deleted the tar, omitted the image, and a fresh pull failed while the local copy stayed. The exercise also found that an empty CI release directory skipped the version-immutability check; the publish workflow now downloads the existing sidecars before publishing.
 - 2026-11-23: The content-immutability extension was exercised. The sidecar records the manifest-layer content digest; the takedown stamps it for older versions; a bumped version of the revoked test image was rejected by the publish build with `content is revoked`, while the release and site stayed unchanged.
 - 2026-11-23: The registry CI gate was exercised with a good and a bad pull request. The design and roadmap are now `Implemented`; the resume and signing questions are explicitly deferred.
+- 2026-11-24: Added resume for interrupted asset downloads. A `.part` file is verified and renamed only after the digest and size match. Tests cover resume, restart, truncation, corruption, and oversize partials.
 
 ## Deviations
 

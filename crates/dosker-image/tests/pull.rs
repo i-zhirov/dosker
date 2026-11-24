@@ -380,3 +380,27 @@ fn a_digest_resolves_from_the_index() {
 
     assert_eq!(version.version, "1.0.0");
 }
+
+#[test]
+fn an_interrupted_pull_resumes_the_asset() {
+    let (_fixture_store, _site, server) = fixture();
+    server.reset_requests();
+    server.fail_next_asset(512);
+    let client = RegistryClient::new(&server.url()).expect("a client");
+    let (_target, store, cache, acceptance) = target();
+    let request = request("i-zhirov/hello-dos:latest", None);
+
+    let error =
+        pull(&client, &store, &cache, &acceptance, &request, now()).expect_err("a truncated pull");
+
+    assert!(matches!(error, PullError::Remote(RemoteError::Http(_))));
+
+    let report =
+        pull(&client, &store, &cache, &acceptance, &request, now()).expect("the resumed pull");
+
+    assert!(!report.cached);
+    assert!(report.resumed);
+    let local = ImageReference::parse("i-zhirov/hello-dos:latest").expect("a local reference");
+    assert!(store.load(&ImageRef::Tag(local)).is_ok());
+    assert!(server.ranges().contains(&Some("bytes=512-".to_owned())));
+}

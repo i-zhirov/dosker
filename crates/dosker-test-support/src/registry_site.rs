@@ -152,6 +152,8 @@ pub struct StaticServer {
     addr: SocketAddr,
     stop: Arc<AtomicBool>,
     requests: Arc<Mutex<Vec<String>>>,
+    ranges: Arc<Mutex<Vec<Option<String>>>>,
+    fail_next_asset: Arc<Mutex<Option<usize>>>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -163,15 +165,19 @@ impl StaticServer {
         let addr = listener.local_addr()?;
         let stop = Arc::new(AtomicBool::new(false));
         let requests = Arc::new(Mutex::new(Vec::new()));
+        let ranges = Arc::new(Mutex::new(Vec::new()));
+        let fail_next_asset = Arc::new(Mutex::new(None));
         let thread = {
             let stop = Arc::clone(&stop);
             let requests = Arc::clone(&requests);
+            let ranges = Arc::clone(&ranges);
+            let fail_next_asset = Arc::clone(&fail_next_asset);
             let root = root.clone();
             thread::spawn(move || {
                 while !stop.load(Ordering::Relaxed) {
                     match listener.accept() {
                         Ok((stream, _)) => {
-                            let _ = handle(stream, &root, &requests);
+                            let _ = handle(stream, &root, &requests, &ranges, &fail_next_asset);
                         }
                         Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                             thread::sleep(POLL);
@@ -185,6 +191,8 @@ impl StaticServer {
             addr,
             stop,
             requests,
+            ranges,
+            fail_next_asset,
             thread: Some(thread),
         })
     }
@@ -202,9 +210,27 @@ impl StaticServer {
             .unwrap_or_default()
     }
 
+    /// Returns the Range header of each request, in order.
+    pub fn ranges(&self) -> Vec<Option<String>> {
+        self.ranges
+            .lock()
+            .map(|log| log.clone())
+            .unwrap_or_default()
+    }
+
+    /// Truncates the next asset response after this many bytes.
+    pub fn fail_next_asset(&self, bytes: usize) {
+        if let Ok(mut value) = self.fail_next_asset.lock() {
+            *value = Some(bytes);
+        }
+    }
+
     /// Clears the request log.
     pub fn reset_requests(&self) {
         if let Ok(mut log) = self.requests.lock() {
+            log.clear();
+        }
+        if let Ok(mut log) = self.ranges.lock() {
             log.clear();
         }
     }
@@ -219,7 +245,13 @@ impl Drop for StaticServer {
     }
 }
 
-fn handle(mut stream: TcpStream, root: &Path, requests: &Mutex<Vec<String>>) -> io::Result<()> {
+fn handle(
+    mut stream: TcpStream,
+    root: &Path,
+    requests: &Mutex<Vec<String>>,
+    ranges: &Mutex<Vec<Option<String>>>,
+    fail_next_asset: &Mutex<Option<usize>>,
+) -> io::Result<()> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     let mut buffer = Vec::new();
@@ -240,8 +272,16 @@ fn handle(mut stream: TcpStream, root: &Path, requests: &Mutex<Vec<String>>) -> 
     let mut parts = line.split_whitespace();
     let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
+    let range = request.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("range")
+            .then(|| value.trim().to_owned())
+    });
     if let Ok(mut log) = requests.lock() {
         log.push(path.to_owned());
+    }
+    if let Ok(mut log) = ranges.lock() {
+        log.push(range.clone());
     }
     if method != "GET" {
         return respond(&mut stream, 405, b"method not allowed\n", "text/plain");
@@ -262,7 +302,47 @@ fn handle(mut stream: TcpStream, root: &Path, requests: &Mutex<Vec<String>>) -> 
     } else {
         "application/octet-stream"
     };
+    let is_asset = file.extension().and_then(|value| value.to_str()) == Some("tar");
+    if is_asset {
+        let limit = fail_next_asset
+            .lock()
+            .ok()
+            .and_then(|mut value| value.take());
+        if let Some(limit) = limit {
+            return respond_truncated(&mut stream, &bytes, limit);
+        }
+    }
+    if let Some(start) = range.as_deref().and_then(range_start) {
+        let total = bytes.len() as u64;
+        if start >= total {
+            return respond_range(
+                &mut stream,
+                416,
+                "Range Not Satisfiable",
+                &format!("bytes */{total}"),
+                &[],
+                content_type,
+            );
+        }
+        return respond_range(
+            &mut stream,
+            206,
+            "Partial Content",
+            &format!("bytes {start}-{}/{total}", total - 1),
+            &bytes[start as usize..],
+            content_type,
+        );
+    }
     respond(&mut stream, 200, &bytes, content_type)
+}
+
+fn range_start(value: &str) -> Option<u64> {
+    let rest = value.strip_prefix("bytes=")?;
+    let (start, end) = rest.split_once('-')?;
+    if !end.is_empty() {
+        return None;
+    }
+    start.parse().ok()
 }
 
 fn respond(stream: &mut TcpStream, status: u16, body: &[u8], content_type: &str) -> io::Result<()> {
@@ -278,5 +358,32 @@ fn respond(stream: &mut TcpStream, status: u16, body: &[u8], content_type: &str)
     );
     stream.write_all(head.as_bytes())?;
     stream.write_all(body)?;
+    stream.flush()
+}
+
+fn respond_range(
+    stream: &mut TcpStream,
+    status: u16,
+    reason: &str,
+    content_range: &str,
+    body: &[u8],
+    content_type: &str,
+) -> io::Result<()> {
+    let head = format!(
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Range: {content_range}\r\nAccept-Ranges: bytes\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes())?;
+    stream.write_all(body)?;
+    stream.flush()
+}
+
+fn respond_truncated(stream: &mut TcpStream, body: &[u8], limit: usize) -> io::Result<()> {
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes())?;
+    stream.write_all(&body[..body.len().min(limit)])?;
     stream.flush()
 }

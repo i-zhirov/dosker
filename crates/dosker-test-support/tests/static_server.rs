@@ -5,11 +5,12 @@ use std::path::PathBuf;
 
 use dosker_test_support::registry_site::StaticServer;
 
-fn get(server: &StaticServer, path: &str) -> (u16, Vec<u8>) {
+fn request(server: &StaticServer, path: &str, headers: &str) -> (u16, String, Vec<u8>) {
     let url = server.url();
     let authority = url.trim_start_matches("http://");
     let mut stream = TcpStream::connect(authority).expect("connect to the server");
-    let request = format!("GET {path} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n");
+    let request =
+        format!("GET {path} HTTP/1.1\r\nHost: {authority}\r\n{headers}Connection: close\r\n\r\n");
     stream
         .write_all(request.as_bytes())
         .expect("write the request");
@@ -22,14 +23,19 @@ fn get(server: &StaticServer, path: &str) -> (u16, Vec<u8>) {
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
         .expect("a header terminator");
-    let head = String::from_utf8_lossy(&response[..split]);
+    let head = String::from_utf8_lossy(&response[..split]).into_owned();
     let status = head
         .lines()
         .next()
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|value| value.parse().ok())
         .expect("a status code");
-    (status, response[split + 4..].to_vec())
+    (status, head, response[split + 4..].to_vec())
+}
+
+fn get(server: &StaticServer, path: &str) -> (u16, Vec<u8>) {
+    let (status, _, body) = request(server, path, "");
+    (status, body)
 }
 
 fn fixture() -> (tempfile::TempDir, StaticServer) {
@@ -46,6 +52,7 @@ fn a_document_is_served() {
     assert_eq!(status, 200);
     assert_eq!(body, b"{\"schema\":1}\n");
     assert_eq!(server.requests(), vec!["/index.json".to_owned()]);
+    assert_eq!(server.ranges(), vec![None]);
 }
 
 #[test]
@@ -63,9 +70,46 @@ fn a_parent_path_is_404() {
 }
 
 #[test]
+fn a_range_request_returns_the_tail() {
+    let (_dir, server) = fixture();
+    let expected = b"{\"schema\":1}\n";
+
+    let (status, head, body) = request(&server, "/index.json", "Range: bytes=2-\r\n");
+
+    assert_eq!(status, 206);
+    assert!(
+        head.contains(&format!(
+            "Content-Range: bytes 2-{}/{}",
+            expected.len() - 1,
+            expected.len()
+        )),
+        "head: {head}"
+    );
+    assert!(head.contains("Accept-Ranges: bytes"), "head: {head}");
+    assert_eq!(body, &expected[2..]);
+    assert_eq!(server.ranges(), vec![Some("bytes=2-".to_owned())]);
+}
+
+#[test]
+fn a_range_past_the_end_is_416() {
+    let (_dir, server) = fixture();
+    let expected = b"{\"schema\":1}\n";
+
+    let (status, head, body) = request(&server, "/index.json", "Range: bytes=999-\r\n");
+
+    assert_eq!(status, 416);
+    assert!(
+        head.contains(&format!("Content-Range: bytes */{}", expected.len())),
+        "head: {head}"
+    );
+    assert!(body.is_empty());
+}
+
+#[test]
 fn the_request_log_can_be_reset() {
     let (_dir, server) = fixture();
     let _ = get(&server, "/index.json");
     server.reset_requests();
     assert!(server.requests().is_empty());
+    assert!(server.ranges().is_empty());
 }
